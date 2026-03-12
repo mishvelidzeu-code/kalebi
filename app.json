@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "cycle-app",
-    "slug": "cycle-app",
+    "name": "Cycle Care",
+    "slug": "kalebi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,11 +9,14 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "აპლიკაციაში სწრაფად და უსაფრთხოდ შესასვლელად გამოიყენება Face ID."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#fff0f5",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -31,18 +34,31 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "imageWidth": 220,
+          "backgroundColor": "#fff0f5",
           "dark": {
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-notifications",
+      "expo-secure-store",
+      "expo-local-authentication"
     ],
+    "extra": {
+      "eas": {
+        "projectId": "90082f78-6f14-4632-9c3f-7a609964a196"
+      }
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "owner": "mishvela"
   }
 }
