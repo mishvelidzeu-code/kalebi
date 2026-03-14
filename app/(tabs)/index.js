@@ -1,17 +1,9 @@
 import dayjs from "dayjs";
 import "dayjs/locale/ka";
 import { BlurView } from "expo-blur";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { ActivityIndicator, Alert, DeviceEventEmitter, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useTheme } from "../../context/ThemeContext";
 import { supabase } from "../../services/supabase";
@@ -24,6 +16,7 @@ export default function HomeScreen() {
   const { isPremium, isDark } = useTheme(); 
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // 👈 ჩამოსქროლვით განახლებისთვის
   const [nextPeriod, setNextPeriod] = useState(null);
   const [daysLeft, setDaysLeft] = useState(null);
   const [cycleDay, setCycleDay] = useState(null);
@@ -33,7 +26,6 @@ export default function HomeScreen() {
   const [pregnancyChance, setPregnancyChance] = useState("დაბალი");
   const [phaseColor, setPhaseColor] = useState("#ff4d88");
   
-  // ახალი სტეიტი მიზნისთვის
   const [userGoal, setUserGoal] = useState("ციკლის კონტროლი");
 
   const theme = {
@@ -45,9 +37,18 @@ export default function HomeScreen() {
     circleBg: isDark ? "#252525" : "#fff0f5",
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // 👈 useFocusEffect ავტომატური განახლებისთვის სხვა ტაბიდან გადმოსვლისას
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
 
   const getDailyStats = (day, total, pLength) => {
     const ovulation = total - 14;
@@ -87,7 +88,6 @@ export default function HomeScreen() {
       const cycles = cyclesRes.data || [];
       const profile = profileRes.data;
 
-      // მიზნის წამოღება პროფილიდან
       if (profile?.goal) {
         setUserGoal(profile.goal);
       }
@@ -131,26 +131,77 @@ export default function HomeScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      
       const today = dayjs().format("YYYY-MM-DD");
-      const { error } = await supabase.from("cycles").insert([{ user_id: user.id, start_date: today, period_length: periodLength, cycle_length: cycleLength }]);
-      if (error) throw error;
-      Alert.alert("წარმატება", "ციკლის დაწყება დაფიქსირდა!");
-      loadData();
+
+      const { data: existing } = await supabase
+        .from("cycles")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("start_date", today)
+        .maybeSingle();
+
+      if (existing) {
+        Alert.alert("ინფორმაცია", "დღევანდელი ციკლი უკვე დაფიქსირებულია.");
+        return;
+      }
+
+      Alert.alert(
+        "დადასტურება", 
+        "დარწმუნებული ხარ, რომ ციკლი დღეს მოგივიდა? ✨", 
+        [
+          {
+            text: "გაუქმება",
+            style: "cancel",
+          },
+          {
+            text: "დიახ, დაამატე",
+            onPress: async () => {
+              const { error } = await supabase.from("cycles").insert([{ 
+                user_id: user.id, 
+                start_date: today, 
+                period_length: periodLength, 
+                cycle_length: cycleLength 
+              }]);
+
+              if (error) throw error;
+              
+              Alert.alert(
+                "წარმატება 🎉", 
+                "ახალი პერიოდი დაფიქსირებულია!\n\n💡 მითითება: თუ კალენდარში ძველი (არასწორი) დღეებიც დაგრჩა მონიშნული, შეგიძლია გადახვიდე კალენდარში, დააკლიკო იმ დღეს და წაშალო."
+              );
+              loadData(); 
+              DeviceEventEmitter.emit("cycleUpdated");
+            },
+          },
+        ]
+      );
+
     } catch (error) {
       Alert.alert("შეცდომა", "მონაცემების შენახვა ვერ მოხერხდა");
     }
   };
 
-  if (loading) return <View style={[styles.container, { justifyContent: 'center', backgroundColor: theme.bg }]}><ActivityIndicator size="large" color={theme.primary} /></View>;
+  if (loading && !refreshing) return <View style={[styles.container, { justifyContent: 'center', backgroundColor: theme.bg }]}><ActivityIndicator size="large" color={theme.primary} /></View>;
 
   const progress = cycleDay ? (cycleDay / cycleLength) * 100 : 0;
   const stats = getDailyStats(cycleDay, cycleLength, periodLength);
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: theme.bg }]} 
+      showsVerticalScrollIndicator={false}
+      // 👈 დამატებულია RefreshControl
+      refreshControl={
+        <RefreshControl 
+          refreshing={refreshing} 
+          onRefresh={onRefresh} 
+          tintColor={theme.primary} 
+        />
+      }
+    >
       <Text style={[styles.topDate, { color: theme.subText }]}>{dayjs().format("D MMMM, dddd")}</Text>
 
-      {/* მთავარი ბარათი */}
       <View style={[styles.mainCard, { backgroundColor: theme.card }]}>
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
@@ -187,7 +238,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* დღევანდელი მაჩვენებლები */}
       <View>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი მაჩვენებლები</Text>
         <View style={[styles.statsCard, { backgroundColor: theme.card, overflow: 'hidden' }]}>
@@ -219,7 +269,6 @@ export default function HomeScreen() {
           ) : userGoal === "ჯანმრთელობის მონიტორინგი" ? (
              "ყურადღება მიაქციეთ სიმპტომების ცვლილებას და აუცილებლად ჩაინიშნეთ დღიურში."
           ) : (
-            // სტანდარტული რჩევები
             phase === "პერიოდი" && "ეცადეთ მიიღოთ თბილი სითხეები და მაგნიუმით მდიდარი საკვები." ||
             phase === "ფოლიკულური ფაზა" && "თქვენი ენერგია პიკშია! საუკეთესო დროა ახალი პროექტებისთვის." ||
             phase === "ნაყოფიერი პერიოდი" && "ორგანიზმი ოვულაციისთვის ემზადება. შესაძლოა იგრძნოთ ენერგიის მატება." ||

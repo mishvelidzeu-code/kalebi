@@ -97,12 +97,36 @@ const checkNotificationStatus = async () => {
   // --- შეტყობინებების გამართული ფუნქცია ---
   const handleNotificationToggle = async (value) => {
     try {
-      setNotifications(value);
-      if (value) {
-        // 1. პროექტის ID-ს Fallback (შენი ID საიტიდან)
+      // 1. თუ მომხმარებელს გამორთვა უნდა, პირდაპირ ვთიშავთ
+      if (!value) {
+        await Notifications.cancelAllScheduledNotificationsAsync();
+        setNotifications(false);
+        return;
+      }
+
+      // 2. ნებართვების შემოწმება
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      // 3. თუ ნებართვა არ გვაქვს, აქ ვჩერდებით
+      if (finalStatus !== 'granted') {
+        Alert.alert("წვდომა უარყოფილია", "გთხოვთ, ჩართოთ შეტყობინებები ტელეფონის პარამეტრებიდან.");
+        setNotifications(false);
+        return;
+      }
+
+      // 4. მხოლოდ ახლა ვრთავთ Toggle-ს
+      setNotifications(true);
+
+      // 5. ტოკენის აღება და სატესტო ნოტიფიკაცია
+      try {
         const projectId = Constants.expoConfig?.extra?.eas?.projectId || "90082f78-6f14-4632-9c3f-7a609964a196";
 
-        // 2. Android-ისთვის არხის შექმნა
         if (Platform.OS === 'android') {
           await Notifications.setNotificationChannelAsync('default', {
             name: 'default',
@@ -111,26 +135,9 @@ const checkNotificationStatus = async () => {
           });
         }
 
-        // 3. ნებართვების მოთხოვნა
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-        if (existingStatus !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
-        }
-        
-        if (finalStatus !== 'granted') {
-          Alert.alert("წვდომა უარყოფილია", "გთხოვთ, ჩართოთ შეტყობინებები ტელეფონის პარამეტრებიდან.");
-          setNotifications(false);
-          return;
-        }
+        const token = await Notifications.getExpoPushTokenAsync({ projectId });
+        console.log("Push token:", token);
 
-        // 4. რეგისტრაცია და ტესტური შეტყობინება
-        const token = await Notifications.getExpoPushTokenAsync({
-  projectId
-});
-
-console.log("Push token:", token);
         await Notifications.scheduleNotificationAsync({
           content: {
             title: "შეტყობინებები აქტიურია! ✨",
@@ -138,12 +145,13 @@ console.log("Push token:", token);
           },
           trigger: { seconds: 2 },
         });
-      } else {
-        await Notifications.cancelAllScheduledNotificationsAsync();
+      } catch (tokenError) {
+        console.log("Push Token Error (Probably Simulator):", tokenError);
       }
     } catch (e) {
-      console.log(e);
-      Alert.alert("შეცდომა", "სისტემას არ აქვს წვდომა ნოთიფიკაციაზე.");
+      console.log("Notification Logic Error:", e);
+      Alert.alert("შეცდომა", "სისტემური ხარვეზი შეტყობინებების ჩართვისას.");
+      setNotifications(false);
     }
   };
 

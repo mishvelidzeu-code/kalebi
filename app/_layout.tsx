@@ -1,6 +1,10 @@
 import { ThemeProvider as NavigationThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react"; // დამატებულია
+import { Platform } from "react-native"; // დამატებულია
+import Purchases from "react-native-purchases"; // დამატებულია
+
 import { OnboardingProvider } from "../components/OnboardingContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 
@@ -30,6 +34,16 @@ function LayoutContent() {
 }
 
 export default function RootLayout() {
+  // RevenueCat-ის ინიციალიზაცია აპლიკაციის ჩართვისთანავე
+  useEffect(() => {
+    const initPurchases = async () => {
+      if (Platform.OS === 'ios') {
+        Purchases.configure({ apiKey: "appl_wPnULcgcdhNvUKrWvnGjVjqBeVl" });
+      }
+    };
+    initPurchases();
+  }, []);
+
   return (
     <ThemeProvider>
       <OnboardingProvider>

@@ -1,13 +1,16 @@
 import dayjs from "dayjs";
 import "dayjs/locale/ka";
 import { BlurView } from "expo-blur";
-import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  RefreshControl,
+  SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -74,6 +77,8 @@ export default function StatisticsScreen() {
   const { isPremium, isDark } = useTheme(); 
   
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // 👈 ჩამოსქროლვის სტეიტი
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
@@ -98,9 +103,19 @@ export default function StatisticsScreen() {
     divider: isDark ? "#333" : "#F0F0F0",
   };
 
-  useEffect(() => {
-    loadAllStats();
-  }, []);
+  // 👈 ავტომატური განახლება ამ ტაბზე გადმოსვლისას
+  useFocusEffect(
+    useCallback(() => {
+      loadAllStats();
+    }, [])
+  );
+
+  // 👈 ჩამოსქროლვით განახლების ფუნქცია
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAllStats();
+    setRefreshing(false);
+  };
 
   const startEntranceAnimation = () => {
     fadeAnim.setValue(0);
@@ -182,16 +197,25 @@ export default function StatisticsScreen() {
     }
   };
 
-  if (loading) return <View style={[styles.center, {backgroundColor: theme.bg}]}><ActivityIndicator size="large" color="#E94560" /></View>;
+  if (loading && !refreshing) return <View style={[styles.center, {backgroundColor: theme.bg}]}><ActivityIndicator size="large" color="#E94560" /></View>;
 
   const maxChartValue = Math.max(...stats.history.map(h => h.length), 40);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       <ScrollView 
         style={styles.container} 
         showsVerticalScrollIndicator={false}
         scrollEnabled={isPremium}
+        // 👈 დაემატა RefreshControl
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            tintColor={isDark ? "#E94560" : "#ff4d88"} 
+          />
+        }
       >
         <Text style={[styles.headerTitle, { color: theme.text }]}>შენი ანალიტიკა ✨</Text>
 
@@ -280,23 +304,41 @@ export default function StatisticsScreen() {
         </Animated.View>
       </ScrollView>
 
-      {/* --- განახლებული პრაიმ ბლოკი --- */}
+      {/* --- განახლებული პრაიმ მოდალი (ინტენსივობა 10) --- */}
       {!isPremium && (
-        <BlurView intensity={7} tint={isDark ? "dark" : "light"} style={styles.premiumOverlay}>
-          <TouchableOpacity 
-            style={[styles.premiumBadge, { backgroundColor: isDark ? "#E94560" : "#1A1A1A" }]} 
-            onPress={() => router.push("/premium")}
-          >
-            <Text style={styles.premiumBadgeText}>გახდი პრაიმი ✨</Text>
-          </TouchableOpacity>
+        <BlurView intensity={10} tint={isDark ? "dark" : "light"} style={styles.premiumOverlay}>
+          <View style={[
+            styles.premiumCard, 
+            { 
+              backgroundColor: isDark ? "rgba(26,26,26,0.85)" : "rgba(255,255,255,0.85)",
+              borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"
+            }
+          ]}>
+            <Text style={styles.premiumIcon}>✨</Text>
+            <Text style={[styles.premiumTitle, { color: theme.text }]}>გახდი პრაიმი</Text>
+            <Text style={[styles.premiumSubtitle, { color: theme.subText }]}>
+              განბლოკე კალენდარი, სიმპტომების ისტორია და დეტალური ანალიტიკა.
+            </Text>
+            
+            <TouchableOpacity 
+              style={[
+                styles.premiumBadge, 
+                { backgroundColor: isDark ? "#E94560" : "#ff4d88" }
+              ]} 
+              activeOpacity={0.8}
+              onPress={() => router.push("/premium")}
+            >
+              <Text style={styles.premiumBadgeText}>სრული ვერსიის გააქტიურება</Text>
+            </TouchableOpacity>
+          </View>
         </BlurView>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 20, paddingTop: 60 },
+  container: { flex: 1, paddingHorizontal: 20, paddingTop: 10 }, // 👈 padding ოდნავ შევამცირე SafeAreaView-ს გამო
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   headerTitle: { fontSize: 32, fontWeight: "900", marginBottom: 25, letterSpacing: -0.5 },
   
@@ -339,25 +381,57 @@ const styles = StyleSheet.create({
   symptomTrack: { height: 8, borderRadius: 4, overflow: 'hidden' },
   symptomFill: { height: '100%', borderRadius: 4 },
 
-  // --- ახალი პრაიმ სტილები ---
+  // --- განახლებული პრაიმ სტილები ---
   premiumOverlay: { 
     ...StyleSheet.absoluteFillObject, 
     justifyContent: "center", 
     alignItems: "center",
-    borderRadius: 24
+    padding: 24,
+    zIndex: 100,
+  },
+  premiumCard: {
+    width: "100%",
+    maxWidth: 360,
+    padding: 30,
+    borderRadius: 32,
+    alignItems: "center",
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.15,
+    shadowRadius: 25,
+    elevation: 10,
+  },
+  premiumIcon: {
+    fontSize: 50,
+    marginBottom: 15,
+  },
+  premiumTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  premiumSubtitle: {
+    fontSize: 15,
+    textAlign: "center",
+    marginBottom: 25,
+    lineHeight: 22,
   },
   premiumBadge: { 
-    paddingVertical: 12, 
-    paddingHorizontal: 24, 
-    borderRadius: 16, 
+    width: "100%",
+    paddingVertical: 16, 
+    borderRadius: 20, 
+    alignItems: "center",
+    shadowColor: "#ff4d88",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
     elevation: 5,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8
   },
   premiumBadgeText: { 
     color: "#FFF", 
-    fontSize: 15, 
+    fontSize: 16, 
     fontWeight: "800" 
   }
 });

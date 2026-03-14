@@ -1,4 +1,5 @@
 import { Picker } from "@react-native-picker/picker";
+import dayjs from "dayjs";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -50,11 +51,13 @@ export default function LastPeriod() {
       setSaving(true);
 
       const currentYear = new Date().getFullYear();
-      const startDate = new Date(currentYear, month - 1, day);
+      
+      // ვქმნით ლოკალურ თარიღს და ეგრევე ვაფორმატებთ ტექსტად (მაგ: "2026-03-02")
+      const formattedDate = dayjs(new Date(currentYear, month - 1, day)).format("YYYY-MM-DD");
 
       setData({
         ...data,
-        last_period: startDate.toISOString()
+        last_period: formattedDate // 👈 ვინახავთ ზუსტ ტექსტს და არა ISO სტრინგს
       });
 
       router.replace("/auth/register");
@@ -92,21 +95,22 @@ export default function LastPeriod() {
             <Text style={styles.pickerLabel}>თვე</Text>
 
             <Picker
-              style={styles.picker}
-              itemStyle={styles.pickerItem} // აქ დაემატა სტილი
-              selectedValue={month}
-              onValueChange={(value)=>setMonth(value)}
-              dropdownIconColor="#ff4d88"
-            >
-              {months.map((m,i)=>(
-                <Picker.Item
-                  key={i}
-                  label={m}
-                  value={i+1}
-                  color={Platform.OS==='ios' ? '#ff4d88' : '#333'}
-                />
-              ))}
-            </Picker>
+  style={styles.picker}
+  itemStyle={styles.pickerItem} 
+  selectedValue={month}
+  onValueChange={(value) => setMonth(value)}
+  dropdownIconColor="#ff4d88"
+  selectionColor="#ff4d88" // 👈 დაამატე ესეც
+>
+  {months.map((m, i) => (
+    <Picker.Item
+      key={i}
+      label={m}
+      value={i + 1}
+      // აქ color აღარ გჭირდება, რადგან itemStyle-ში მივუთითეთ
+    />
+  ))}
+</Picker>
           </View>
 
           <View style={styles.pickerContainer}>
@@ -247,6 +251,7 @@ const styles = StyleSheet.create({
   pickerItem: {
     fontWeight: "bold",
     fontSize: 20, // ოდნავ გავზარდე კიდეც, რომ კარგად გამოჩნდეს
+    color: "#ff4d88",
   },
 
   footer:{width:"100%",zIndex:10,paddingHorizontal:30},

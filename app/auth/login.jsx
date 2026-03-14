@@ -1,4 +1,4 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons"; // იკონებისთვის
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useRouter } from "expo-router";
@@ -25,8 +25,6 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  
-  // საწყისი მნიშვნელობა არის false, სანამ ტელეფონს არ შევამოწმებთ
   const [isBiometricSupported, setIsBiometricSupported] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -38,14 +36,17 @@ export default function Login() {
       Animated.timing(slideAnim, { toValue: 0, duration: 800, useNativeDriver: true })
     ]).start();
 
-    // რეალური შემოწმება
     checkBiometrics();
   }, []);
 
   const checkBiometrics = async () => {
-    const compatible = await LocalAuthentication.hasHardwareAsync();
-    const enrolled = await LocalAuthentication.isEnrolledAsync();
-    setIsBiometricSupported(compatible && enrolled);
+    try {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      setIsBiometricSupported(compatible && enrolled);
+    } catch (e) {
+      console.log("Biometric check error", e);
+    }
   };
 
   const login = async () => {
@@ -55,28 +56,34 @@ export default function Login() {
     }
 
     setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
+      if (error) {
+        setLoading(false);
+        Alert.alert("შეცდომა", error.message);
+        return;
+      }
 
-    if (error) {
+      // მონაცემების შენახვა
+      await SecureStore.setItemAsync("saved_email", email.trim());
+      await SecureStore.setItemAsync("saved_password", password);
+
       setLoading(false);
-      Alert.alert("შეცდომა", error.message);
-      return;
+      router.replace("/(tabs)");
+    } catch (e) {
+      setLoading(false);
+      Alert.alert("შეცდომა", "სისტემური ხარვეზი ლოგინისას");
     }
-
-    // ვინახავთ მონაცემებს შემდეგი შესვლისთვის
-    await SecureStore.setItemAsync("saved_email", email.trim());
-    await SecureStore.setItemAsync("saved_password", password);
-
-    setLoading(false);
-    router.replace("/(tabs)");
   };
 
+  // --- განახლებული დიაგნოსტიკური ფუნქცია ---
   const handleBiometricAuth = async () => {
     try {
+      // 1. ჯერ ამოვიღოთ მონაცემები
       const savedEmail = await SecureStore.getItemAsync("saved_email");
       const savedPassword = await SecureStore.getItemAsync("saved_password");
 
@@ -85,10 +92,17 @@ export default function Login() {
         return;
       }
 
+      // 2. შევამოწმოთ, ხომ არ არის სკანერი უკვე ჩართული (რომ არ გაიჭედოს)
+      const isScanning = await LocalAuthentication.hasHardwareAsync();
+      if (!isScanning) return;
+
+      // 3. პირდაპირ გამოვიძახოთ სკანერი (ყოველგვარი წინასწარი ალერტის გარეშე)
+      // ალერტმა შეიძლება დააბნიოს iOS-ის Face ID ინტერფეისი
       const authResult = await LocalAuthentication.authenticateAsync({
-        promptMessage: "დაასკანერეთ Face ID / ანაბეჭდი",
-        fallbackLabel: "გამოიყენეთ პაროლი",
-        disableDeviceFallback: true, // პრიორიტეტი ბიომეტრიას
+        promptMessage: "შესვლა Face ID-ით",
+        fallbackLabel: "გამოიყენეთ პინ-კოდი", 
+        disableDeviceFallback: false, // მივცეთ უფლება პინ-კოდი გამოიყენოს, თუ სახე ვერ იცნო
+        cancelLabel: "გაუქმება"
       });
 
       if (authResult.success) {
@@ -98,16 +112,18 @@ export default function Login() {
           password: savedPassword,
         });
 
-        setLoading(false);
-
         if (error) {
+          setLoading(false);
           Alert.alert("შეცდომა", "ავტორიზაცია ვერ მოხერხდა.");
         } else {
+          setLoading(false);
           router.replace("/(tabs)");
         }
       }
     } catch (error) {
-      Alert.alert("შეცდომა", "ბიომეტრიით შესვლა ვერ მოხერხდა");
+      console.log("Biometric error:", error);
+      // თუ გაიჭედა, მომხმარებელს მაინც მივცეთ საშუალება ხელით შევიდეს
+      setLoading(false);
     }
   };
 
@@ -117,7 +133,7 @@ export default function Login() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
-        <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }], width: '100%' }]}>
           
           <View style={styles.header}>
             <View style={styles.iconBox}>
@@ -147,29 +163,30 @@ export default function Login() {
               placeholderTextColor="#aaa"
             />
 
-            <View style={styles.buttonRow}>
-              <TouchableOpacity
-                style={[styles.button, isBiometricSupported && styles.buttonWithBiometric, loading && { opacity: 0.7 }]}
-                onPress={login}
-                disabled={loading}
-              >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>შესვლა</Text>}
-              </TouchableOpacity>
-
-              {isBiometricSupported && (
-                <TouchableOpacity
-                  style={styles.biometricButton}
-                  onPress={handleBiometricAuth}
-                  disabled={loading}
-                >
-                  <MaterialCommunityIcons name="face-recognition" size={30} color="#ff4d88" />
-                </TouchableOpacity>
-              )}
-            </View>
+            <TouchableOpacity
+              style={[styles.button, loading && { opacity: 0.7 }]}
+              onPress={login}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>შესვლა</Text>}
+            </TouchableOpacity>
 
             <TouchableOpacity onPress={() => router.push("/auth/register")} style={styles.link}>
               <Text style={styles.linkText}>არ გაქვს ანგარიში? <Text style={styles.linkHighlight}>რეგისტრაცია</Text></Text>
             </TouchableOpacity>
+
+            {isBiometricSupported && (
+              <View style={styles.biometricContainer}>
+                <Text style={styles.biometricText}>ან სწრაფად შესვლა</Text>
+                <TouchableOpacity
+                  style={styles.biometricButtonBottom}
+                  onPress={handleBiometricAuth}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons name="face-recognition" size={35} color="#ff4d88" />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </Animated.View>
       </KeyboardAvoidingView>
@@ -190,25 +207,45 @@ const styles = StyleSheet.create({
   emoji: { fontSize: 36 },
   title: { fontSize: 28, fontWeight: "900", color: "#ff4d88", textAlign: "center", marginBottom: 10 },
   subtitle: { fontSize: 15, color: "#7A5C6A", textAlign: "center", lineHeight: 22 },
-  form: { width: "100%" },
+  form: { width: "100%", zIndex: 10 },
   input: {
     backgroundColor: "#fff", padding: 20, borderRadius: 22, marginBottom: 15,
     fontSize: 16, fontWeight: "600", elevation: 4, shadowColor: "#000",
     shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }
   },
-  buttonRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 },
   button: {
     backgroundColor: "#ff4d88", padding: 20, borderRadius: 22,
-    alignItems: "center", elevation: 8, shadowColor: "#ff4d88", shadowOpacity: 0.4, shadowRadius: 15, width: "100%",
+    alignItems: "center", elevation: 8, shadowColor: "#ff4d88", shadowOpacity: 0.4, shadowRadius: 15, width: "100%", marginTop: 10,
   },
-  buttonWithBiometric: { flex: 1, marginRight: 15 },
   buttonText: { color: "#fff", fontSize: 18, fontWeight: "800" },
-  biometricButton: {
-    backgroundColor: "#fff", width: 65, height: 65, borderRadius: 22,
-    justifyContent: "center", alignItems: "center", elevation: 8,
-    shadowColor: "#ff4d88", shadowOpacity: 0.2, shadowRadius: 15, borderWidth: 2, borderColor: "#FFF0F5",
-  },
-  link: { marginTop: 25, alignItems: "center" },
+  link: { marginTop: 25, marginBottom: 10, alignItems: "center" },
   linkText: { color: "#7A5C6A", fontSize: 15, fontWeight: "600" },
-  linkHighlight: { color: "#ff4d88", fontWeight: "800" }
+  linkHighlight: { color: "#ff4d88", fontWeight: "800" },
+  biometricContainer: { 
+    marginTop: 20, 
+    alignItems: "center",
+    paddingBottom: 20,
+    zIndex: 100
+  },
+  biometricText: { 
+    color: "#7A5C6A", 
+    fontSize: 14, 
+    marginBottom: 15, 
+    fontWeight: "600" 
+  },
+  biometricButtonBottom: {
+    backgroundColor: "#fff", 
+    width: 80, 
+    height: 80, 
+    borderRadius: 25,
+    justifyContent: "center", 
+    alignItems: "center", 
+    elevation: 10,
+    shadowColor: "#ff4d88", 
+    shadowOpacity: 0.3, 
+    shadowRadius: 15, 
+    borderWidth: 2, 
+    borderColor: "#FFF0F5",
+    zIndex: 1000,
+  }
 });

@@ -3,15 +3,7 @@ import "dayjs/locale/ka";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from "react-native";
+import { ActivityIndicator, Alert, DeviceEventEmitter, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Calendar } from "react-native-calendars";
 
 import { useTheme } from "../../context/ThemeContext";
@@ -30,9 +22,9 @@ export default function CalendarScreen() {
   const [currentDate, setCurrentDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [selectedDay, setSelectedDay] = useState(dayjs().format("YYYY-MM-DD"));
   
-  // --- დამატებულია calendarKey კალენდრის იძულებითი განახლებისთვის ---
   const [calendarKey, setCalendarKey] = useState(1);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [dayDetails, setDayDetails] = useState({
     symptoms: [],
@@ -52,12 +44,40 @@ export default function CalendarScreen() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(); // იტვირთება მხოლოდ ერთხელ, აპლიკაციის ჩართვისას
+
+    // ვუსმენთ სიგნალს სხვა გვერდებიდან
+    const subscription = DeviceEventEmitter.addListener("cycleUpdated", () => {
+      loadData(); // კალენდარი განახლდება *მხოლოდ* მაშინ, თუ ვინმემ ციკლი დაამატა ან წაშალა
+    });
+
+    // მეხსიერების გასუფთავება გვერდის დახურვისას
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   useEffect(() => {
     fetchDayDetails(selectedDay);
   }, [selectedDay]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  // 👈 ახალი ფუნქცია: ციკლის ხანგრძლივობის შეცვლა
+  const adjustPeriodLength = async (cycle, delta) => {
+    const newLen = cycle.period_length + delta;
+    if (newLen < 1) return; // მინიმუმ 1 დღე უნდა იყოს
+    try {
+      await supabase.from("cycles").update({ period_length: newLen }).eq("id", cycle.id);
+      onRefresh(); // ვაახლებთ კალენდარს დაუყოვნებლივ
+    } catch (e) {
+      console.log(e);
+    }
+  };
 
   const fetchDayDetails = async (dateStr) => {
     setDayDetails(prev => ({ ...prev, loading: true }));
@@ -108,27 +128,36 @@ export default function CalendarScreen() {
     };
   }
 
-  // --- შესწორებული ფუნქციები წლების და თვეების არჩევისთვის ---
   const changeYear = (amount) => {
     const newDate = dayjs(currentDate).add(amount, 'year').format("YYYY-MM-DD");
     setCurrentDate(newDate);
-    setCalendarKey(Date.now()); // Date.now() 100%-ით აიძულებს კალენდარს დახატოს ახალი თვე
+    setCalendarKey(Date.now());
   };
 
   const selectMonth = (index) => {
     const newDate = dayjs(currentDate).month(index).format("YYYY-MM-DD");
     setCurrentDate(newDate);
-    setCalendarKey(Date.now()); // Date.now() 100%-ით აიძულებს კალენდარს დახატოს ახალი თვე
+    setCalendarKey(Date.now());
     setShowMonthPicker(false);
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.container, { backgroundColor: theme.bg }]}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={{ paddingBottom: 100 }}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh} 
+              tintColor={isDark ? "#E94560" : "#ff4d88"} 
+            />
+          }
+        >
           
           <Calendar
-            key={`${isDark ? 'dark' : 'light'}-${calendarKey}`} // აი ჯადოქრობა აქ არის! კალენდარი მაშინვე განახლდება.
+            key={`${isDark ? 'dark' : 'light'}-${calendarKey}`}
             current={currentDate}
             onMonthChange={(month) => setCurrentDate(month.dateString)}
             markedDates={calendarMarks}
@@ -168,24 +197,81 @@ export default function CalendarScreen() {
               <Text style={[styles.detailsTitle, { color: theme.text }]}>
                 {dayjs(selectedDay).format("D MMMM")}
               </Text>
-              <TouchableOpacity
-                style={[styles.editButton, { backgroundColor: isDark ? "rgba(233,69,96,0.15)" : "#FFF0F5" }]}
-                onPress={() => isPremium ? router.push("/(tabs)/symptoms") : router.push("/premium")}
-              >
-                <Text style={[styles.editButtonText, { color: isDark ? "#E94560" : "#ff4d88" }]}>რედაქტირება</Text>
-              </TouchableOpacity>
+              
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                {/* 👈 ჭკვიანი ღილაკები: წაშლა ან დამატება */}
+                {activeCycle && !activeCycle.isPrediction ? (
+                  <TouchableOpacity
+                    style={[styles.editButton, { backgroundColor: isDark ? "rgba(255,50,50,0.1)" : "#ffe5e5" }]}
+                    onPress={() => {
+                      Alert.alert(
+                        "წაშლა",
+                        "ნამდვილად გსურთ ამ ციკლის წაშლა?",
+                        [
+                          { text: "გაუქმება", style: "cancel" },
+                          { text: "წაშლა", style: "destructive", onPress: () => deleteCycle(activeCycle) }
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={{ color: "#ff3333", fontWeight: "700" }}>წაშლა</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.editButton, { backgroundColor: isDark ? "rgba(233,69,96,0.15)" : "#FFF0F5" }]}
+                    onPress={() => {
+                      Alert.alert(
+                        "დამატება",
+                        `${dayjs(selectedDay).format("D MMMM")}-ს ნამდვილად დაგეწყოთ პერიოდი?`,
+                        [
+                          { text: "გაუქმება", style: "cancel" },
+                          { text: "დამატება", onPress: async () => {
+                              await addCycle(selectedDay);
+                              onRefresh();
+                          }}
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={[styles.editButtonText, { color: isDark ? "#E94560" : "#ff4d88" }]}>➕ დამატება</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             {dayDetails.loading ? (
               <ActivityIndicator color={isDark ? "#E94560" : "#ff4d88"} style={{ marginTop: 20 }} />
             ) : (
               <View style={[styles.detailsCard, { backgroundColor: theme.card }]}>
+                
                 <View style={styles.statusRow}>
                   <Text style={[styles.statusLabel, { color: theme.subText }]}>მდგომარეობა:</Text>
                   <Text style={[styles.statusValue, { color: theme.text }]}>
                     {activeCycle ? "🩸 პერიოდის დღე" : "თავისუფალი დღე"}
                   </Text>
                 </View>
+
+                {/* 👈 ახალი: ციკლის დღეების დამატება/მოკლება (ჩანს მხოლოდ ნამდვილ ციკლზე) */}
+                {activeCycle && !activeCycle.isPrediction && (
+                  <View style={[styles.statusRow, { alignItems: 'center', marginTop: 5, marginBottom: 15 }]}>
+                    <Text style={[styles.statusLabel, { color: theme.subText }]}>ხანგრძლივობა:</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TouchableOpacity 
+                        onPress={() => adjustPeriodLength(activeCycle, -1)}
+                        style={{ width: 32, height: 32, backgroundColor: theme.pill, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 16 }}>-</Text>
+                      </TouchableOpacity>
+                      <Text style={{ color: theme.text, fontWeight: 'bold', marginHorizontal: 15 }}>
+                        {activeCycle.period_length} დღე
+                      </Text>
+                      <TouchableOpacity 
+                        onPress={() => adjustPeriodLength(activeCycle, 1)}
+                        style={{ width: 32, height: 32, backgroundColor: theme.pill, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 16 }}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
 
                 {dayDetails.mood && (
                   <View style={styles.statusRow}>
@@ -226,8 +312,6 @@ export default function CalendarScreen() {
       <Modal visible={showMonthPicker} transparent animationType="fade">
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.monthPickerCard, { backgroundColor: theme.card }]}>
-            
-            {/* წლების გადამრთველი */}
             <View style={styles.yearSelector}>
               <TouchableOpacity onPress={() => changeYear(-1)} style={styles.yearBtn}>
                 <Text style={[styles.yearBtnText, { color: theme.text }]}>{"<"}</Text>
@@ -238,7 +322,6 @@ export default function CalendarScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* თვეების გრიდი */}
             <View style={styles.monthsGrid}>
               {shortMonths.map((m, i) => {
                 const isActive = dayjs(currentDate).month() === i;
@@ -261,19 +344,37 @@ export default function CalendarScreen() {
             <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowMonthPicker(false)}>
               <Text style={styles.closeModalBtnText}>გაუქმება</Text>
             </TouchableOpacity>
-
           </View>
         </View>
       </Modal>
 
+      {/* --- განახლებული პრაიმ მოდალი (Glassmorphism ეფექტით) --- */}
       {!isPremium && (
-        <BlurView intensity={7} tint={isDark ? "dark" : "light"} style={styles.premiumOverlay}>
-          <TouchableOpacity 
-            style={[styles.premiumBadge, { backgroundColor: isDark ? "#E94560" : "#1A1A1A" }]} 
-            onPress={() => router.push("/premium")}
-          >
-            <Text style={styles.premiumBadgeText}>გახდი პრაიმი ✨</Text>
-          </TouchableOpacity>
+        <BlurView intensity={10} tint={isDark ? "dark" : "light"} style={styles.premiumOverlay}>
+          <View style={[
+            styles.premiumCard, 
+            { 
+              backgroundColor: isDark ? "rgba(26,26,26,0.85)" : "rgba(255,255,255,0.85)",
+              borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"
+            }
+          ]}>
+            <Text style={styles.premiumIcon}>✨</Text>
+            <Text style={[styles.premiumTitle, { color: theme.text }]}>გახდი პრაიმი</Text>
+            <Text style={[styles.premiumSubtitle, { color: theme.subText }]}>
+              განბლოკე კალენდარი, სიმპტომების ისტორია და დეტალური ანალიტიკა.
+            </Text>
+            
+            <TouchableOpacity 
+              style={[
+                styles.premiumBadge, 
+                { backgroundColor: isDark ? "#E94560" : "#ff4d88" }
+              ]} 
+              activeOpacity={0.8}
+              onPress={() => router.push("/premium")}
+            >
+              <Text style={styles.premiumBadgeText}>სრული ვერსიის გააქტიურება</Text>
+            </TouchableOpacity>
+          </View>
         </BlurView>
       )}
     </View>
@@ -316,20 +417,52 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject, 
     justifyContent: "center", 
     alignItems: "center",
-    borderRadius: 24
+    padding: 24,
+    zIndex: 100,
+  },
+  premiumCard: {
+    width: "100%",
+    maxWidth: 360,
+    padding: 30,
+    borderRadius: 32,
+    alignItems: "center",
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.15,
+    shadowRadius: 25,
+    elevation: 10,
+  },
+  premiumIcon: {
+    fontSize: 50,
+    marginBottom: 15,
+  },
+  premiumTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  premiumSubtitle: {
+    fontSize: 15,
+    textAlign: "center",
+    marginBottom: 25,
+    lineHeight: 22,
   },
   premiumBadge: { 
-    paddingVertical: 12, 
-    paddingHorizontal: 24, 
-    borderRadius: 16, 
+    width: "100%",
+    paddingVertical: 16, 
+    borderRadius: 20, 
+    alignItems: "center",
+    shadowColor: "#ff4d88",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
     elevation: 5,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8
   },
   premiumBadgeText: { 
     color: "#FFF", 
-    fontSize: 15, 
+    fontSize: 16, 
     fontWeight: "800" 
   },
 

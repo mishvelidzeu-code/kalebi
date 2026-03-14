@@ -10,23 +10,33 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "buildNumber": "2",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "აპლიკაციაში სწრაფად და უსაფრთხოდ შესასვლელად გამოიყენება Face ID."
-      }
-    },
-    "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#fff0f5",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "NSFaceIDUsageDescription": "აპლიკაციაში სწრაფად და უსაფრთხოდ შესასვლელად გამოიყენება Face ID.",
+        "ITSAppUsesNonExemptEncryption": false
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "bundleIdentifier": "com.mishvela.kalebi"
     },
+   "android": {
+  "package": "com.mishvela.kalebi",
+  "versionCode": 2, // აუცილებელია Play Store-ისთვის (უნდა გაიზარდოს ყოველ Build-ზე)
+  "adaptiveIcon": {
+    "foregroundImage": "./assets/images/android-icon-foreground.png",
+    "backgroundImage": "./assets/images/android-icon-background.png", // ან გამოიყენე "backgroundColor": "#fff0f5"
+    "backgroundColor": "#fff0f5"
+  },
+  "edgeToEdgeEnabled": true,
+  "predictiveBackGestureEnabled": false,
+  "permissions": [
+    "android.permission.USE_BIOMETRIC",
+    "android.permission.USE_FINGERPRINT",
+    "android.permission.POST_NOTIFICATIONS" // აუცილებელია შეტყობინებებისთვის Android 13+ ზე
+  ]
+},
     "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -38,7 +48,7 @@
           "imageWidth": 220,
           "backgroundColor": "#fff0f5",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#fff0f5"
           }
         }
       ],
@@ -59,6 +69,12 @@
     "assetBundlePatterns": [
       "**/*"
     ],
-    "owner": "mishvela"
+    "owner": "mishvela",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/90082f78-6f14-4632-9c3f-7a609964a196"
+    }
   }
 }

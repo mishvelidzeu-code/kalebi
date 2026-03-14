@@ -154,6 +154,7 @@ export default function SymptomsScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 120 }}
+          scrollEnabled={isPremium}
         >
           <View style={styles.header}>
             <Text style={[styles.title, { color: dynamicColors.text }]}>დღევანდელი დღიური</Text>
@@ -229,15 +230,33 @@ export default function SymptomsScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* --- განახლებული პრაიმ ბლოკი --- */}
+      {/* --- განახლებული პრაიმ მოდალი (ინტენსივობა 10) --- */}
       {!isPremium && (
-        <BlurView intensity={7} tint={isDark ? "dark" : "light"} style={styles.premiumOverlay}>
-          <TouchableOpacity 
-            style={[styles.premiumBadge, { backgroundColor: isDark ? "#E94560" : "#1A1A1A" }]} 
-            onPress={() => router.push("/premium")}
-          >
-            <Text style={styles.premiumBadgeText}>გახდი პრაიმი ✨</Text>
-          </TouchableOpacity>
+        <BlurView intensity={10} tint={isDark ? "dark" : "light"} style={styles.premiumOverlay}>
+          <View style={[
+            styles.premiumCard, 
+            { 
+              backgroundColor: isDark ? "rgba(26,26,26,0.85)" : "rgba(255,255,255,0.85)",
+              borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"
+            }
+          ]}>
+            <Text style={styles.premiumIcon}>✨</Text>
+            <Text style={[styles.premiumTitle, { color: dynamicColors.text }]}>გახდი პრაიმი</Text>
+            <Text style={[styles.premiumSubtitle, { color: dynamicColors.subText }]}>
+              განბლოკე კალენდარი, სიმპტომების ისტორია და დეტალური ანალიტიკა.
+            </Text>
+            
+            <TouchableOpacity 
+              style={[
+                styles.premiumBadge, 
+                { backgroundColor: isDark ? "#E94560" : "#ff4d88" }
+              ]} 
+              activeOpacity={0.8}
+              onPress={() => router.push("/premium")}
+            >
+              <Text style={styles.premiumBadgeText}>სრული ვერსიის გააქტიურება</Text>
+            </TouchableOpacity>
+          </View>
         </BlurView>
       )}
     </View>
@@ -269,24 +288,57 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: "#E94560", padding: 20, borderRadius: 22, alignItems: "center" },
   saveBtnText: { color: "#FFF", fontSize: 18, fontWeight: "700" },
   
-  // --- ახალი პრაიმ სტილები ---
+  // --- განახლებული პრაიმ სტილები ---
   premiumOverlay: { 
     ...StyleSheet.absoluteFillObject, 
     justifyContent: "center", 
-    alignItems: "center"
+    alignItems: "center",
+    padding: 24,
+    zIndex: 100,
+  },
+  premiumCard: {
+    width: "100%",
+    maxWidth: 360,
+    padding: 30,
+    borderRadius: 32,
+    alignItems: "center",
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.15,
+    shadowRadius: 25,
+    elevation: 10,
+  },
+  premiumIcon: {
+    fontSize: 50,
+    marginBottom: 15,
+  },
+  premiumTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  premiumSubtitle: {
+    fontSize: 15,
+    textAlign: "center",
+    marginBottom: 25,
+    lineHeight: 22,
   },
   premiumBadge: { 
-    paddingVertical: 12, 
-    paddingHorizontal: 24, 
-    borderRadius: 16, 
+    width: "100%",
+    paddingVertical: 16, 
+    borderRadius: 20, 
+    alignItems: "center",
+    shadowColor: "#ff4d88",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
     elevation: 5,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8
   },
   premiumBadgeText: { 
     color: "#FFF", 
-    fontSize: 15, 
+    fontSize: 16, 
     fontWeight: "800" 
   }
 });
