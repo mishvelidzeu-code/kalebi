@@ -5,6 +5,7 @@ import utc from 'dayjs/plugin/utc';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert } from 'react-native'; // დავამატოთ Alert შეტყობინებისთვის
 
+import { syncCycleRemindersForUser } from '../services/notifications';
 import { supabase } from '../services/supabase';
 import { calculateAverageCycle, calculateAveragePeriod } from '../utils/cyclePrediction';
 
@@ -55,18 +56,21 @@ export const useCycles = () => {
       if (!user) return;
 
       const avgPeriod = profile?.period_length || calculateAveragePeriod(rawCycles) || 5;
+      const avgCycle = profile?.cycle_length || calculateAverageCycle(rawCycles) || 28;
       const formattedDate = dayjs(dateString).format("YYYY-MM-DD");
 
       const { error } = await supabase.from('cycles').insert([
         { 
           user_id: user.id, 
           start_date: formattedDate, 
-          period_length: avgPeriod 
+          period_length: avgPeriod,
+          cycle_length: avgCycle
         }
       ]);
 
       if (error) throw error;
       await loadData();
+      await syncCycleRemindersForUser();
     } catch (error) {
       console.error("Error adding cycle:", error);
     }
@@ -94,6 +98,7 @@ export const useCycles = () => {
         .eq('id', user.id);
 
       if (profileError) throw profileError;
+      await syncCycleRemindersForUser();
 
       await loadData(); // მონაცემების განახლება
       Alert.alert("წარმატება", "მონაცემები წარმატებით წაიშალა ✨");

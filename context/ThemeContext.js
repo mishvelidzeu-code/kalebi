@@ -2,7 +2,6 @@ import { DefaultTheme } from "@react-navigation/native";
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
 
-// პრაიმ თემა - მუქი
 const PremiumTheme = {
   ...DefaultTheme,
   dark: true,
@@ -18,7 +17,6 @@ const PremiumTheme = {
   },
 };
 
-// სტანდარტული თემა - თეთრი
 const StandardTheme = {
   ...DefaultTheme,
   colors: {
@@ -35,7 +33,7 @@ const StandardTheme = {
 const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
-  const [isPremium, setIsPremium] = useState(false);
+  const [isPremium, setIsPremium] = useState(true);
   const [usePremiumTheme, setUsePremiumTheme] = useState(true);
 
   useEffect(() => {
@@ -43,25 +41,29 @@ export const ThemeProvider = ({ children }) => {
   }, []);
 
   const checkPremiumStatus = async () => {
+    setIsPremium(true);
+    setUsePremiumTheme(true);
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) return;
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("is_premium")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      const premiumStatus = data?.is_premium || false;
-      setIsPremium(premiumStatus);
-      if (premiumStatus) setUsePremiumTheme(true);
-    } catch (e) {
-      setIsPremium(false);
+      await supabase.from("profiles").upsert(
+        {
+          id: user.id,
+          is_premium: true,
+        },
+        { onConflict: "id" }
+      );
+    } catch {
+      setIsPremium(true);
+      setUsePremiumTheme(true);
     }
   };
 
-  // --- ახალი ფუნქცია: სტატუსის იძულებითი განახლება ყიდვისას ---
   const refreshTheme = async () => {
     await checkPremiumStatus();
   };
@@ -75,15 +77,11 @@ export const ThemeProvider = ({ children }) => {
     setUsePremiumTheme,
     isDark,
     colors: currentTheme.colors,
-    navigationTheme: currentTheme, // ამას _layout-ში გამოვიყენებთ
-    refreshTheme // <--- გადავცემთ ამ ფუნქციას მთელ აპლიკაციას
+    navigationTheme: currentTheme,
+    refreshTheme,
   };
 
-  return (
-    <ThemeContext.Provider value={themeContextValue}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={themeContextValue}>{children}</ThemeContext.Provider>;
 };
 
 export const useTheme = () => useContext(ThemeContext);

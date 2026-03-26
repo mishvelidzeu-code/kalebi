@@ -1,7 +1,5 @@
 import dayjs from "dayjs";
 import "dayjs/locale/ka";
-import { BlurView } from "expo-blur";
-import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, DeviceEventEmitter, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Calendar } from "react-native-calendars";
@@ -15,22 +13,19 @@ dayjs.locale("ka");
 const shortMonths = ["იან", "თებ", "მარ", "აპრ", "მაი", "ივნ", "ივლ", "აგვ", "სექ", "ოქტ", "ნოე", "დეკ"];
 
 export default function CalendarScreen() {
-  const router = useRouter();
-  const { isPremium, isDark } = useTheme(); 
-  const { markedDates, loadData, addCycle, deleteCycle, rawCycles, loading } = useCycles();
+  const { isDark } = useTheme();
+  const { markedDates, loadData, addCycle, deleteCycle, rawCycles } = useCycles();
 
   const [currentDate, setCurrentDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [selectedDay, setSelectedDay] = useState(dayjs().format("YYYY-MM-DD"));
-  
   const [calendarKey, setCalendarKey] = useState(1);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-
   const [dayDetails, setDayDetails] = useState({
     symptoms: [],
     note: null,
     mood: null,
-    loading: false
+    loading: false,
   });
 
   const theme = {
@@ -40,21 +35,13 @@ export default function CalendarScreen() {
     subText: isDark ? "#AAAAAA" : "#555",
     pill: isDark ? "#2A2A2A" : "#F8F8F8",
     divider: isDark ? "#333" : "#f0f0f0",
-    calendarBg: isDark ? "#1A1A1A" : "#FFF"
+    calendarBg: isDark ? "#1A1A1A" : "#FFF",
   };
 
   useEffect(() => {
-    loadData(); // იტვირთება მხოლოდ ერთხელ, აპლიკაციის ჩართვისას
-
-    // ვუსმენთ სიგნალს სხვა გვერდებიდან
-    const subscription = DeviceEventEmitter.addListener("cycleUpdated", () => {
-      loadData(); // კალენდარი განახლდება *მხოლოდ* მაშინ, თუ ვინმემ ციკლი დაამატა ან წაშალა
-    });
-
-    // მეხსიერების გასუფთავება გვერდის დახურვისას
-    return () => {
-      subscription.remove();
-    };
+    loadData();
+    const subscription = DeviceEventEmitter.addListener("cycleUpdated", () => loadData());
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
@@ -67,36 +54,33 @@ export default function CalendarScreen() {
     setRefreshing(false);
   };
 
-  // 👈 ახალი ფუნქცია: ციკლის ხანგრძლივობის შეცვლა
   const adjustPeriodLength = async (cycle, delta) => {
     const newLen = cycle.period_length + delta;
-    if (newLen < 1) return; // მინიმუმ 1 დღე უნდა იყოს
+    if (newLen < 1) return;
     try {
       await supabase.from("cycles").update({ period_length: newLen }).eq("id", cycle.id);
-      onRefresh(); // ვაახლებთ კალენდარს დაუყოვნებლივ
+      onRefresh();
     } catch (e) {
       console.log(e);
     }
   };
 
   const fetchDayDetails = async (dateStr) => {
-    setDayDetails(prev => ({ ...prev, loading: true }));
+    setDayDetails((prev) => ({ ...prev, loading: true }));
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase
-        .from("symptoms")
-        .select("symptoms, note, mood")
-        .eq("user_id", user.id)
-        .eq("date", dateStr)
-        .maybeSingle();
+
+      const { data } = await supabase.from("symptoms").select("symptoms, note, mood").eq("user_id", user.id).eq("date", dateStr).maybeSingle();
 
       if (data) {
         setDayDetails({
           symptoms: data.symptoms || [],
           note: data.note,
           mood: data.mood,
-          loading: false
+          loading: false,
         });
       } else {
         setDayDetails({ symptoms: [], note: null, mood: null, loading: false });
@@ -109,7 +93,7 @@ export default function CalendarScreen() {
   const getActiveCycleForDate = (date) => {
     if (!date || !rawCycles) return null;
     const target = dayjs(date);
-    return rawCycles.find(c => {
+    return rawCycles.find((c) => {
       const start = dayjs(c.start_date);
       const end = start.add((c.period_length || 5) - 1, "day");
       return target.isSame(start, "day") || target.isSame(end, "day") || (target.isAfter(start) && target.isBefore(end));
@@ -123,13 +107,13 @@ export default function CalendarScreen() {
     calendarMarks[selectedDay] = {
       ...calendarMarks[selectedDay],
       selected: true,
-      selectedColor: "#48CAE4", 
+      selectedColor: "#48CAE4",
       disableTouchEvent: false,
     };
   }
 
   const changeYear = (amount) => {
-    const newDate = dayjs(currentDate).add(amount, 'year').format("YYYY-MM-DD");
+    const newDate = dayjs(currentDate).add(amount, "year").format("YYYY-MM-DD");
     setCurrentDate(newDate);
     setCalendarKey(Date.now());
   };
@@ -144,20 +128,13 @@ export default function CalendarScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.container, { backgroundColor: theme.bg }]}>
-        <ScrollView 
-          showsVerticalScrollIndicator={false} 
+        <ScrollView
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100 }}
-          refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
-              onRefresh={onRefresh} 
-              tintColor={isDark ? "#E94560" : "#ff4d88"} 
-            />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? "#E94560" : "#ff4d88"} />}
         >
-          
           <Calendar
-            key={`${isDark ? 'dark' : 'light'}-${calendarKey}`}
+            key={`${isDark ? "dark" : "light"}-${calendarKey}`}
             current={currentDate}
             onMonthChange={(month) => setCurrentDate(month.dateString)}
             markedDates={calendarMarks}
@@ -165,13 +142,9 @@ export default function CalendarScreen() {
             enableSwipeMonths
             onDayPress={(day) => setSelectedDay(day.dateString)}
             renderHeader={(date) => (
-              <TouchableOpacity 
-                style={styles.header} 
-                activeOpacity={0.7}
-                onPress={() => setShowMonthPicker(true)}
-              >
+              <TouchableOpacity style={styles.header} activeOpacity={0.7} onPress={() => setShowMonthPicker(true)}>
                 <Text style={[styles.headerText, { color: theme.text }]}>
-                  {dayjs(date).format("MMMM YYYY")} <Text style={{fontSize: 14}}>▾</Text>
+                  {dayjs(date).format("MMMM YYYY")} <Text style={{ fontSize: 14 }}>▾</Text>
                 </Text>
               </TouchableOpacity>
             )}
@@ -179,7 +152,7 @@ export default function CalendarScreen() {
               calendarBackground: theme.calendarBg,
               dayTextColor: theme.text,
               monthTextColor: theme.text,
-              todayTextColor: "#48CAE4", 
+              todayTextColor: "#48CAE4",
               arrowColor: isDark ? "#E94560" : "#ff4d88",
               textDisabledColor: isDark ? "#444" : "#d9e1e8",
               selectedDayTextColor: "#ffffff",
@@ -194,44 +167,36 @@ export default function CalendarScreen() {
 
           <View style={styles.detailsContainer}>
             <View style={styles.detailsHeader}>
-              <Text style={[styles.detailsTitle, { color: theme.text }]}>
-                {dayjs(selectedDay).format("D MMMM")}
-              </Text>
-              
+              <Text style={[styles.detailsTitle, { color: theme.text }]}>{dayjs(selectedDay).format("D MMMM")}</Text>
+
               <View style={{ flexDirection: "row", gap: 10 }}>
-                {/* 👈 ჭკვიანი ღილაკები: წაშლა ან დამატება */}
                 {activeCycle && !activeCycle.isPrediction ? (
                   <TouchableOpacity
                     style={[styles.editButton, { backgroundColor: isDark ? "rgba(255,50,50,0.1)" : "#ffe5e5" }]}
-                    onPress={() => {
-                      Alert.alert(
-                        "წაშლა",
-                        "ნამდვილად გსურთ ამ ციკლის წაშლა?",
-                        [
-                          { text: "გაუქმება", style: "cancel" },
-                          { text: "წაშლა", style: "destructive", onPress: () => deleteCycle(activeCycle) }
-                        ]
-                      );
-                    }}
+                    onPress={() =>
+                      Alert.alert("წაშლა", "ნამდვილად გსურთ ამ ციკლის წაშლა?", [
+                        { text: "გაუქმება", style: "cancel" },
+                        { text: "წაშლა", style: "destructive", onPress: () => deleteCycle(activeCycle) },
+                      ])
+                    }
                   >
                     <Text style={{ color: "#ff3333", fontWeight: "700" }}>წაშლა</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
                     style={[styles.editButton, { backgroundColor: isDark ? "rgba(233,69,96,0.15)" : "#FFF0F5" }]}
-                    onPress={() => {
-                      Alert.alert(
-                        "დამატება",
-                        `${dayjs(selectedDay).format("D MMMM")}-ს ნამდვილად დაგეწყოთ პერიოდი?`,
-                        [
-                          { text: "გაუქმება", style: "cancel" },
-                          { text: "დამატება", onPress: async () => {
-                              await addCycle(selectedDay);
-                              onRefresh();
-                          }}
-                        ]
-                      );
-                    }}
+                    onPress={() =>
+                      Alert.alert("დამატება", `${dayjs(selectedDay).format("D MMMM")}-ს ნამდვილად დავუწყოთ პერიოდი?`, [
+                        { text: "გაუქმება", style: "cancel" },
+                        {
+                          text: "დამატება",
+                          onPress: async () => {
+                            await addCycle(selectedDay);
+                            onRefresh();
+                          },
+                        },
+                      ])
+                    }
                   >
                     <Text style={[styles.editButtonText, { color: isDark ? "#E94560" : "#ff4d88" }]}>➕ დამატება</Text>
                   </TouchableOpacity>
@@ -243,31 +208,21 @@ export default function CalendarScreen() {
               <ActivityIndicator color={isDark ? "#E94560" : "#ff4d88"} style={{ marginTop: 20 }} />
             ) : (
               <View style={[styles.detailsCard, { backgroundColor: theme.card }]}>
-                
                 <View style={styles.statusRow}>
                   <Text style={[styles.statusLabel, { color: theme.subText }]}>მდგომარეობა:</Text>
-                  <Text style={[styles.statusValue, { color: theme.text }]}>
-                    {activeCycle ? "🩸 პერიოდის დღე" : "თავისუფალი დღე"}
-                  </Text>
+                  <Text style={[styles.statusValue, { color: theme.text }]}>{activeCycle ? "🩸 პერიოდის დღე" : "თავისუფალი დღე"}</Text>
                 </View>
 
-                {/* 👈 ახალი: ციკლის დღეების დამატება/მოკლება (ჩანს მხოლოდ ნამდვილ ციკლზე) */}
                 {activeCycle && !activeCycle.isPrediction && (
-                  <View style={[styles.statusRow, { alignItems: 'center', marginTop: 5, marginBottom: 15 }]}>
+                  <View style={[styles.statusRow, { alignItems: "center", marginTop: 5, marginBottom: 15 }]}>
                     <Text style={[styles.statusLabel, { color: theme.subText }]}>ხანგრძლივობა:</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <TouchableOpacity 
-                        onPress={() => adjustPeriodLength(activeCycle, -1)}
-                        style={{ width: 32, height: 32, backgroundColor: theme.pill, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
-                        <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 16 }}>-</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <TouchableOpacity onPress={() => adjustPeriodLength(activeCycle, -1)} style={{ width: 32, height: 32, backgroundColor: theme.pill, borderRadius: 16, alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ color: theme.text, fontWeight: "bold", fontSize: 16 }}>-</Text>
                       </TouchableOpacity>
-                      <Text style={{ color: theme.text, fontWeight: 'bold', marginHorizontal: 15 }}>
-                        {activeCycle.period_length} დღე
-                      </Text>
-                      <TouchableOpacity 
-                        onPress={() => adjustPeriodLength(activeCycle, 1)}
-                        style={{ width: 32, height: 32, backgroundColor: theme.pill, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}>
-                        <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 16 }}>+</Text>
+                      <Text style={{ color: theme.text, fontWeight: "bold", marginHorizontal: 15 }}>{activeCycle.period_length} დღე</Text>
+                      <TouchableOpacity onPress={() => adjustPeriodLength(activeCycle, 1)} style={{ width: 32, height: 32, backgroundColor: theme.pill, borderRadius: 16, alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ color: theme.text, fontWeight: "bold", fontSize: 16 }}>+</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -289,17 +244,12 @@ export default function CalendarScreen() {
                     ))}
                   </View>
                 ) : (
-                  <Text style={[styles.emptyText, { borderTopColor: theme.divider, color: theme.subText }]}>
-                    ამ დღეს სიმპტომები არ ჩაგიწერია.
-                  </Text>
+                  <Text style={[styles.emptyText, { borderTopColor: theme.divider, color: theme.subText }]}>ამ დღეს სიმპტომები არ ჩაგიწერია.</Text>
                 )}
 
                 {dayDetails.note && (
-                  <View style={[styles.noteBox, { 
-                    backgroundColor: isDark ? "rgba(233,69,96,0.1)" : "#FFF0F5",
-                    borderLeftColor: isDark ? "#E94560" : "#ff4d88"
-                  }]}>
-                    <Text style={[styles.noteText, { color: isDark ? "#E94560" : "#ff4d88" }]}>"{dayDetails.note}"</Text>
+                  <View style={[styles.noteBox, { backgroundColor: isDark ? "rgba(233,69,96,0.1)" : "#FFF0F5", borderLeftColor: isDark ? "#E94560" : "#ff4d88" }]}>
+                    <Text style={[styles.noteText, { color: isDark ? "#E94560" : "#ff4d88" }]}>{`"${dayDetails.note}"`}</Text>
                   </View>
                 )}
               </View>
@@ -308,7 +258,6 @@ export default function CalendarScreen() {
         </ScrollView>
       </View>
 
-      {/* --- თვეების მოდალი --- */}
       <Modal visible={showMonthPicker} transparent animationType="fade">
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.monthPickerCard, { backgroundColor: theme.card }]}>
@@ -328,14 +277,8 @@ export default function CalendarScreen() {
                 const activeColor = isDark ? "#E94560" : "#ff4d88";
                 const idleBg = isDark ? "#252525" : "#F5F5F5";
                 return (
-                  <TouchableOpacity
-                    key={m}
-                    style={[styles.monthBtn, { backgroundColor: isActive ? activeColor : idleBg }]}
-                    onPress={() => selectMonth(i)}
-                  >
-                    <Text style={[styles.monthBtnText, { color: isActive ? "#FFF" : theme.text }]}>
-                      {m}
-                    </Text>
+                  <TouchableOpacity key={m} style={[styles.monthBtn, { backgroundColor: isActive ? activeColor : idleBg }]} onPress={() => selectMonth(i)}>
+                    <Text style={[styles.monthBtnText, { color: isActive ? "#FFF" : theme.text }]}>{m}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -347,36 +290,6 @@ export default function CalendarScreen() {
           </View>
         </View>
       </Modal>
-
-      {/* --- განახლებული პრაიმ მოდალი (Glassmorphism ეფექტით) --- */}
-      {!isPremium && (
-        <BlurView intensity={10} tint={isDark ? "dark" : "light"} style={styles.premiumOverlay}>
-          <View style={[
-            styles.premiumCard, 
-            { 
-              backgroundColor: isDark ? "rgba(26,26,26,0.85)" : "rgba(255,255,255,0.85)",
-              borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"
-            }
-          ]}>
-            <Text style={styles.premiumIcon}>✨</Text>
-            <Text style={[styles.premiumTitle, { color: theme.text }]}>გახდი პრაიმი</Text>
-            <Text style={[styles.premiumSubtitle, { color: theme.subText }]}>
-              განბლოკე კალენდარი, სიმპტომების ისტორია და დეტალური ანალიტიკა.
-            </Text>
-            
-            <TouchableOpacity 
-              style={[
-                styles.premiumBadge, 
-                { backgroundColor: isDark ? "#E94560" : "#ff4d88" }
-              ]} 
-              activeOpacity={0.8}
-              onPress={() => router.push("/premium")}
-            >
-              <Text style={styles.premiumBadgeText}>სრული ვერსიის გააქტიურება</Text>
-            </TouchableOpacity>
-          </View>
-        </BlurView>
-      )}
     </View>
   );
 }
@@ -411,71 +324,15 @@ const styles = StyleSheet.create({
   noteBox: { marginTop: 10, padding: 12, borderRadius: 12, borderLeftWidth: 3 },
   noteText: { fontStyle: "italic", fontSize: 13 },
   emptyText: { fontSize: 13, marginTop: 15, fontStyle: "italic", borderTopWidth: 1, paddingTop: 15 },
-  
-  // --- განახლებული პრაიმის სტილები ---
-  premiumOverlay: { 
-    ...StyleSheet.absoluteFillObject, 
-    justifyContent: "center", 
-    alignItems: "center",
-    padding: 24,
-    zIndex: 100,
-  },
-  premiumCard: {
-    width: "100%",
-    maxWidth: 360,
-    padding: 30,
-    borderRadius: 32,
-    alignItems: "center",
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.15,
-    shadowRadius: 25,
-    elevation: 10,
-  },
-  premiumIcon: {
-    fontSize: 50,
-    marginBottom: 15,
-  },
-  premiumTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  premiumSubtitle: {
-    fontSize: 15,
-    textAlign: "center",
-    marginBottom: 25,
-    lineHeight: 22,
-  },
-  premiumBadge: { 
-    width: "100%",
-    paddingVertical: 16, 
-    borderRadius: 20, 
-    alignItems: "center",
-    shadowColor: "#ff4d88",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  premiumBadgeText: { 
-    color: "#FFF", 
-    fontSize: 16, 
-    fontWeight: "800" 
-  },
-
-  // --- მოდალის სტილები ---
   modalOverlayCenter: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", padding: 20 },
   monthPickerCard: { borderRadius: 28, padding: 25, elevation: 10, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 15 },
-  yearSelector: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  yearText: { fontSize: 22, fontWeight: '800' },
-  yearBtn: { paddingVertical: 8, paddingHorizontal: 15, backgroundColor: 'rgba(150,150,150,0.1)', borderRadius: 12 },
-  yearBtnText: { fontSize: 18, fontWeight: '800' },
+  yearSelector: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
+  yearText: { fontSize: 22, fontWeight: "800" },
+  yearBtn: { paddingVertical: 8, paddingHorizontal: 15, backgroundColor: "rgba(150,150,150,0.1)", borderRadius: 12 },
+  yearBtnText: { fontSize: 18, fontWeight: "800" },
   monthsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   monthBtn: { width: "31%", paddingVertical: 15, borderRadius: 15, alignItems: "center", marginBottom: 12 },
   monthBtnText: { fontSize: 15, fontWeight: "700" },
   closeModalBtn: { marginTop: 10, alignItems: "center", paddingVertical: 15 },
-  closeModalBtnText: { fontSize: 16, fontWeight: "700", color: "#888" }
+  closeModalBtnText: { fontSize: 16, fontWeight: "700", color: "#888" },
 });

@@ -2,37 +2,38 @@
   "expo": {
     "name": "Cycle Care",
     "slug": "kalebi",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "cycleapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "owner": "qalebi",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "2",
+      "buildNumber": "7",
+      "bundleIdentifier": "com.mishvela.kalebi",
       "infoPlist": {
         "NSFaceIDUsageDescription": "აპლიკაციაში სწრაფად და უსაფრთხოდ შესასვლელად გამოიყენება Face ID.",
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "bundleIdentifier": "com.mishvela.kalebi"
+      }
     },
-   "android": {
-  "package": "com.mishvela.kalebi",
-  "versionCode": 2, // აუცილებელია Play Store-ისთვის (უნდა გაიზარდოს ყოველ Build-ზე)
-  "adaptiveIcon": {
-    "foregroundImage": "./assets/images/android-icon-foreground.png",
-    "backgroundImage": "./assets/images/android-icon-background.png", // ან გამოიყენე "backgroundColor": "#fff0f5"
-    "backgroundColor": "#fff0f5"
-  },
-  "edgeToEdgeEnabled": true,
-  "predictiveBackGestureEnabled": false,
-  "permissions": [
-    "android.permission.USE_BIOMETRIC",
-    "android.permission.USE_FINGERPRINT",
-    "android.permission.POST_NOTIFICATIONS" // აუცილებელია შეტყობინებებისთვის Android 13+ ზე
-  ]
-},
+    "android": {
+      "package": "com.mishvela.kalebi",
+      "versionCode": 4,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "backgroundColor": "#fff0f5"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
+    },
     "web": {
       "bundler": "metro",
       "output": "single",
@@ -57,11 +58,6 @@
       "expo-secure-store",
       "expo-local-authentication"
     ],
-    "extra": {
-      "eas": {
-        "projectId": "90082f78-6f14-4632-9c3f-7a609964a196"
-      }
-    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
@@ -69,12 +65,14 @@
     "assetBundlePatterns": [
       "**/*"
     ],
-    "owner": "mishvela",
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {
-      "url": "https://u.expo.dev/90082f78-6f14-4632-9c3f-7a609964a196"
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "14f3ee50-1b1b-4b9e-b31a-4978b8863a0f"
+      }
     }
   }
 }

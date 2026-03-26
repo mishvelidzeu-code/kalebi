@@ -1,34 +1,19 @@
 import dayjs from "dayjs";
 import "dayjs/locale/ka";
-import { BlurView } from "expo-blur";
-import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
-} from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+
 import { useTheme } from "../../context/ThemeContext";
 import { supabase } from "../../services/supabase";
 
 dayjs.locale("ka");
 
 export default function SymptomsScreen() {
-  const router = useRouter();
-  
-  const { isPremium, isDark } = useTheme(); 
+  const { isDark } = useTheme();
 
   const [selectedSymptoms, setSelectedSymptoms] = useState([]);
   const [mood, setMood] = useState(null);
   const [note, setNote] = useState("");
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -41,7 +26,7 @@ export default function SymptomsScreen() {
     subText: isDark ? "#AAAAAA" : "#999999",
     inputBg: isDark ? "#252525" : "#F9F9F9",
     chip: isDark ? "#2A2A2A" : "#F2F2F2",
-    shadow: isDark ? "#000" : "#000",
+    shadow: "#000",
   };
 
   const categories = [
@@ -53,7 +38,7 @@ export default function SymptomsScreen() {
         { id: "fatigue", label: "დაღლილობა", icon: "🥱" },
         { id: "bloating", label: "შეშუპება", icon: "🎈" },
         { id: "backache", label: "წელის ტკივილი", icon: "⚡" },
-      ]
+      ],
     },
     {
       title: "ემოციური ფონი",
@@ -62,8 +47,8 @@ export default function SymptomsScreen() {
         { id: "sad", label: "სევდა", icon: "😢" },
         { id: "anxious", label: "შფოთვა", icon: "😰" },
         { id: "happy", label: "ბედნიერი", icon: "✨" },
-      ]
-    }
+      ],
+    },
   ];
 
   const moods = [
@@ -71,7 +56,7 @@ export default function SymptomsScreen() {
     { emoji: "😊", label: "კარგი" },
     { emoji: "😐", label: "ნორმალური" },
     { emoji: "😔", label: "ცუდი" },
-    { emoji: "😫", label: "საშინელი" }
+    { emoji: "😫", label: "საშინელი" },
   ];
 
   useEffect(() => {
@@ -81,15 +66,15 @@ export default function SymptomsScreen() {
   const loadTodayData = async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-      
-      const { data } = await supabase
-        .from("symptoms")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("date", todayStr)
-        .maybeSingle();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data } = await supabase.from("symptoms").select("*").eq("user_id", user.id).eq("date", todayStr).maybeSingle();
 
       if (data) {
         setSelectedSymptoms(data.symptoms || []);
@@ -104,31 +89,32 @@ export default function SymptomsScreen() {
   };
 
   const toggleSymptom = (id) => {
-    setSelectedSymptoms(prev =>
-      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
-    );
+    setSelectedSymptoms((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
   };
 
   const saveSymptoms = async () => {
-    if (!isPremium) { router.push("/premium"); return; }
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
-      const { error } = await supabase
-        .from("symptoms")
-        .upsert({
+
+      const { error } = await supabase.from("symptoms").upsert(
+        {
           user_id: user.id,
           date: todayStr,
           symptoms: selectedSymptoms,
-          mood: mood,
-          note: note,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "user_id,date" });
+          mood,
+          note,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,date" }
+      );
 
       if (error) throw error;
       Alert.alert("წარმატება", "დღიური განახლდა ✨");
-    } catch (error) {
+    } catch {
       Alert.alert("შეცდომა", "მონაცემების შენახვა ვერ მოხერხდა");
     } finally {
       setSaving(false);
@@ -145,45 +131,28 @@ export default function SymptomsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: dynamicColors.bg }}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-      >
-        <ScrollView
-          style={[styles.container, { backgroundColor: dynamicColors.bg }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 120 }}
-          scrollEnabled={isPremium}
-        >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+        <ScrollView style={[styles.container, { backgroundColor: dynamicColors.bg }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: dynamicColors.text }]}>დღევანდელი დღიური</Text>
             <Text style={styles.dateText}>{dayjs().format("dddd, D MMMM")}</Text>
           </View>
 
-          {/* Mood */}
           <View style={[styles.card, { backgroundColor: dynamicColors.card, shadowColor: dynamicColors.shadow }]}>
             <Text style={[styles.sectionTitle, { color: dynamicColors.text }]}>როგორ გრძნობ თავს?</Text>
             <View style={styles.moodGrid}>
               {moods.map((m) => {
                 const active = mood === m.label;
                 return (
-                  <TouchableOpacity
-                    key={m.label}
-                    style={[styles.moodItem, active && styles.activeMood]}
-                    onPress={() => setMood(m.label)}
-                  >
+                  <TouchableOpacity key={m.label} style={[styles.moodItem, active && styles.activeMood]} onPress={() => setMood(m.label)}>
                     <Text style={styles.moodEmoji}>{m.emoji}</Text>
-                    <Text style={[styles.moodLabel, { color: dynamicColors.subText }, active && styles.activeMoodText]}>
-                      {m.label}
-                    </Text>
+                    <Text style={[styles.moodLabel, { color: dynamicColors.subText }, active && styles.activeMoodText]}>{m.label}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
           </View>
 
-          {/* Symptoms */}
           {categories.map((cat, index) => (
             <View key={index} style={styles.section}>
               <Text style={[styles.sectionTitle, { color: dynamicColors.text }]}>{cat.title}</Text>
@@ -191,15 +160,9 @@ export default function SymptomsScreen() {
                 {cat.items.map((item) => {
                   const active = selectedSymptoms.includes(item.id);
                   return (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[styles.chip, { backgroundColor: dynamicColors.chip }, active && styles.activeChip]}
-                      onPress={() => toggleSymptom(item.id)}
-                    >
+                    <TouchableOpacity key={item.id} style={[styles.chip, { backgroundColor: dynamicColors.chip }, active && styles.activeChip]} onPress={() => toggleSymptom(item.id)}>
                       <Text style={styles.chipIcon}>{item.icon}</Text>
-                      <Text style={[styles.chipText, { color: dynamicColors.text }, active && styles.activeChipText]}>
-                        {item.label}
-                      </Text>
+                      <Text style={[styles.chipText, { color: dynamicColors.text }, active && styles.activeChipText]}>{item.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -207,7 +170,6 @@ export default function SymptomsScreen() {
             </View>
           ))}
 
-          {/* Note */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: dynamicColors.text }]}>დამატებითი ჩანაწერი</Text>
             <TextInput
@@ -220,45 +182,11 @@ export default function SymptomsScreen() {
             />
           </View>
 
-          <TouchableOpacity
-            style={styles.saveBtn}
-            onPress={saveSymptoms}
-            disabled={saving}
-          >
+          <TouchableOpacity style={styles.saveBtn} onPress={saveSymptoms} disabled={saving}>
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>მონაცემების შენახვა</Text>}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* --- განახლებული პრაიმ მოდალი (ინტენსივობა 10) --- */}
-      {!isPremium && (
-        <BlurView intensity={10} tint={isDark ? "dark" : "light"} style={styles.premiumOverlay}>
-          <View style={[
-            styles.premiumCard, 
-            { 
-              backgroundColor: isDark ? "rgba(26,26,26,0.85)" : "rgba(255,255,255,0.85)",
-              borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"
-            }
-          ]}>
-            <Text style={styles.premiumIcon}>✨</Text>
-            <Text style={[styles.premiumTitle, { color: dynamicColors.text }]}>გახდი პრაიმი</Text>
-            <Text style={[styles.premiumSubtitle, { color: dynamicColors.subText }]}>
-              განბლოკე კალენდარი, სიმპტომების ისტორია და დეტალური ანალიტიკა.
-            </Text>
-            
-            <TouchableOpacity 
-              style={[
-                styles.premiumBadge, 
-                { backgroundColor: isDark ? "#E94560" : "#ff4d88" }
-              ]} 
-              activeOpacity={0.8}
-              onPress={() => router.push("/premium")}
-            >
-              <Text style={styles.premiumBadgeText}>სრული ვერსიის გააქტიურება</Text>
-            </TouchableOpacity>
-          </View>
-        </BlurView>
-      )}
     </View>
   );
 }
@@ -287,58 +215,4 @@ const styles = StyleSheet.create({
   noteInput: { borderRadius: 20, padding: 18, height: 100, textAlignVertical: "top", fontSize: 15 },
   saveBtn: { backgroundColor: "#E94560", padding: 20, borderRadius: 22, alignItems: "center" },
   saveBtnText: { color: "#FFF", fontSize: 18, fontWeight: "700" },
-  
-  // --- განახლებული პრაიმ სტილები ---
-  premiumOverlay: { 
-    ...StyleSheet.absoluteFillObject, 
-    justifyContent: "center", 
-    alignItems: "center",
-    padding: 24,
-    zIndex: 100,
-  },
-  premiumCard: {
-    width: "100%",
-    maxWidth: 360,
-    padding: 30,
-    borderRadius: 32,
-    alignItems: "center",
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.15,
-    shadowRadius: 25,
-    elevation: 10,
-  },
-  premiumIcon: {
-    fontSize: 50,
-    marginBottom: 15,
-  },
-  premiumTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  premiumSubtitle: {
-    fontSize: 15,
-    textAlign: "center",
-    marginBottom: 25,
-    lineHeight: 22,
-  },
-  premiumBadge: { 
-    width: "100%",
-    paddingVertical: 16, 
-    borderRadius: 20, 
-    alignItems: "center",
-    shadowColor: "#ff4d88",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  premiumBadgeText: { 
-    color: "#FFF", 
-    fontSize: 16, 
-    fontWeight: "800" 
-  }
 });
