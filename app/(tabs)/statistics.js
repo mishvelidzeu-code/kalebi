@@ -5,8 +5,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "../../context/ThemeContext";
+import { usePregnancy } from "../../context/PregnancyContext";
 import { supabase } from "../../services/supabase";
-import { calculateAverageCycle, calculateAveragePeriod } from "../../utils/cyclePrediction";
+import { calculateCycleState } from "../../utils/cycleEngine";
+import { getPreferredCycleLength, getPreferredPeriodLength } from "../../utils/cyclePrediction";
 
 dayjs.locale("ka");
 
@@ -20,7 +22,165 @@ const SYMPTOM_LABELS = {
   sad: "სევდა",
   anxious: "შფოთვა",
   happy: "ბედნიერი",
+  nausea: "გულისრევა",
+  heartburn: "გულძმარვა",
+  movement: "ბავშვი იძრვის",
+  urination: "ხშირი შარდვა",
 };
+
+const PREGNANCY_MILESTONES = [
+  { week: 12, label: "I ტრიმესტრი სრულდება", icon: "🌱" },
+  { week: 16, label: "სქესის გაგება", icon: "👶" },
+  { week: 20, label: "ანატომიური USG", icon: "🔬" },
+  { week: 24, label: "ვიაბილობის ზღვარი", icon: "💪" },
+  { week: 28, label: "III ტრიმესტრი იწყება", icon: "🌟" },
+  { week: 32, label: "ნაყოფი თითქმის მზადაა", icon: "🎯" },
+  { week: 36, label: "სრული ვადის მიახლოება", icon: "⏰" },
+  { week: 37, label: "სრული ვადა", icon: "✨" },
+  { week: 40, label: "მშობიარობის თარიღი", icon: "🎊" },
+];
+
+function PregnancyStatisticsScreen() {
+  const { isDark } = useTheme();
+  const { currentWeek, currentTrimester, daysRemaining, pregnancyStartDate } = usePregnancy();
+
+  const [topSymptoms, setTopSymptoms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  const theme = {
+    bg: isDark ? "#0F0F0F" : "#F7F8FA",
+    card: isDark ? "#1A1A1A" : "#FFFFFF",
+    text: isDark ? "#FFFFFF" : "#1A1A1A",
+    subText: isDark ? "#AAAAAA" : "#777777",
+    iconBg: isDark ? "#2A2A2A" : "#F0F4FF",
+    divider: isDark ? "#333" : "#F0F0F0",
+  };
+
+  const trimesterColor = currentTrimester === 1 ? "#06d6a0" : currentTrimester === 2 ? "#ffd166" : "#ff4d88";
+  const progress = ((currentWeek || 1) / 40) * 100;
+  const nextMilestone = PREGNANCY_MILESTONES.find((m) => m.week >= (currentWeek || 1));
+
+  useFocusEffect(useCallback(() => {
+    const load = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase.from("symptoms").select("symptoms").eq("user_id", user.id);
+        const all = (data || []).flatMap((s) => s.symptoms || []);
+        const counts = all.reduce((acc, s) => { acc[s] = (acc[s] || 0) + 1; return acc; }, {});
+        const top = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 4).map(([id, count]) => ({ label: SYMPTOM_LABELS[id] || id, count }));
+        setTopSymptoms(top);
+      } catch (e) { console.log(e); }
+      finally {
+        setLoading(false);
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+        ]).start();
+      }
+    };
+    load();
+  }, [fadeAnim, slideAnim]));
+
+  if (loading) return <View style={[styles.center, { backgroundColor: theme.bg }]}><ActivityIndicator size="large" color={trimesterColor} /></View>;
+
+  const dueDate = pregnancyStartDate ? dayjs(pregnancyStartDate).add(280, "day").format("D MMMM YYYY") : "-";
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>ორსულობის ანალიტიკა 🤰</Text>
+
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+
+          {/* Hero */}
+          <View style={[styles.heroCard, { backgroundColor: trimesterColor }]}>
+            <View style={styles.heroGlow} />
+            <Text style={styles.heroLabel}>მშობიარობამდე დარჩა</Text>
+            <Text style={styles.heroNumber}>{daysRemaining} <Text style={styles.heroSubText}>დღე</Text></Text>
+            <View style={styles.heroDateBadge}>
+              <Text style={styles.heroDate}>{dueDate}</Text>
+            </View>
+          </View>
+
+          {/* Progress */}
+          <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>ორსულობის პროგრესი</Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 10 }}>
+              <Text style={[{ color: theme.subText, fontSize: 13, fontWeight: "600" }]}>კვირა {currentWeek} / 40</Text>
+              <Text style={[{ color: trimesterColor, fontSize: 13, fontWeight: "700" }]}>{Math.round(progress)}%</Text>
+            </View>
+            <View style={[styles.symptomTrack, { backgroundColor: isDark ? "#2A2A2A" : "#F5F5F5", height: 12, borderRadius: 6 }]}>
+              <View style={[styles.symptomFill, { width: `${progress}%`, backgroundColor: trimesterColor, borderRadius: 6 }]} />
+            </View>
+          </View>
+
+          {/* Trimester Cards */}
+          <View style={styles.metricsRow}>
+            <View style={[styles.metricCard, { backgroundColor: theme.card }]}>
+              <View style={[styles.iconBox, { backgroundColor: isDark ? "#2A2A2A" : "#fff0f5" }]}>
+                <Text style={{ fontSize: 20 }}>🗓️</Text>
+              </View>
+              <Text style={[styles.metricValue, { color: theme.text }]}>{currentWeek}<Text style={styles.metricUnit}> კვ.</Text></Text>
+              <Text style={[styles.metricLabel, { color: theme.subText }]}>მიმდინარე კვირა</Text>
+            </View>
+            <View style={[styles.metricCard, { backgroundColor: theme.card }]}>
+              <View style={[styles.iconBox, { backgroundColor: isDark ? "#2A2A2A" : "#fff0f5" }]}>
+                <Text style={{ fontSize: 20 }}>
+                  {currentTrimester === 1 ? "🌱" : currentTrimester === 2 ? "🌸" : "🌟"}
+                </Text>
+              </View>
+              <Text style={[styles.metricValue, { color: trimesterColor, fontSize: 22 }]}>
+                {currentTrimester === 1 ? "I" : currentTrimester === 2 ? "II" : "III"}
+              </Text>
+              <Text style={[styles.metricLabel, { color: theme.subText }]}>ტრიმესტრი</Text>
+            </View>
+          </View>
+
+          {/* Next Milestone */}
+          {nextMilestone && nextMilestone.week > (currentWeek || 1) && (
+            <View style={[styles.datesCard, { backgroundColor: theme.card }]}>
+              <View style={styles.dateItem}>
+                <Text style={styles.dateIcon}>{nextMilestone.icon}</Text>
+                <View>
+                  <Text style={[styles.dateLabel, { color: theme.subText }]}>მომდევნო მილსტოუნი — კვირა {nextMilestone.week}</Text>
+                  <Text style={[styles.dateValue, { color: theme.text }]}>{nextMilestone.label}</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Symptoms */}
+          {topSymptoms.length > 0 && (
+            <View style={[styles.symptomsCard, { backgroundColor: theme.card }]}>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>ხშირი სიმპტომები</Text>
+              {topSymptoms.map((s, i) => {
+                const maxCount = topSymptoms[0].count;
+                const percent = (s.count / maxCount) * 100;
+                return (
+                  <View key={i} style={styles.symptomRow}>
+                    <View style={styles.symptomHeader}>
+                      <Text style={[styles.symptomName, { color: theme.text }]}>{s.label}</Text>
+                      <Text style={[styles.symptomCount, { color: trimesterColor }]}>{s.count}-ჯერ</Text>
+                    </View>
+                    <View style={[styles.symptomTrack, { backgroundColor: isDark ? "#2A2A2A" : "#F5F5F5" }]}>
+                      <View style={[styles.symptomFill, { width: `${percent}%`, backgroundColor: trimesterColor }]} />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          <View style={{ height: 100 }} />
+        </Animated.View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
 
 const AnimatedBar = ({ value, maxValue, label, index, isDark }) => {
   const heightAnim = useRef(new Animated.Value(0)).current;
@@ -33,7 +193,7 @@ const AnimatedBar = ({ value, maxValue, label, index, isDark }) => {
       delay: index * 100,
       useNativeDriver: false,
     }).start();
-  }, [value]);
+  }, [heightAnim, index, maxValue, value]);
 
   return (
     <View style={styles.barWrapper}>
@@ -59,9 +219,13 @@ const AnimatedBar = ({ value, maxValue, label, index, isDark }) => {
 
 export default function StatisticsScreen() {
   const { isDark } = useTheme();
+  const { pregnancyMode } = usePregnancy();
+
+  if (pregnancyMode) return <PregnancyStatisticsScreen />;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const [stats, setStats] = useState({
@@ -85,29 +249,22 @@ export default function StatisticsScreen() {
     divider: isDark ? "#333" : "#F0F0F0",
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadAllStats();
-    }, [])
-  );
-
   const onRefresh = async () => {
     setRefreshing(true);
     await loadAllStats();
     setRefreshing(false);
   };
 
-  const startEntranceAnimation = () => {
+  const startEntranceAnimation = useCallback(() => {
     fadeAnim.setValue(0);
     slideAnim.setValue(30);
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
     ]).start();
-  };
+  }, [fadeAnim, slideAnim]);
 
-  const loadAllStats = async () => {
-    setLoading(true);
+  const loadAllStats = useCallback(async () => {
     try {
       const {
         data: { user },
@@ -124,16 +281,31 @@ export default function StatisticsScreen() {
       const profile = profileRes.data;
       const symptomsData = symptomsRes.data || [];
 
-      const avgC = calculateAverageCycle(cycles) || profile?.cycle_length || 28;
-      const avgP = calculateAveragePeriod(cycles) || profile?.period_length || 5;
+      const avgC = getPreferredCycleLength(cycles, profile);
+      const avgP = getPreferredPeriodLength(cycles, profile);
 
       const lastStart = cycles.length > 0 ? cycles[cycles.length - 1].start_date : profile?.last_period;
-      const start = dayjs(lastStart);
-      const next = start.add(avgC, "day");
-      const today = dayjs().startOf("day");
-      const diff = Math.max(0, next.diff(today, "day"));
-      const ovulation = next.subtract(14, "day");
-      const fertileStart = ovulation.subtract(5, "day");
+      const forecast = calculateCycleState({
+        lastStartDate: lastStart,
+        cycleLength: avgC,
+        periodLength: avgP,
+      });
+
+      if (!forecast) {
+        setStats((prev) => ({
+          ...prev,
+          avgCycle: avgC,
+          avgPeriod: avgP,
+          cyclesCount: cycles.length,
+          nextPeriod: "-",
+          daysLeft: null,
+          ovulationDay: "-",
+          fertileWindow: "-",
+          topSymptoms: [],
+          history: [],
+        }));
+        return;
+      }
 
       const allSymptoms = symptomsData.flatMap((s) => s.symptoms || []);
       const counts = allSymptoms.reduce((acc, curr) => {
@@ -159,10 +331,10 @@ export default function StatisticsScreen() {
         avgCycle: avgC,
         avgPeriod: avgP,
         cyclesCount: cycles.length,
-        nextPeriod: next.format("D MMMM"),
-        daysLeft: diff,
-        ovulationDay: ovulation.format("D MMMM"),
-        fertileWindow: `${fertileStart.format("D")} - ${ovulation.format("D MMM")}`,
+        nextPeriod: forecast.nextPeriod.format("D MMMM"),
+        daysLeft: forecast.daysLeft,
+        ovulationDay: forecast.ovulation.format("D MMMM"),
+        fertileWindow: `${forecast.fertileStart.format("D")} - ${forecast.fertileEnd.format("D MMM")}`,
         topSymptoms,
         history,
       });
@@ -171,9 +343,18 @@ export default function StatisticsScreen() {
     } catch (err) {
       console.log("Statistics error:", err);
     } finally {
-      setLoading(false);
+      if (!hasLoadedOnceRef.current) {
+        setLoading(false);
+        hasLoadedOnceRef.current = true;
+      }
     }
-  };
+  }, [startEntranceAnimation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadAllStats();
+    }, [loadAllStats])
+  );
 
   if (loading && !refreshing) {
     return (

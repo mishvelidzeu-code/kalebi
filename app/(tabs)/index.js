@@ -1,17 +1,300 @@
 import dayjs from "dayjs";
 import "dayjs/locale/ka";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, DeviceEventEmitter, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import PrimePreview from "../../components/PrimePreview";
 import { useTheme } from "../../context/ThemeContext";
+import { usePregnancy } from "../../context/PregnancyContext";
+import { getHomeAssistantAdvice, getPregnancyWeeklyAdvice, invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
+import { syncCycleRemindersForUser } from "../../services/notifications";
 import { supabase } from "../../services/supabase";
-import { calculateAverageCycle, calculateAveragePeriod } from "../../utils/cyclePrediction";
+import { calculateCycleState, getPregnancyChanceKey } from "../../utils/cycleEngine";
+import { getPreferredCycleLength, getPreferredPeriodLength } from "../../utils/cyclePrediction";
+import { getDailyAdvice } from "../../utils/dailyAdvice";
 
 dayjs.locale("ka");
 
+const DEFAULT_GOAL = "ციკლის კონტროლი";
+const HOME_ADVICE_CACHE_KEY_PREFIX = "@cycle-care/home-advice";
+
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
+const BABY_IMAGES_WITH_PHOTO = new Set([5,6,7,8,9,10,11,12,13]);
+
+function getBabyImageUrl(week) {
+  if (!BABY_IMAGES_WITH_PHOTO.has(week)) return null;
+  return `${SUPABASE_URL}/storage/v1/object/public/baby-images/week-${week}.png`;
+}
+
+function getHomeAdviceCacheKey(userId) {
+  return `${HOME_ADVICE_CACHE_KEY_PREFIX}/${userId}`;
+}
+
+async function readCachedHomeAdvice(userId, adviceKey) {
+  try {
+    if (!userId || !adviceKey) return null;
+
+    const rawValue = await AsyncStorage.getItem(getHomeAdviceCacheKey(userId));
+    if (!rawValue) return null;
+
+    const parsedValue = JSON.parse(rawValue);
+    if (parsedValue?.adviceKey !== adviceKey || !parsedValue?.text) {
+      return null;
+    }
+
+    return parsedValue.text;
+  } catch (error) {
+    console.log("Home advice cache read error:", error);
+    return null;
+  }
+}
+
+async function writeCachedHomeAdvice(userId, adviceKey, text) {
+  try {
+    if (!userId || !adviceKey || !text) return;
+
+    await AsyncStorage.setItem(
+      getHomeAdviceCacheKey(userId),
+      JSON.stringify({
+        adviceKey,
+        text,
+        cachedAt: new Date().toISOString(),
+      })
+    );
+  } catch (error) {
+    console.log("Home advice cache save error:", error);
+  }
+}
+
+const BABY_DATA = {
+  1:  { size: "ნაყოფის უჯრედი", emoji: "🔬", advice: "ორსულობა ახლა იწყება. ფოლიუმის მჟავა ძალიან მნიშვნელოვანია." },
+  2:  { size: "ნაყოფის უჯრედი", emoji: "🔬", advice: "ორგანიზმი მზადდება ნაყოფის ჩასახვისთვის." },
+  3:  { size: "ყაყაჩოს თესლი", emoji: "🌱", advice: "ნაყოფი ახლა ძალიან პატარაა — 1-2 მმ. მიიღე ვიტამინები." },
+  4:  { size: "ხაშხაშის თესლი", emoji: "🌸", advice: "გული ახლა ჩამოყალიბდება. მოერიდე ალკოჰოლს და კოფეინს." },
+  5:  { size: "სეზამი", emoji: "🫘", advice: "ნაყოფი დაახლოებით 5 მმ-ია. პირველი ექიმის ვიზიტი დაგეგმე." },
+  6:  { size: "მოცვი", emoji: "🫐", advice: "გული ცემს! ახლა შეიძლება გულისრევა გაჩნდეს." },
+  7:  { size: "ჟოლო", emoji: "🍓", advice: "ტვინი სწრაფად ვითარდება. ბევრი სითხე დალიე." },
+  8:  { size: "კივი", emoji: "🥝", advice: "ნაყოფი 1.6 სმ-ია. ყველა ძირითადი ორგანო ვითარდება." },
+  9:  { size: "ყურძნის მარცვალი", emoji: "🍇", advice: "ნაყოფს ახლა ყველა თითი აქვს. ეჭვები ნორმალურია." },
+  10: { size: "ატამი", emoji: "🍑", advice: "კრიტიკული ფაზა დასრულდა — ნაყოფი ახლა ნაყოფია!" },
+  11: { size: "ლეღვი", emoji: "🍈", advice: "ნაყოფი 4.5 სმ-ია. პირველი ტრიმესტრი თითქმის დასრულდა." },
+  12: { size: "ლიმონი", emoji: "🍋", advice: "ალბათ გულისრევა შეიმსუბუქება. USG დროა!" },
+  13: { size: "ნეკერჩხალი", emoji: "🍎", advice: "მეორე ტრიმესტრი იწყება! ენერგია დაბრუნდება." },
+  14: { size: "ლიმონი", emoji: "🍋", advice: "ნაყოფი 8.5 სმ-ია. მოძრაობა მალე იგრძნობა." },
+  15: { size: "ვაშლი", emoji: "🍎", advice: "სმენა ვითარდება. ესაუბრე შენს ბავშვს!" },
+  16: { size: "ავოკადო", emoji: "🥑", advice: "ნაყოფი 11.5 სმ-ია. სქესი შეიძლება გაიგო USG-ზე." },
+  17: { size: "ბოლოკი", emoji: "🥕", advice: "ნაყოფი ცხიმს იკრებს. ეს მას სიტყველობს." },
+  18: { size: "ბადრიჯანი", emoji: "🍆", advice: "პირველი მოძრაობა შეიძლება იგრძნო!" },
+  19: { size: "მანგო", emoji: "🥭", advice: "ნაყოფი 15 სმ-ია. კანი ჩამოყალიბება." },
+  20: { size: "ბანანი", emoji: "🍌", advice: "ნახევარი გზა გავლილია! შენიშნე ბავშვის მოძრაობა." },
+  21: { size: "სტაფილო", emoji: "🥕", advice: "ნაყოფი 26 სმ-ია. ძილი გვერდზე უფრო კომფორტულია." },
+  22: { size: "სიმინდი", emoji: "🌽", advice: "ტუჩები და წარბები ჩამოყალიბდა. ბავშვი გეფიცხება!" },
+  23: { size: "კივი", emoji: "🥝", advice: "სმენა კარგად ვითარდება. მუსიკა უკრა!" },
+  24: { size: "სიმინდი", emoji: "🌽", advice: "ნაყოფი ახლა 600 გ-ია. ფილტვები ვითარდება." },
+  25: { size: "ბოსტნეული", emoji: "🫑", advice: "ნაყოფი 34 სმ-ია. ძილი შეიძლება გართულდეს." },
+  26: { size: "ბადრიჯანი", emoji: "🍆", advice: "თვალები გაიხელება! ნაყოფი სინათლეს გრძნობს." },
+  27: { size: "ყვავილოვანი კომბოსტო", emoji: "🥦", advice: "მესამე ტრიმესტრის ბოლო კვირა. ბავშვი ბრუნდება." },
+  28: { size: "ბადია", emoji: "🫚", advice: "მესამე ტრიმესტრი! ნაყოფი 1 კგ-ია. ბრეგტონ-ჰიქსი ნორმალურია." },
+  29: { size: "კარტოფილი", emoji: "🥔", advice: "ნაყოფი ბრუნდება. თავი ქვემოთ კარგი ნიშანია." },
+  30: { size: "კომბოსტო", emoji: "🥬", advice: "ახლა ნაყოფი 1.3 კგ-ია. სვინგები ხშირია — ეს ნორმალურია." },
+  31: { size: "ქოქოსი", emoji: "🥥", advice: "ნაყოფი 1.5 კგ-ია. ოფლიანობა შეიძლება მოიმატოს." },
+  32: { size: "ჯუნჯული", emoji: "🫚", advice: "ნაყოფი 1.7 კგ-ია. ნებისმიერ დროს მზადაა გარე სამყაროსთვის." },
+  33: { size: "ანანასი", emoji: "🍍", advice: "ნაყოფი 1.9 კგ-ია. ბებიაქალი/ექიმი ვიზიტი სულ უახლოვდება." },
+  34: { size: "კივი", emoji: "🥝", advice: "ფილტვები თითქმის მზადაა. ბავშვი ნებისმიერ დროს შეიძლება მოვიდეს." },
+  35: { size: "ნემსიყლაპია", emoji: "🫚", advice: "ნაყოფი 2.4 კგ-ია. გირჩევ, საავადმყოფოს ჩანთა შეფუთო!" },
+  36: { size: "ქოქოსი", emoji: "🥥", advice: "ნაყოფი 2.6 კგ-ია. ყოველი კვირა მნიშვნელოვანია!" },
+  37: { size: "ბოლქვი", emoji: "🧅", advice: "ბავშვი სრული ვადისაა! ნებისმიერ დროს შეიძლება." },
+  38: { size: "ვიდრო", emoji: "🥬", advice: "ნაყოფი 3 კგ-ია. სხეული ემზადება მშობიარობისთვის." },
+  39: { size: "საზამთრო", emoji: "🍉", advice: "თითქმის დროა! ისვენე, ძალები შეინახე." },
+  40: { size: "საზამთრო", emoji: "🍉", advice: "სრული ვადა! ბავშვი ნებისმიერ დროს მოდის. 🎉" },
+};
+
+const TRIMESTER_COLORS = { 1: "#06d6a0", 2: "#ffd166", 3: "#ff4d88" };
+const TRIMESTER_LABELS = { 1: "I ტრიმესტრი", 2: "II ტრიმესტრი", 3: "III ტრიმესტრი" };
+
+function PregnancyHomeScreen({ isDark }) {
+  const { currentWeek, currentTrimester, daysRemaining } = usePregnancy();
+  const [weeklyAdvice, setWeeklyAdvice] = useState("");
+  const [adviceLoading, setAdviceLoading] = useState(false);
+  const [adviceError, setAdviceError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showBabyModal, setShowBabyModal] = useState(false);
+  const loadedForWeekRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const url = getBabyImageUrl(week);
+    if (url) Image.prefetch(url).catch(() => {});
+  }, [week]);
+
+  const week = Math.min(Math.max(currentWeek || 1, 1), 40);
+  const baby = BABY_DATA[week];
+  const trimesterColor = TRIMESTER_COLORS[currentTrimester] || "#ff4d88";
+  const progress = (week / 40) * 100;
+
+  const theme = {
+    bg: isDark ? "#0F0F0F" : "#faf7f7",
+    card: isDark ? "#1A1A1A" : "#fff",
+    text: isDark ? "#FFFFFF" : "#333",
+    subText: isDark ? "#AAAAAA" : "#888",
+    primary: "#ff4d88",
+  };
+
+  const loadWeeklyAdvice = useCallback(async (force = false) => {
+    if (!force && loadedForWeekRef.current === week) return;
+    if (!isMountedRef.current) return;
+    setAdviceError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!isMountedRef.current) return;
+      if (!user) return;
+      const cacheKey = `@cycle-care/pregnancy-weekly-advice/${user.id}`;
+      if (!force) {
+        try {
+          const raw = await AsyncStorage.getItem(cacheKey);
+          if (!isMountedRef.current) return;
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed?.week === week && parsed?.text) {
+              setWeeklyAdvice(parsed.text);
+              loadedForWeekRef.current = week;
+              return;
+            }
+          }
+        } catch {}
+      }
+      if (!isMountedRef.current) return;
+      setAdviceLoading(true);
+      const response = await getPregnancyWeeklyAdvice();
+      if (!isMountedRef.current) return;
+      if (response?.text) {
+        setWeeklyAdvice(response.text);
+        loadedForWeekRef.current = week;
+        try {
+          await AsyncStorage.setItem(cacheKey, JSON.stringify({ week, text: response.text, cachedAt: new Date().toISOString() }));
+        } catch {}
+      }
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      console.log("Pregnancy weekly advice error:", err?.message);
+      setAdviceError(err?.message || "შეცდომა");
+    } finally {
+      if (isMountedRef.current) setAdviceLoading(false);
+    }
+  }, [week]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadWeeklyAdvice();
+    }, [loadWeeklyAdvice])
+  );
+
+  const onRefresh = useCallback(async () => {
+    if (!isMountedRef.current) return;
+    setRefreshing(true);
+    await loadWeeklyAdvice(false);
+    if (isMountedRef.current) setRefreshing(false);
+  }, [loadWeeklyAdvice]);
+
+  const displayAdvice = weeklyAdvice || baby.advice;
+
+  return (
+    <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={trimesterColor} />}>
+      <Text style={[styles.topDate, { color: theme.subText }]}>{dayjs().format("D MMMM, dddd")}</Text>
+
+      <View style={[styles.mainCard, { backgroundColor: theme.card }]}>
+        <View style={styles.infoRow}>
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>ტრიმესტრი</Text>
+            <Text style={[styles.infoValue, { color: trimesterColor }]}>{TRIMESTER_LABELS[currentTrimester]}</Text>
+          </View>
+          <View style={[styles.infoItem, { borderLeftWidth: 1, borderLeftColor: isDark ? "#333" : "#eee" }]}>
+            <Text style={styles.infoLabel}>დარჩენილია</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{daysRemaining} დღე</Text>
+          </View>
+        </View>
+
+        <View style={[styles.circleContainer, { backgroundColor: isDark ? "#252525" : "#fff0f5", borderColor: trimesterColor }]}>
+          <View style={styles.outerCircle}>
+            <Text style={{ fontSize: 36 }}>{baby.emoji}</Text>
+            <Text style={[styles.cycleDayNumber, { color: trimesterColor, fontSize: 38 }]}>{week}</Text>
+            <Text style={[styles.cycleDayText, { color: trimesterColor }]}>კვირა</Text>
+          </View>
+        </View>
+
+        <View style={[styles.progressBarContainer, { backgroundColor: isDark ? "#222" : "#f0f0f0" }]}>
+          <View style={[styles.progressFill, { width: `${Math.min(progress, 100)}%`, backgroundColor: trimesterColor }]} />
+        </View>
+
+        <Text style={[styles.daysLeftLabel, { color: theme.subText }]}>ბავშვის ზომა ახლა</Text>
+        <Text style={[styles.daysLeftNumber, { color: theme.text, fontSize: 22 }]}>{baby.size}</Text>
+        <Text style={[styles.nextDateText, { color: theme.subText }]}>სავარაუდო მშობიარობა: {dayjs().add(daysRemaining, "day").format("D MMMM YYYY")}</Text>
+        <TouchableOpacity onPress={() => setShowBabyModal(true)} style={{ marginTop: 14, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: trimesterColor + "22", borderRadius: 20, borderWidth: 1, borderColor: trimesterColor + "55" }}>
+          <Text style={{ color: trimesterColor, fontWeight: "700", fontSize: 14 }}>{baby.emoji} კვირა {week} — ნაყოფი ნახე</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Modal visible={showBabyModal} transparent animationType="fade" onRequestClose={() => setShowBabyModal(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", alignItems: "center" }} onPress={() => setShowBabyModal(false)}>
+          <Pressable style={{ width: "100%", alignItems: "center" }} onPress={() => {}}>
+            <TouchableOpacity onPress={() => setShowBabyModal(false)} style={{ position: "absolute", top: -50, right: 24, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center", zIndex: 10 }}>
+              <Text style={{ fontSize: 20, color: "#fff", fontWeight: "700" }}>✕</Text>
+            </TouchableOpacity>
+
+            {getBabyImageUrl(week) ? (
+              <BabyImage uri={getBabyImageUrl(week)} emoji={baby.emoji} />
+            ) : (
+              <Text style={{ fontSize: 100 }}>{baby.emoji}</Text>
+            )}
+
+            <View style={{ marginTop: 20, alignItems: "center" }}>
+              <Text style={{ fontSize: 15, color: trimesterColor, fontWeight: "700", letterSpacing: 1 }}>{TRIMESTER_LABELS[currentTrimester]}</Text>
+              <Text style={{ fontSize: 36, fontWeight: "800", color: "#fff", marginTop: 4 }}>{week}-ე კვირა</Text>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>კვირა {week} — AI ასისტენტი ✨</Text>
+      <View style={[styles.insightCard, { backgroundColor: theme.card }]}>
+        {adviceLoading ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 24 }}>
+            <ActivityIndicator color={trimesterColor} size="small" />
+            <Text style={[styles.insightText, { color: theme.subText }]}>ასისტენტი ამზადებს კვირის განახლებას...</Text>
+          </View>
+        ) : weeklyAdvice ? (
+          <WeeklyAdviceCard text={weeklyAdvice} trimesterColor={trimesterColor} isDark={isDark} theme={theme} />
+        ) : adviceError ? (
+          <View style={{ padding: 24, gap: 10 }}>
+            <Text style={{ color: "#ff4d88", fontSize: 13 }}>⚠️ {adviceError}</Text>
+            <TouchableOpacity onPress={() => loadWeeklyAdvice(true)} style={{ alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 8, backgroundColor: trimesterColor, borderRadius: 12 }}>
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>ხელახლა სცადე</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={{ height: 100 }} />
+    </ScrollView>
+  );
+}
+
 export default function HomeScreen() {
-  const { isDark } = useTheme();
+  const router = useRouter();
+  const { isDark, isPremium } = useTheme();
+  const { pregnancyMode } = usePregnancy();
+  const lastAdviceKeyRef = useRef("");
+  const adviceRequestKeyRef = useRef("");
+  const hasLoadedOnceRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -20,10 +303,13 @@ export default function HomeScreen() {
   const [cycleDay, setCycleDay] = useState(null);
   const [cycleLength, setCycleLength] = useState(28);
   const [phase, setPhase] = useState("");
+  const [phaseKey, setPhaseKey] = useState("period");
   const [periodLength, setPeriodLength] = useState(5);
   const [pregnancyChance, setPregnancyChance] = useState("დაბალი");
   const [phaseColor, setPhaseColor] = useState("#ff4d88");
-  const [userGoal, setUserGoal] = useState("ციკლის კონტროლი");
+  const [userGoal, setUserGoal] = useState(DEFAULT_GOAL);
+  const [adviceLoading, setAdviceLoading] = useState(false);
+  const [dailyAdvice, setDailyAdvice] = useState("დღეს საკუთარ სხეულს მოუსმინე და ჩაინიშნე როგორ გრძნობ თავს.");
 
   const theme = {
     bg: isDark ? "#0F0F0F" : "#faf7f7",
@@ -34,15 +320,52 @@ export default function HomeScreen() {
     circleBg: isDark ? "#252525" : "#fff0f5",
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [])
-  );
+  const refreshHomeAdvice = useCallback(async (userId, adviceKey, forceRefresh = false) => {
+    if (!forceRefresh && adviceKey === lastAdviceKeyRef.current) {
+      return;
+    }
+
+    if (!forceRefresh && adviceRequestKeyRef.current === adviceKey) {
+      return;
+    }
+
+    adviceRequestKeyRef.current = adviceKey;
+
+    try {
+      if (!forceRefresh) {
+        const cachedAdvice = await readCachedHomeAdvice(userId, adviceKey);
+        if (cachedAdvice) {
+          setDailyAdvice(cachedAdvice);
+          lastAdviceKeyRef.current = adviceKey;
+          return;
+        }
+      }
+
+      setAdviceLoading(true);
+
+      const aiAdvice = await getHomeAssistantAdvice();
+      if (adviceRequestKeyRef.current !== adviceKey) {
+        return;
+      }
+
+      if (aiAdvice?.text) {
+        setDailyAdvice(aiAdvice.text);
+        lastAdviceKeyRef.current = adviceKey;
+        await writeCachedHomeAdvice(userId, adviceKey, aiAdvice.text);
+      }
+    } catch (aiError) {
+      console.log("Home AI advice error:", aiError);
+    } finally {
+      if (adviceRequestKeyRef.current === adviceKey) {
+        adviceRequestKeyRef.current = "";
+        setAdviceLoading(false);
+      }
+    }
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadData();
+    await loadData({ forceAdviceRefresh: false });
     setRefreshing(false);
   };
 
@@ -55,73 +378,149 @@ export default function HomeScreen() {
     return { anger: 90, energy: 30, appetite: 95, stability: 15 };
   };
 
-  const getPhaseAndChance = (day, totalLength, pLength) => {
-    const ovulation = totalLength - 14;
-    if (day <= pLength) return { phase: "პერიოდი", chance: "ძალიან დაბალი", color: theme.primary };
-    if (day < ovulation - 5) return { phase: "ფოლიკულური ფაზა", chance: "დაბალი", color: "#48CAE4" };
+  const getPhaseAndChance = useCallback((day, totalLength, pLength) => {
+    const ovulation = totalLength - 13;
+    const chanceKey = getPregnancyChanceKey(day, totalLength);
+
+    if (day <= pLength) {
+      return { phase: "პერიოდი", phaseKey: "period", chance: "ძალიან დაბალი", color: theme.primary };
+    }
+
+    if (day < ovulation - 5) {
+      return { phase: "ფოლიკულური ფაზა", phaseKey: "follicular", chance: "დაბალი", color: "#48CAE4" };
+    }
+
     if (day >= ovulation - 5 && day <= ovulation + 1) {
       const isPeak = day === ovulation || day === ovulation - 1;
-      return { phase: "ნაყოფიერი პერიოდი", chance: isPeak ? "უმაღლესი 🔥" : "მაღალი", color: isPeak ? "#ffd166" : "#06d6a0" };
+      return {
+        phase: "ნაყოფიერი პერიოდი",
+        phaseKey: "fertile",
+        chance: chanceKey === "veryHigh" ? "უმაღლესი 🔥" : "მაღალი",
+        color: isPeak ? "#ffd166" : "#06d6a0",
+      };
     }
-    return { phase: "ლუტეალური ფაზა", chance: "დაბალი", color: "#C8B6FF" };
-  };
 
-  const loadData = async () => {
-    setLoading(true);
+    return { phase: "ლუტეალური ფაზა", phaseKey: "luteal", chance: "დაბალი", color: "#C8B6FF" };
+  }, [theme.primary]);
+
+  const loadData = useCallback(async ({ forceAdviceRefresh = false } = {}) => {
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setAdviceLoading(false);
+        return;
+      }
 
-      const [cyclesRes, profileRes] = await Promise.all([
+      const today = dayjs().startOf("day");
+      const todayKey = today.format("YYYY-MM-DD");
+
+      const [cyclesRes, profileRes, todaySymptomsRes] = await Promise.all([
         supabase.from("cycles").select("*").eq("user_id", user.id).order("start_date", { ascending: true }),
         supabase.from("profiles").select("*").eq("id", user.id).single(),
+        supabase.from("symptoms").select("symptoms, mood, note").eq("user_id", user.id).eq("date", todayKey).maybeSingle(),
       ]);
 
       const cycles = cyclesRes.data || [];
       const profile = profileRes.data;
+      const todayEntry = todaySymptomsRes.data || null;
+      const currentGoal = profile?.goal || DEFAULT_GOAL;
 
-      if (profile?.goal) setUserGoal(profile.goal);
+      setUserGoal(currentGoal);
+
       if (!profile && cycles.length === 0) {
-        setLoading(false);
+        setAdviceLoading(false);
         return;
       }
 
-      const avgCycle = calculateAverageCycle(cycles) || profile?.cycle_length || 28;
-      const avgPeriod = calculateAveragePeriod(cycles) || profile?.period_length || 5;
+      const preferredCycleLength = getPreferredCycleLength(cycles, profile);
+      const preferredPeriodLength = getPreferredPeriodLength(cycles, profile);
       const lastStartDate = cycles.length > 0 ? cycles[cycles.length - 1].start_date : profile?.last_period;
 
       if (!lastStartDate) {
-        setLoading(false);
+        setAdviceLoading(false);
         return;
       }
 
-      const start = dayjs(lastStartDate);
-      const today = dayjs().startOf("day");
-      setCycleLength(avgCycle);
-      setPeriodLength(avgPeriod);
+      const cycleState = calculateCycleState({
+        lastStartDate,
+        cycleLength: preferredCycleLength,
+        periodLength: preferredPeriodLength,
+        referenceDate: today,
+      });
 
-      let next = start.add(avgCycle, "day");
-      while (next.isBefore(today)) next = next.add(avgCycle, "day");
+      if (!cycleState) {
+        setAdviceLoading(false);
+        return;
+      }
 
-      setDaysLeft(next.diff(today, "day"));
-      setNextPeriod(next.format("D MMMM"));
+      setCycleLength(preferredCycleLength);
+      setPeriodLength(preferredPeriodLength);
 
-      let dayInCycle = today.diff(start, "day") + 1;
-      if (dayInCycle > avgCycle) dayInCycle = ((dayInCycle - 1) % avgCycle) + 1;
+      setDaysLeft(cycleState.daysLeft);
+      setNextPeriod(cycleState.nextPeriod.format("D MMMM"));
+
+      const dayInCycle = cycleState.cycleDay;
       setCycleDay(dayInCycle);
 
-      const status = getPhaseAndChance(dayInCycle, avgCycle, avgPeriod);
+      const status = getPhaseAndChance(dayInCycle, preferredCycleLength, preferredPeriodLength);
       setPhase(status.phase);
+      setPhaseKey(status.phaseKey);
       setPregnancyChance(status.chance);
       setPhaseColor(status.color);
+
+      const fallbackAdvice = getDailyAdvice({
+        phaseKey: status.phaseKey,
+        goal: currentGoal,
+        cycleDay: dayInCycle,
+        cycleLength: preferredCycleLength,
+        periodLength: preferredPeriodLength,
+        date: today.toDate(),
+      });
+
+      const adviceKey = [
+        todayKey,
+        currentGoal,
+        dayInCycle,
+        status.phaseKey,
+        preferredCycleLength,
+        preferredPeriodLength,
+        [...(todayEntry?.symptoms || [])].sort().join("|"),
+        todayEntry?.mood || "",
+        (todayEntry?.note || "").trim(),
+      ].join("::");
+
+      if (!hasLoadedOnceRef.current) {
+        setLoading(false);
+        hasLoadedOnceRef.current = true;
+      }
+
+      if (isPremium) {
+        if (forceAdviceRefresh || adviceKey !== lastAdviceKeyRef.current) {
+          setDailyAdvice(fallbackAdvice);
+        }
+
+        void refreshHomeAdvice(user.id, adviceKey, forceAdviceRefresh);
+      } else {
+        setDailyAdvice(fallbackAdvice);
+        setAdviceLoading(false);
+      }
     } catch (error) {
       console.log("Home load error:", error);
     } finally {
-      setLoading(false);
+      if (!hasLoadedOnceRef.current) {
+        setLoading(false);
+        hasLoadedOnceRef.current = true;
+      }
     }
-  };
+  }, [getPhaseAndChance, isPremium, refreshHomeAdvice]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const logPeriod = async () => {
     try {
@@ -154,10 +553,14 @@ export default function HomeScreen() {
 
             if (error) throw error;
 
+            invalidateAssistantContextCache();
+            await syncCycleRemindersForUser();
+
             Alert.alert(
               "წარმატება 🎉",
-              "ახალი პერიოდი დაფიქსირებულია!\n\n💡 მითითება: თუ კალენდარში ძველი (არასწორი) დღეებიც დაგრჩა მონიშნული, შეგიძლია გადახვიდე კალენდარში, დააკლიკო იმ დღეს და წაშალო."
+              "ახალი პერიოდი დაფიქსირებულია!\n\n💡 მითითება: თუ კალენდარში ძველი არასწორი ნიშნებიც დარჩა, შეგიძლია კალენდარში გადახვიდე, იმ დღეს დააჭირო და წაშალო."
             );
+
             loadData();
             DeviceEventEmitter.emit("cycleUpdated");
           },
@@ -167,6 +570,10 @@ export default function HomeScreen() {
       Alert.alert("შეცდომა", "მონაცემების შენახვა ვერ მოხერხდა");
     }
   };
+
+  if (pregnancyMode) {
+    return <PregnancyHomeScreen isDark={isDark} />;
+  }
 
   if (loading && !refreshing) {
     return (
@@ -191,7 +598,7 @@ export default function HomeScreen() {
           </View>
           <View style={[styles.infoItem, { borderLeftWidth: 1, borderLeftColor: isDark ? "#333" : "#eee" }]}>
             <Text style={styles.infoLabel}>{userGoal === "დაორსულება" ? "ნაყოფიერება" : "დაორსულების შანსი"}</Text>
-            <Text style={[styles.infoValue, { color: pregnancyChance.includes("მაღალი") ? "#06d6a0" : theme.primary }]}>{pregnancyChance}</Text>
+            <Text style={[styles.infoValue, { color: pregnancyChance.includes("მაღალი") || pregnancyChance.includes("უმაღლესი") ? "#06d6a0" : theme.primary }]}>{pregnancyChance}</Text>
           </View>
         </View>
 
@@ -228,29 +635,116 @@ export default function HomeScreen() {
       <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი რჩევა</Text>
       <View style={[styles.insightCard, { backgroundColor: theme.card }]}>
         <View style={[styles.insightIconBox, { backgroundColor: theme.circleBg }]}>
-          <Text style={{ fontSize: 24 }}>💡</Text>
+          <Text style={{ fontSize: 24 }}>{phaseKey === "fertile" ? "🌿" : phaseKey === "period" ? "🫶" : "💡"}</Text>
         </View>
-        <Text style={[styles.insightText, { color: theme.subText }]}>
-          {userGoal === "დაორსულება"
-            ? phase === "ნაყოფიერი პერიოდი"
-              ? "საუკეთესო დროა ჩასახვისთვის! მაქსიმალურად გამოიყენე ეს დღეები. 🔥"
-              : phase === "პერიოდი"
-                ? "ამ პერიოდში ორგანიზმი ისვენებს. მიიღეთ რკინით მდიდარი საკვები."
-                : "დააკვირდით თქვენს განწყობას და ემზადეთ ნაყოფიერი დღეებისთვის."
-            : userGoal === "ჯანმრთელობის მონიტორინგი"
-              ? "ყურადღება მიაქციეთ სიმპტომების ცვლილებას და აუცილებლად ჩაინიშნეთ დღიურში."
-              : phase === "პერიოდი"
-                ? "ეცადეთ მიიღოთ თბილი სითხეები და მაგნიუმით მდიდარი საკვები."
-                : phase === "ფოლიკულური ფაზა"
-                  ? "თქვენი ენერგია პიკშია! საუკეთესო დროა ახალი პროექტებისთვის."
-                  : phase === "ნაყოფიერი პერიოდი"
-                    ? "ორგანიზმი ოვულაციისთვის ემზადება. შესაძლებელია იგრძნოთ ენერგიის მატება."
-                    : "დროა შეანელოთ ტემპი. ხარისხიანი ძილი დაგეხმარებათ PMS-ის დაძლევაში."}
-        </Text>
+        <View style={styles.insightContent}>
+          <PrimePreview
+            style={styles.insightPreview}
+            minHeight={118}
+            concealCompletely
+            message="სრული რჩევის სანახავად გახსენი Prime"
+          >
+            <Text style={[styles.insightText, { color: theme.subText }]}>
+              {dailyAdvice}
+            </Text>
+          </PrimePreview>
+
+          {isPremium && adviceLoading && (
+            <View style={styles.insightLoadingRow}>
+              <ActivityIndicator size="small" color={theme.primary} />
+              <Text style={[styles.insightHint, { color: theme.subText }]}>
+                ასისტენტი აახლებს რჩევას...
+              </Text>
+            </View>
+          )}
+        </View>
+        {isPremium && (
+          <Text style={{ fontSize: 11, color: "#aaa", textAlign: "right", marginTop: 8, opacity: 0.7 }}>ასისტენტი შეიძლება შეცდეს</Text>
+        )}
       </View>
+
+      {!isPremium && !pregnancyMode && (
+        <TouchableOpacity
+          activeOpacity={0.82}
+          style={[styles.pregnancyBanner, { backgroundColor: theme.card }]}
+          onPress={() => router.push("/pregnancy-premium")}
+        >
+          <View style={styles.pregnancyBannerLeft}>
+            <View style={styles.pregnancyBannerIcon}>
+              <Text style={{ fontSize: 26 }}>🤰</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.pregnancyBannerTitle, { color: theme.text }]}>ორსულობის რეჟიმი</Text>
+              <Text style={[styles.pregnancyBannerSub, { color: theme.subText }]}>კვირეული AI რჩევა, ნოტიფიკაციები და ნაყოფის ვიზუალიზაცია</Text>
+            </View>
+          </View>
+          <View style={styles.pregnancyBannerBadge}>
+            <Text style={styles.pregnancyBannerBadgeText}>$3.99</Text>
+          </View>
+        </TouchableOpacity>
+      )}
 
       <View style={{ height: 100 }} />
     </ScrollView>
+  );
+}
+
+function BabyImage({ uri, emoji }) {
+  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  if (error) {
+    return <Text style={{ fontSize: 100 }}>{emoji}</Text>;
+  }
+
+  return (
+    <View style={{ width: "100%", aspectRatio: 1, backgroundColor: "#111", justifyContent: "center", alignItems: "center" }}>
+      {loading && <ActivityIndicator color="#ff4d88" size="large" style={{ position: "absolute" }} />}
+      <Image
+        source={{ uri }}
+        style={{ width: "100%", height: "100%" }}
+        resizeMode="contain"
+        onLoad={() => setLoading(false)}
+        onError={(e) => { console.log("Baby image error:", uri, e.nativeEvent?.error); setError(true); setLoading(false); }}
+      />
+    </View>
+  );
+}
+
+function WeeklyAdviceCard({ text, trimesterColor, isDark, theme }) {
+  const babyIdx = text.indexOf("🍼");
+  const adviceIdx = text.indexOf("💗");
+
+  if (babyIdx === -1 || adviceIdx === -1 || babyIdx >= adviceIdx) {
+    return (
+      <View style={{ padding: 24 }}>
+        <Text style={{ color: theme.text, fontSize: 15, lineHeight: 26 }}>{text}</Text>
+      </View>
+    );
+  }
+
+  const babyBody = text.slice(babyIdx, adviceIdx).replace(/^🍼[^\n]*\n?/, "").trim();
+  const adviceBody = text.slice(adviceIdx).replace(/^💗[^\n]*\n?/, "").trim();
+
+  return (
+    <View>
+      <View style={{ padding: 20 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <View style={{ width: 3, height: 18, borderRadius: 2, backgroundColor: trimesterColor }} />
+          <Text style={{ color: trimesterColor, fontWeight: "700", fontSize: 14 }}>🍼 ნაყოფის განვითარება</Text>
+        </View>
+        <Text style={{ color: theme.text, fontSize: 15, lineHeight: 26 }}>{babyBody}</Text>
+      </View>
+      <View style={{ height: 1, backgroundColor: isDark ? "#2a2a2a" : "#f0f0f0", marginHorizontal: 20 }} />
+      <View style={{ padding: 20 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <View style={{ width: 3, height: 18, borderRadius: 2, backgroundColor: "#ff4d88" }} />
+          <Text style={{ color: "#ff4d88", fontWeight: "700", fontSize: 14 }}>💗 ამ კვირის რჩევა</Text>
+        </View>
+        <Text style={{ color: theme.text, fontSize: 15, lineHeight: 26 }}>{adviceBody}</Text>
+      </View>
+      <Text style={{ fontSize: 11, color: "#aaa", textAlign: "right", paddingHorizontal: 20, paddingBottom: 12, opacity: 0.7 }}>ასისტენტი შეიძლება შეცდეს</Text>
+    </View>
   );
 }
 
@@ -295,7 +789,40 @@ const styles = StyleSheet.create({
   meterPercent: { fontSize: 13, fontWeight: "700" },
   meterBg: { height: 8, backgroundColor: "rgba(150,150,150,0.1)", borderRadius: 4, overflow: "hidden" },
   meterFill: { height: "100%", borderRadius: 4 },
-  insightCard: { borderRadius: 20, padding: 20, flexDirection: "row", alignItems: "center", elevation: 3 },
-  insightIconBox: { width: 50, height: 50, borderRadius: 15, justifyContent: "center", alignItems: "center", marginRight: 15 },
-  insightText: { flex: 1, fontSize: 14, lineHeight: 20 },
+  insightCard: { borderRadius: 24, padding: 22, elevation: 3 },
+  insightIconBox: { display: "none" },
+  insightContent: { gap: 10 },
+  insightPreview: { alignSelf: "stretch" },
+  insightLoadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  insightHint: { fontSize: 12, fontWeight: "600" },
+  insightText: { fontSize: 14, lineHeight: 21 },
+  pregnancyBanner: {
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "rgba(6,214,160,0.25)",
+  },
+  pregnancyBannerLeft: { flexDirection: "row", alignItems: "center", gap: 14, flex: 1 },
+  pregnancyBannerIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: "rgba(6,214,160,0.12)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pregnancyBannerTitle: { fontSize: 15, fontWeight: "800", marginBottom: 2 },
+  pregnancyBannerSub: { fontSize: 12, lineHeight: 17 },
+  pregnancyBannerBadge: {
+    backgroundColor: "#06D6A0",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+    marginLeft: 10,
+  },
+  pregnancyBannerBadgeText: { color: "white", fontSize: 13, fontWeight: "900" },
 });

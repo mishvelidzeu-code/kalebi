@@ -50,7 +50,7 @@ export default function Birth() {
   const handleNext = () => {
     setData({
       ...data,
-      birth_date: date.toISOString()
+      birth_date: dayjs(date).format("YYYY-MM-DD")
     });
     router.push("/onboarding/protection");
   };

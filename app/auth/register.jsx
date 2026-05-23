@@ -4,6 +4,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Animated, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { OnboardingContext } from "../../components/OnboardingContext";
+import { setNotificationsEnabled, syncCycleRemindersForUser } from "../../services/notifications";
 import { supabase } from "../../services/supabase";
 
 export default function Register() {
@@ -25,8 +26,16 @@ export default function Register() {
   }, []);
 
   const handleRegister = async () => {
+    const trimmedPhoneNumber = onboardingData.phone_number?.trim();
+    let postRegistrationNotice = null;
+
     if (!email || !password) {
       Alert.alert("შეცდომა", "გთხოვთ შეიყვანოთ ელ-ფოსტა და პაროლი");
+      return;
+    }
+
+    if (!trimmedPhoneNumber) {
+      Alert.alert("შეავსე ნომერი", "ტელეფონის ნომერი სავალდებულოა.");
       return;
     }
 
@@ -38,7 +47,9 @@ export default function Register() {
         password,
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        throw authError;
+      }
 
       if (authData?.user) {
         const user = authData.user;
@@ -46,20 +57,24 @@ export default function Register() {
         const { error: profileError } = await supabase.from("profiles").upsert({
           id: user.id,
           name: onboardingData.name || email.split("@")[0],
+          phone_number: trimmedPhoneNumber,
           birth_date: onboardingData.birth_date,
           protection: onboardingData.protection,
           health: onboardingData.health,
           cycle_length: onboardingData.cycle_length || 28,
           period_length: onboardingData.period_length || 5,
           last_period: onboardingData.last_period,
-          is_premium: true,
+          is_premium: false,
+          premium_override: false,
           onboarding_completed: true,
         });
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          throw profileError;
+        }
 
         if (onboardingData.last_period) {
-          await supabase.from("cycles").insert([
+          const { error: cycleError } = await supabase.from("cycles").insert([
             {
               user_id: user.id,
               start_date: onboardingData.last_period.split("T")[0],
@@ -67,6 +82,26 @@ export default function Register() {
               cycle_length: onboardingData.cycle_length || 28,
             },
           ]);
+
+          if (cycleError) {
+            console.error("Initial cycle insert failed during registration:", cycleError);
+            postRegistrationNotice =
+              "ანგარიში შეიქმნა, მაგრამ საწყისი ციკლის ჩანაწერი სრულად ვერ შეინახა. აპი მაინც იმუშავებს პროფილის მონაცემებით.";
+          }
+        }
+
+        if (onboardingData.notifications_enabled) {
+          await setNotificationsEnabled(true);
+          await syncCycleRemindersForUser();
+        } else {
+          await setNotificationsEnabled(false);
+        }
+
+        if (postRegistrationNotice) {
+          Alert.alert("რეგისტრაცია დასრულდა", postRegistrationNotice, [
+            { text: "გაგრძელება", onPress: () => router.replace("/(tabs)") },
+          ]);
+          return;
         }
 
         router.replace("/(tabs)");

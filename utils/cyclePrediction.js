@@ -22,6 +22,26 @@ export function calculateAverageCycle(cycles) {
   return Math.round(avg);
 }
 
+export function getPreferredCycleLength(cycles, profile) {
+  const profileCycleLength = Number(profile?.cycle_length);
+  if (profileCycleLength >= 21 && profileCycleLength <= 45) return profileCycleLength;
+
+  const latestCycleLength = Number(cycles?.[cycles.length - 1]?.cycle_length);
+  if (latestCycleLength >= 21 && latestCycleLength <= 45) return latestCycleLength;
+
+  return calculateAverageCycle(cycles) || 28;
+}
+
+export function getPreferredPeriodLength(cycles, profile) {
+  const profilePeriodLength = Number(profile?.period_length);
+  if (profilePeriodLength >= 1 && profilePeriodLength <= 14) return profilePeriodLength;
+
+  const latestPeriodLength = Number(cycles?.[cycles.length - 1]?.period_length);
+  if (latestPeriodLength >= 1 && latestPeriodLength <= 14) return latestPeriodLength;
+
+  return calculateAveragePeriod(cycles) || 5;
+}
+
 export function calculateAveragePeriod(cycles) {
   // აქაც null-ს ვაბრუნებთ, თუ ისტორია ცარიელია
   if (!cycles || cycles.length === 0) return null;

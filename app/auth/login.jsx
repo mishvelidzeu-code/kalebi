@@ -171,7 +171,7 @@ export default function Login() {
               {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>შესვლა</Text>}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.push("/auth/register")} style={styles.link}>
+            <TouchableOpacity onPress={() => router.replace("/onboarding/name")} style={styles.link}>
               <Text style={styles.linkText}>არ გაქვს ანგარიში? <Text style={styles.linkHighlight}>რეგისტრაცია</Text></Text>
             </TouchableOpacity>
 

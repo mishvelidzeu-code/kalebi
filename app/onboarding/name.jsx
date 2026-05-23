@@ -1,19 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  Dimensions,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
-} from "react-native";
+import { Alert, Animated, Dimensions, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { OnboardingContext } from "../../components/OnboardingContext";
 
@@ -22,122 +10,154 @@ const { width } = Dimensions.get("window");
 export default function Name() {
   const router = useRouter();
   const { data, setData } = useContext(OnboardingContext);
+  const scrollViewRef = useRef(null);
 
   const [name, setName] = useState(data?.name || "");
+  const [phoneNumber, setPhoneNumber] = useState(data?.phone_number || "");
   const [isFocused, setIsFocused] = useState(false);
+  const [isPhoneFocused, setIsPhoneFocused] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [inputContainerY, setInputContainerY] = useState(0);
 
-  // --- ანიმაციები ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
+
+  const scrollToInputs = () => {
+    if (!scrollViewRef.current) {
+      return;
+    }
+
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(inputContainerY - 36, 0),
+        animated: true,
+      });
+    }, 120);
+  };
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, tension: 20, friction: 6, useNativeDriver: true })
+      Animated.spring(slideAnim, { toValue: 0, tension: 20, friction: 6, useNativeDriver: true }),
     ]).start();
 
-    // კლავიატურის კონტროლი
-    const keyboardWillShowListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => setKeyboardVisible(true)
-    );
-    const keyboardWillHideListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setKeyboardVisible(false)
-    );
+    const keyboardWillShowListener = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", () => {
+      setKeyboardVisible(true);
+
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(inputContainerY - 36, 0),
+          animated: true,
+        });
+      }, 120);
+    });
+    const keyboardWillHideListener = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboardVisible(false));
 
     return () => {
       keyboardWillShowListener.remove();
       keyboardWillHideListener.remove();
     };
-  }, []);
+  }, [inputContainerY]);
 
   const handleNext = () => {
     const trimmedName = name.trim();
-    if (!trimmedName) return;
+    const trimmedPhoneNumber = phoneNumber.trim();
+
+    if (!trimmedName) {
+      return;
+    }
+
+    if (!trimmedPhoneNumber) {
+      Alert.alert("შეავსე ნომერი", "ტელეფონის ნომერი სავალდებულოა.");
+      return;
+    }
 
     setData({
       ...data,
-      name: trimmedName
+      name: trimmedName,
+      phone_number: trimmedPhoneNumber,
     });
 
     Keyboard.dismiss();
     router.push("/onboarding/birth");
   };
 
+  const isNextDisabled = name.trim().length === 0 || phoneNumber.trim().length === 0;
+
   return (
-    <LinearGradient
-      colors={["#FFFFFF", "#FFF0F5", "#FFD6E7"]}
-      style={styles.container}
-    >
-      {/* --- ფონის დეკორაციები --- */}
+    <LinearGradient colors={["#FFFFFF", "#FFF0F5", "#FFD6E7"]} style={styles.container}>
       <View style={styles.bgCircleTop} />
       <View style={styles.bgCircleBottom} />
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardView}
-      >
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardView}>
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={[styles.scrollContent, keyboardVisible && styles.scrollContentKeyboardOpen]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
           <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-            
             <View style={styles.header}>
               <View style={styles.iconBox}>
                 <Text style={styles.emoji}>👋</Text>
               </View>
               <Text style={styles.title}>რა გქვია?</Text>
-              <Text style={styles.subtitle}>
-                გვითხარი შენი სახელი, რომ აპლიკაციამ უკეთ და უფრო პერსონალურად მოგმართოს.
-              </Text>
+              <Text style={styles.subtitle}>გვითხარი შენი სახელი და ტელეფონის ნომერი, რომ პროფილი სრულად და სწორად შევქმნათ.</Text>
             </View>
 
-            <View style={styles.inputContainer}>
+            <View
+              style={styles.inputContainer}
+              onLayout={(event) => {
+                setInputContainerY(event.nativeEvent.layout.y);
+              }}
+            >
               <TextInput
-                style={[
-                  styles.input,
-                  isFocused && styles.inputFocused 
-                ]}
+                style={[styles.input, isFocused && styles.inputFocused]}
                 placeholder="შეიყვანე სახელი..."
                 placeholderTextColor="#aaa"
                 value={name}
                 onChangeText={setName}
-                onFocus={() => setIsFocused(true)}
+                onFocus={() => {
+                  setIsFocused(true);
+                  if (keyboardVisible) {
+                    scrollToInputs();
+                  }
+                }}
                 onBlur={() => setIsFocused(false)}
                 autoCorrect={false}
                 maxLength={30}
+                returnKeyType="next"
+              />
+
+              <Text style={styles.inputHint}>ტელეფონის ნომერი სავალდებულოა.</Text>
+
+              <TextInput
+                style={[styles.input, styles.secondaryInput, isPhoneFocused && styles.inputFocused]}
+                placeholder="ტელეფონის ნომერი"
+                placeholderTextColor="#aaa"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                onFocus={() => {
+                  setIsPhoneFocused(true);
+                  if (keyboardVisible) {
+                    scrollToInputs();
+                  }
+                }}
+                onBlur={() => setIsPhoneFocused(false)}
+                keyboardType="phone-pad"
+                autoCorrect={false}
+                maxLength={20}
               />
             </View>
-
           </Animated.View>
 
-          {/* დინამიური სტილი: როცა კლავიატურა ამოდის padding იცვლება */}
-          <Animated.View 
-            style={[
-              styles.footer, 
-              keyboardVisible ? styles.footerOpen : styles.footerClosed,
-              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
-            ]}
-          >
-            
-            <TouchableOpacity
-              style={[
-                styles.button,
-                name.trim().length === 0 && styles.buttonDisabled
-              ]}
-              disabled={name.trim().length === 0}
-              onPress={handleNext}
-              activeOpacity={0.8}
-            >
+          <Animated.View style={[styles.footer, keyboardVisible ? styles.footerOpen : styles.footerClosed, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <TouchableOpacity style={[styles.button, isNextDisabled && styles.buttonDisabled]} disabled={isNextDisabled} onPress={handleNext} activeOpacity={0.8}>
               <Text style={styles.buttonText}>შემდეგი ნაბიჯი ✨</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.loginLink}
               onPress={() => {
                 Keyboard.dismiss();
@@ -149,7 +169,6 @@ export default function Name() {
                 უკვე გაქვს ანგარიში? <Text style={styles.loginLinkHighlight}>შესვლა</Text>
               </Text>
             </TouchableOpacity>
-
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -169,17 +188,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingTop: 80,
   },
-
-  // --- ფონის დეკორაციები ---
+  scrollContentKeyboardOpen: {
+    paddingBottom: 180,
+  },
   bgCircleTop: { position: "absolute", width: width, height: width, borderRadius: width / 2, backgroundColor: "#FFEAF2", top: -width * 0.4, right: -width * 0.3, opacity: 0.7 },
   bgCircleBottom: { position: "absolute", width: width * 0.8, height: width * 0.8, borderRadius: width / 2, backgroundColor: "rgba(255, 214, 231, 0.4)", bottom: -width * 0.2, left: -width * 0.3 },
-
   content: {
-    flex: 1, // ეს აწვება footer-ს ქვემოთ
+    flex: 1,
     alignItems: "center",
     zIndex: 10,
   },
-
   header: {
     alignItems: "center",
     marginBottom: 40,
@@ -215,7 +233,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     paddingHorizontal: 10,
   },
-
   inputContainer: {
     width: "100%",
   },
@@ -238,27 +255,31 @@ const styles = StyleSheet.create({
   },
   inputFocused: {
     borderColor: "#ff4d88",
-    backgroundColor: "#FFF0F5", 
+    backgroundColor: "#FFF0F5",
     shadowColor: "#ff4d88",
     shadowOpacity: 0.2,
   },
-
+  secondaryInput: {
+    marginTop: 14,
+  },
+  inputHint: {
+    marginTop: 14,
+    marginLeft: 6,
+    color: "#7A5C6A",
+    fontSize: 13,
+    fontWeight: "600",
+  },
   footer: {
     width: "100%",
     zIndex: 10,
   },
-  
-  // როცა კლავიატურა ჩაკეცილია
   footerClosed: {
-    paddingBottom: 80, 
+    paddingBottom: 80,
   },
-  
-  // როცა კლავიატურა ამოწეულია
   footerOpen: {
     paddingTop: 20,
     paddingBottom: 20,
   },
-
   button: {
     backgroundColor: "#ff4d88",
     paddingVertical: 20,
@@ -283,16 +304,16 @@ const styles = StyleSheet.create({
   },
   loginLink: {
     marginTop: 20,
-    alignItems: 'center',
-    paddingVertical: 10, 
+    alignItems: "center",
+    paddingVertical: 10,
   },
   loginLinkText: {
-    color: '#7A5C6A',
+    color: "#7A5C6A",
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   loginLinkHighlight: {
-    color: '#ff4d88',
-    fontWeight: '800',
+    color: "#ff4d88",
+    fontWeight: "800",
   },
 });

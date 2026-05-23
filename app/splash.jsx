@@ -4,6 +4,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Animated, Dimensions, StyleSheet, Text, View } from "react-native";
+import { fixFutureCycleDatesForCurrentUser } from "../services/cycleDataMigration";
+import { syncCycleRemindersForUser } from "../services/notifications";
 import { supabase } from "../services/supabase";
 
 const { width, height } = Dimensions.get("window");
@@ -62,6 +64,15 @@ export default function Splash() {
       // 2. ვამოწმებთ, აქვს თუ არა სესია და გავლილი ონბორდინგი
       if (sessionData?.session) {
         const user = sessionData.session.user;
+        try {
+          const migrationResult = await fixFutureCycleDatesForCurrentUser();
+          if (migrationResult.fixedProfile || migrationResult.fixedCycles > 0) {
+            await syncCycleRemindersForUser();
+          }
+        } catch (migrationError) {
+          console.log("Cycle date migration failed:", migrationError);
+        }
+
         const { data: profile } = await supabase
           .from("profiles")
           .select("onboarding_completed")

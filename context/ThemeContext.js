@@ -1,5 +1,7 @@
 import { DefaultTheme } from "@react-navigation/native";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { AppState } from "react-native";
+import { syncPremiumStatusFromPurchases } from "../services/purchases";
 import { supabase } from "../services/supabase";
 
 const PremiumTheme = {
@@ -33,42 +35,81 @@ const StandardTheme = {
 const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
-  const [isPremium, setIsPremium] = useState(true);
+  const [isPremium, setIsPremium] = useState(false);
   const [usePremiumTheme, setUsePremiumTheme] = useState(true);
 
-  useEffect(() => {
-    checkPremiumStatus();
-  }, []);
-
-  const checkPremiumStatus = async () => {
-    setIsPremium(true);
-    setUsePremiumTheme(true);
-
+  const checkPremiumStatus = useCallback(async () => {
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) return;
+      if (!user) {
+        setIsPremium(false);
+        return;
+      }
 
-      await supabase.from("profiles").upsert(
-        {
-          id: user.id,
-          is_premium: true,
-        },
-        { onConflict: "id" }
-      );
-    } catch {
-      setIsPremium(true);
-      setUsePremiumTheme(true);
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("is_premium, premium_override")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const premiumOverride = Boolean(data?.premium_override);
+      if (premiumOverride) {
+        setIsPremium(true);
+        return;
+      }
+
+      const profilePremiumStatus = Boolean(data?.is_premium);
+      const syncedStatus = await syncPremiumStatusFromPurchases();
+      if (syncedStatus.source === "revenuecat") {
+        setIsPremium(Boolean(syncedStatus.isPremium));
+        return;
+      }
+
+      setIsPremium(profilePremiumStatus);
+    } catch (error) {
+      console.log("Premium status check error:", error);
+      setIsPremium(false);
     }
-  };
+  }, []);
 
-  const refreshTheme = async () => {
+  useEffect(() => {
+    checkPremiumStatus();
+  }, [checkPremiumStatus]);
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsPremium(false);
+
+      if (session?.user) {
+        checkPremiumStatus();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [checkPremiumStatus]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        checkPremiumStatus();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [checkPremiumStatus]);
+
+  const refreshTheme = useCallback(async () => {
     await checkPremiumStatus();
-  };
+  }, [checkPremiumStatus]);
 
-  const isDark = isPremium && usePremiumTheme;
+  const isDark = usePremiumTheme;
   const currentTheme = isDark ? PremiumTheme : StandardTheme;
 
   const themeContextValue = {
@@ -81,7 +122,11 @@ export const ThemeProvider = ({ children }) => {
     refreshTheme,
   };
 
-  return <ThemeContext.Provider value={themeContextValue}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={themeContextValue}>
+      {children}
+    </ThemeContext.Provider>
+  );
 };
 
 export const useTheme = () => useContext(ThemeContext);

@@ -1,9 +1,21 @@
 import { ThemeProvider as NavigationThemeProvider } from "@react-navigation/native";
+import * as Notifications from "expo-notifications"; // 👈 დამატებულია იმპორტი
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 import { OnboardingProvider } from "../components/OnboardingContext";
+import { PregnancyProvider } from "../context/PregnancyContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
+
+// 👈 დამატებულია Foreground Handler (განახლებული ტიპებით)
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true, // 👈 შეცვალა shouldShowAlert
+    shouldShowList: true,   // 👈 შეცვალა shouldShowAlert
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 function LayoutContent() {
   const { isDark, navigationTheme, colors } = useTheme();
@@ -33,9 +45,11 @@ function LayoutContent() {
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <OnboardingProvider>
-        <LayoutContent />
-      </OnboardingProvider>
+      <PregnancyProvider>
+        <OnboardingProvider>
+          <LayoutContent />
+        </OnboardingProvider>
+      </PregnancyProvider>
     </ThemeProvider>
   );
 }

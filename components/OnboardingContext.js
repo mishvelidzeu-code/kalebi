@@ -4,11 +4,14 @@ export const OnboardingContext = createContext();
 
 const initialState = {
   name: "",
+  phone_number: "",
   birth_date: null,
   protection: "",
   health: "",
   cycle_length: null,
-  last_period: null
+  period_length: null,
+  last_period: null,
+  notifications_enabled: false
 };
 
 export const OnboardingProvider = ({ children }) => {

@@ -7,6 +7,59 @@ import { supabase } from "./supabase";
 const NOTIFICATIONS_ENABLED_KEY = "@cycle-care/notifications-enabled";
 const DEFAULT_NOTIFICATION_HOUR = 10;
 const CYCLES_TO_SCHEDULE = 6;
+const WELLNESS_CHECKIN_INTERVAL_DAYS = 4;
+const WELLNESS_CHECKINS_TO_SCHEDULE = 12;
+const DIARY_REMINDER_INTERVAL_DAYS = 3;
+const DIARY_REMINDERS_TO_SCHEDULE = 12;
+
+const PREGNANCY_WEEK_SIZES = {
+  5: ["სეზამის მარცვლის", "🌱"],
+  6: ["ოსპის", "🫘"],
+  7: ["მოცვის", "🫐"],
+  8: ["ჟოლოს", "🍓"],
+  9: ["ყურძნის მარცვლის", "🍇"],
+  10: ["ქლიავის", "🍑"],
+  11: ["ლეღვის", "🍋"],
+  12: ["ლიმონის", "🍋"],
+  13: ["ატმის", "🍑"],
+  14: ["ვაშლის", "🍎"],
+  15: ["ფორთოხლის", "🍊"],
+  16: ["ავოკადოს", "🥑"],
+  17: ["მსხლის", "🍐"],
+  18: ["ბოლოკის", "🥕"],
+  19: ["მანგოს", "🥭"],
+  20: ["ბანანის", "🍌"],
+  21: ["სტაფილოს", "🥕"],
+  22: ["ქოქოსის", "🥥"],
+  23: ["გრეიფრუტის", "🍈"],
+  24: ["სიმინდის ტაროს", "🌽"],
+  25: ["ყვავილოვანი კომბოსტოს", "🥦"],
+  26: ["სალათის კოჭის", "🥬"],
+  27: ["კომბოსტოს", "🥬"],
+  28: ["ბადრიჯნის", "🍆"],
+  29: ["კიტრის", "🥒"],
+  30: ["გოგრის ნაჭრის", "🎃"],
+  31: ["ქოქოსის", "🥥"],
+  32: ["ანანასის", "🍍"],
+  33: ["ნესვის", "🍈"],
+  34: ["პაპაიას", "🍈"],
+  35: ["ბოსტნეულის", "🥦"],
+  36: ["სალათის", "🥬"],
+  37: ["ნესვის", "🍈"],
+  38: ["ნერგის", "🌿"],
+  39: ["გოგრის", "🎃"],
+  40: ["სასიხარულო", "👶"],
+};
+
+const PREGNANCY_MILESTONE_MESSAGES = {
+  12: "I ტრიმესტრი დასრულდა! 🎉 ყველაზე კრიტიკული ეტაპი წარმატებით გადალახე!",
+  20: "ნახევარი გზა გავლილია! 🌟 ბავშვი ახლა სრულად ჩამოყალიბებულია",
+  28: "III ტრიმესტრი დაიწყო! 💪 ფინიშამდე ცოტა დარჩა!",
+  36: "ბავშვი სრულად მზადაა დასაბადებლად! ✨ მომზადება დაიწყე",
+  40: "სავარაუდო მშობიარობის კვირა! 👶 მალე გნახავ, ჩვილო!",
+};
+
+const DOCTOR_VISIT_WEEKS = [8, 12, 16, 20, 24, 28, 32, 36, 38, 40];
 
 function parseCycleDate(dateValue) {
   if (!dateValue) return null;
@@ -90,7 +143,10 @@ export async function getNotificationsEnabled() {
 }
 
 export async function setNotificationsEnabled(enabled) {
-  await AsyncStorage.setItem(NOTIFICATIONS_ENABLED_KEY, enabled ? "true" : "false");
+  await AsyncStorage.setItem(
+    NOTIFICATIONS_ENABLED_KEY,
+    enabled ? "true" : "false"
+  );
 }
 
 export async function disableCycleReminders() {
@@ -118,17 +174,63 @@ export function calculateCycleDates(cycleStartDate, cycleLength) {
 
 export async function schedulePeriodNotification(nextPeriodDate) {
   const triggerDate = addDays(parseCycleDate(nextPeriodDate), -2);
-  return scheduleLocalNotification("მენსტრუაცია 🌸", "მენსტრუაცია სავარაუდოდ 2 დღეში დაიწყება", triggerDate);
+  return scheduleLocalNotification(
+    "მენსტრუაცია 🌸",
+    "მენსტრუაცია სავარაუდოდ 2 დღეში დაიწყება",
+    triggerDate
+  );
 }
 
 export async function scheduleOvulationNotification(ovulationDate) {
   const triggerDate = addDays(parseCycleDate(ovulationDate), -1);
-  return scheduleLocalNotification("ოვულაცია 💕", "ხვალ ოვულაციის სავარაუდო დღეა", triggerDate);
+  return scheduleLocalNotification(
+    "ოვულაცია 💕",
+    "ხვალ ოვულაციის სავარაუდო დღეა",
+    triggerDate
+  );
 }
 
 export async function scheduleFertileNotification(fertileStartDate) {
   const triggerDate = parseCycleDate(fertileStartDate);
-  return scheduleLocalNotification("ნაყოფიერი დღეები 🌱", "დღეს იწყება ნაყოფიერი პერიოდი", triggerDate);
+  return scheduleLocalNotification(
+    "ნაყოფიერი დღეები 🌱",
+    "დღეს იწყება ნაყოფიერი პერიოდი",
+    triggerDate
+  );
+}
+
+export async function scheduleWellnessCheckinNotification(checkinDate) {
+  const triggerDate = parseCycleDate(checkinDate);
+  return scheduleLocalNotification(
+    "როგორ გრძნობ თავს დღეს? 💗",
+    "შეავსე დღიური და ჩაინიშნე შენი განწყობა და სიმპტომები.",
+    triggerDate
+  );
+}
+
+async function scheduleWellnessCheckins() {
+  const scheduledIds = [];
+  let nextCheckinDate = new Date();
+  nextCheckinDate.setHours(DEFAULT_NOTIFICATION_HOUR, 0, 0, 0);
+
+  if (nextCheckinDate.getTime() <= Date.now()) {
+    nextCheckinDate = addDays(nextCheckinDate, 1);
+  }
+
+  for (let i = 0; i < WELLNESS_CHECKINS_TO_SCHEDULE; i += 1) {
+    const notificationId =
+      await scheduleWellnessCheckinNotification(nextCheckinDate);
+    if (notificationId) {
+      scheduledIds.push(notificationId);
+    }
+
+    nextCheckinDate = addDays(
+      nextCheckinDate,
+      WELLNESS_CHECKIN_INTERVAL_DAYS
+    );
+  }
+
+  return scheduledIds;
 }
 
 export async function scheduleCycleReminders(lastPeriodDate, cycleLength) {
@@ -156,9 +258,89 @@ export async function scheduleCycleReminders(lastPeriodDate, cycleLength) {
       cycleStart = cycleDates.nextPeriod;
     }
 
+    const wellnessIds = await scheduleWellnessCheckins();
+    scheduledIds.push(...wellnessIds);
+
     return scheduledIds.filter(Boolean);
   } catch (error) {
     console.log("Schedule reminders error:", error);
+    return [];
+  }
+}
+
+export async function schedulePregnancyNotifications(lmpDate) {
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    await setupNotificationChannel();
+
+    const lmp = parseCycleDate(lmpDate);
+    if (!lmp) return [];
+
+    const scheduledIds = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const daysPregnant = Math.floor((today - lmp) / (1000 * 60 * 60 * 24));
+    const currentWeek = Math.max(1, Math.floor(daysPregnant / 7) + 1);
+
+    // Weekly milestone notifications (current week+1 → 40)
+    for (let week = currentWeek + 1; week <= 40; week++) {
+      const weekStartDate = addDays(lmp, (week - 1) * 7);
+      weekStartDate.setHours(DEFAULT_NOTIFICATION_HOUR, 0, 0, 0);
+      if (!isFutureTrigger(weekStartDate)) continue;
+
+      const milestoneMsg = PREGNANCY_MILESTONE_MESSAGES[week];
+      const sizeData = PREGNANCY_WEEK_SIZES[week];
+
+      let body;
+      if (milestoneMsg) {
+        body = milestoneMsg;
+      } else if (sizeData) {
+        body = `ნაყოფი ახლა ${sizeData[0]} ზომისაა ${sizeData[1]}`;
+      } else {
+        body = `${week}-ე კვირა დაიწყო! 🤰`;
+      }
+
+      const id = await scheduleLocalNotification(
+        `კვირა ${week} 🤰`,
+        body,
+        weekStartDate
+      );
+      if (id) scheduledIds.push(id);
+    }
+
+    // Doctor visit reminders (3 days before week starts)
+    for (const week of DOCTOR_VISIT_WEEKS) {
+      if (week <= currentWeek) continue;
+      const weekStartDate = addDays(lmp, (week - 1) * 7);
+      const reminderDate = addDays(weekStartDate, -3);
+      reminderDate.setHours(DEFAULT_NOTIFICATION_HOUR, 0, 0, 0);
+      if (!isFutureTrigger(reminderDate)) continue;
+
+      const id = await scheduleLocalNotification(
+        "ექიმის ვიზიტი 🏥",
+        `კვირა ${week} ახლოვდება — ექიმის ვიზიტი დაჯავშნე`,
+        reminderDate
+      );
+      if (id) scheduledIds.push(id);
+    }
+
+    // Diary reminders every 2 days
+    let diaryDate = addDays(today, 1);
+    diaryDate.setHours(9, 0, 0, 0);
+    for (let i = 0; i < DIARY_REMINDERS_TO_SCHEDULE; i++) {
+      const id = await scheduleLocalNotification(
+        "ორსულობის დღიური 📔",
+        "დაფიქსირე დღევანდელი სიმპტომები და განწყობა",
+        new Date(diaryDate)
+      );
+      if (id) scheduledIds.push(id);
+      diaryDate = addDays(diaryDate, DIARY_REMINDER_INTERVAL_DAYS);
+    }
+
+    return scheduledIds.filter(Boolean);
+  } catch (error) {
+    console.log("Schedule pregnancy notifications error:", error);
     return [];
   }
 }
@@ -180,15 +362,31 @@ export async function syncCycleRemindersForUser() {
     if (!user) return [];
 
     const [latestCycleResponse, profileResponse] = await Promise.all([
-      supabase.from("cycles").select("start_date, cycle_length").eq("user_id", user.id).order("start_date", { ascending: false }).limit(1),
-      supabase.from("profiles").select("last_period, cycle_length").eq("id", user.id).maybeSingle(),
+      supabase
+        .from("cycles")
+        .select("start_date, cycle_length")
+        .eq("user_id", user.id)
+        .order("start_date", { ascending: false })
+        .limit(1),
+      supabase
+        .from("profiles")
+        .select("last_period, cycle_length, pregnancy_mode")
+        .eq("id", user.id)
+        .maybeSingle(),
     ]);
 
     const latestCycle = latestCycleResponse.data?.[0];
     const profile = profileResponse.data;
 
+    // Pregnancy mode: schedule pregnancy-specific notifications
+    if (profile?.pregnancy_mode && profile?.last_period) {
+      return schedulePregnancyNotifications(profile.last_period);
+    }
+
     const lastPeriodDate = latestCycle?.start_date || profile?.last_period;
-    const cycleLength = Number(latestCycle?.cycle_length || profile?.cycle_length || 28);
+    const cycleLength = Number(
+      latestCycle?.cycle_length || profile?.cycle_length || 28
+    );
 
     if (!lastPeriodDate) {
       await Notifications.cancelAllScheduledNotificationsAsync();
