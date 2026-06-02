@@ -54,8 +54,9 @@ export default function Register() {
       if (authData?.user) {
         const user = authData.user;
 
-        const { error: profileError } = await supabase.from("profiles").upsert({
+        const profilePayload = {
           id: user.id,
+          email: user.email || email.trim(),
           name: onboardingData.name || email.split("@")[0],
           phone_number: trimmedPhoneNumber,
           birth_date: onboardingData.birth_date,
@@ -67,7 +68,16 @@ export default function Register() {
           is_premium: false,
           premium_override: false,
           onboarding_completed: true,
-        });
+        };
+
+        let { error: profileError } = await supabase.from("profiles").upsert(profilePayload);
+
+        if (profileError && String(profileError.message || "").includes("email")) {
+          const fallbackProfilePayload = { ...profilePayload };
+          delete fallbackProfilePayload.email;
+          const fallbackResult = await supabase.from("profiles").upsert(fallbackProfilePayload);
+          profileError = fallbackResult.error;
+        }
 
         if (profileError) {
           throw profileError;

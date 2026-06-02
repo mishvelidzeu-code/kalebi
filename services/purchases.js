@@ -91,12 +91,13 @@ function hasActiveEntitlement(customerInfo) {
   return Boolean(customerInfo?.entitlements?.active?.[getEntitlementId()]);
 }
 
-async function writePremiumStatusToProfile(userId, isPremium) {
+async function writePremiumStatusToProfile(user, isPremium) {
   const { error } = await supabase
     .from("profiles")
     .upsert(
       {
-        id: userId,
+        id: user.id,
+        email: user.email,
         is_premium: isPremium,
       },
       { onConflict: "id" }
@@ -121,7 +122,7 @@ export async function syncPremiumStatusFromPurchases() {
   const customerInfo = await Purchases.getCustomerInfo();
   const isPremium = hasActiveEntitlement(customerInfo);
 
-  await writePremiumStatusToProfile(user.id, isPremium);
+  await writePremiumStatusToProfile(user, isPremium);
 
   return {
     isPremium,

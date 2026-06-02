@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cycle Care - ჩამოტვირთე აპი</title>
+  <link rel="icon" href="assets/images/icon.png" />
+  <style>
+    :root {
+      --primary: #ff4d88;
+      --primary-dark: #e94560;
+      --soft: #fff0f5;
+      --soft-strong: #ffd6e7;
+      --text: #2d1f27;
+      --muted: #7a5c6a;
+      --white: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-height: 100%;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 18%, rgba(255, 214, 231, 0.78) 0 170px, transparent 171px),
+        radial-gradient(circle at 88% 78%, rgba(255, 240, 245, 0.95) 0 230px, transparent 231px),
+        linear-gradient(145deg, #ffffff 0%, var(--soft) 52%, var(--soft-strong) 100%);
+      overflow-x: hidden;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      border-radius: 999px;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(2px);
+    }
+
+    body::before {
+      width: 46vw;
+      height: 46vw;
+      top: -16vw;
+      right: -12vw;
+      background: rgba(255, 234, 242, 0.82);
+    }
+
+    body::after {
+      width: 34vw;
+      height: 34vw;
+      left: -12vw;
+      bottom: -10vw;
+      background: rgba(255, 214, 231, 0.54);
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px 18px;
+    }
+
+    .shell {
+      width: min(1040px, 100%);
+      display: grid;
+      grid-template-columns: 1.02fr 0.98fr;
+      align-items: center;
+      gap: 44px;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 24px;
+    }
+
+    .logo-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 16px 10px 10px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.84);
+      border-radius: 28px;
+      box-shadow: 0 16px 38px rgba(255, 77, 136, 0.14);
+      backdrop-filter: blur(14px);
+    }
+
+    .app-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 20px;
+      box-shadow: 0 14px 26px rgba(255, 77, 136, 0.28);
+    }
+
+    .app-name {
+      color: var(--primary);
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1.1;
+    }
+
+    .spark {
+      position: relative;
+      width: 164px;
+      height: 32px;
+      margin-left: 28px;
+    }
+
+    .spark::before {
+      content: "";
+      position: absolute;
+      left: 6px;
+      top: 15px;
+      width: 120px;
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      box-shadow: 0 0 12px rgba(255, 77, 136, 0.7);
+      animation: trail 2.6s ease-in-out infinite;
+    }
+
+    .spark::after {
+      content: "✦";
+      position: absolute;
+      top: -2px;
+      left: 114px;
+      color: var(--primary);
+      font-size: 26px;
+      text-shadow: 0 0 14px rgba(255, 77, 136, 0.75);
+      animation: pulse 1.1s ease-in-out infinite;
+    }
+
+    h1 {
+      max-width: 650px;
+      margin: 0;
+      color: var(--primary);
+      font-size: clamp(42px, 7vw, 78px);
+      line-height: 0.98;
+      font-weight: 900;
+      letter-spacing: 0;
+      text-shadow: 0 10px 24px rgba(255, 77, 136, 0.16);
+    }
+
+    .lead {
+      max-width: 560px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.75;
+      font-weight: 650;
+    }
+
+    .actions {
+      width: min(430px, 100%);
+      display: grid;
+      gap: 14px;
+    }
+
+    .download {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 76px;
+      padding: 16px 18px;
+      color: var(--white);
+      text-decoration: none;
+      background: var(--primary);
+      border-radius: 24px;
+      box-shadow: 0 18px 34px rgba(255, 77, 136, 0.36);
+      transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    }
+
+    .download:hover,
+    .download:focus-visible {
+      transform: translateY(-3px);
+      background: var(--primary-dark);
+      box-shadow: 0 24px 42px rgba(255, 77, 136, 0.43);
+      outline: none;
+    }
+
+    .download.secondary {
+      color: var(--primary);
+      background: rgba(255, 255, 255, 0.82);
+      border: 2px solid rgba(255, 77, 136, 0.14);
+      box-shadow: 0 16px 30px rgba(255, 77, 136, 0.14);
+    }
+
+    .download.secondary:hover,
+    .download.secondary:focus-visible {
+      background: var(--soft);
+      box-shadow: 0 22px 38px rgba(255, 77, 136, 0.2);
+    }
+
+    .download-text {
+      display: grid;
+      gap: 3px;
+    }
+
+    .download-text strong {
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .download-text span {
+      font-size: 13px;
+      font-weight: 700;
+      opacity: 0.82;
+    }
+
+    .download-icon {
+      width: 46px;
+      height: 46px;
+      flex: 0 0 46px;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.2);
+      font-size: 24px;
+    }
+
+    .secondary .download-icon {
+      background: rgba(255, 77, 136, 0.12);
+    }
+
+    .phone-wrap {
+      justify-self: center;
+      position: relative;
+      width: min(360px, 86vw);
+      aspect-ratio: 0.58;
+      padding: 12px;
+      border-radius: 46px;
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: 0 34px 76px rgba(122, 92, 106, 0.22);
+      backdrop-filter: blur(14px);
+    }
+
+    .phone {
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+      border-radius: 36px;
+      background: linear-gradient(160deg, #ffffff 0%, var(--soft) 58%, var(--soft-strong) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+    }
+
+    .phone::before {
+      content: "";
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      width: 92px;
+      height: 8px;
+      border-radius: 99px;
+      background: rgba(122, 92, 106, 0.16);
+      transform: translateX(-50%);
+    }
+
+    .phone-screen {
+      height: 100%;
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      gap: 22px;
+      padding: 42px 28px;
+      text-align: center;
+    }
+
+    .big-icon {
+      width: 126px;
+      height: 126px;
+      border-radius: 42px;
+      box-shadow: 0 20px 45px rgba(255, 77, 136, 0.3);
+      animation: float 3.8s ease-in-out infinite;
+    }
+
+    .phone-title {
+      margin: 0;
+      color: var(--primary);
+      font-size: 34px;
+      line-height: 1.1;
+      font-weight: 900;
+    }
+
+    .phone-subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+      font-weight: 700;
+    }
+
+    .mini-card {
+      width: 100%;
+      display: grid;
+      gap: 10px;
+      padding: 18px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: 0 14px 30px rgba(255, 77, 136, 0.12);
+    }
+
+    .mini-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 99px;
+      background: var(--primary);
+      box-shadow: 0 0 0 7px rgba(255, 77, 136, 0.12);
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.38); }
+    }
+
+    @keyframes trail {
+      0%, 100% { opacity: 0.35; transform: translateX(-14px); }
+      50% { opacity: 1; transform: translateX(18px); }
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+
+    @media (max-width: 820px) {
+      .page {
+        align-items: start;
+        padding-top: 24px;
+      }
+
+      .shell {
+        grid-template-columns: 1fr;
+        gap: 30px;
+      }
+
+      .brand {
+        align-items: center;
+        text-align: center;
+      }
+
+      .spark {
+        margin-left: 0;
+      }
+
+      .actions {
+        margin-inline: auto;
+      }
+
+      .phone-wrap {
+        width: min(315px, 90vw);
+      }
+    }
+
+    @media (max-width: 420px) {
+      .page {
+        padding-inline: 14px;
+      }
+
+      .download {
+        min-height: 70px;
+        border-radius: 20px;
+        padding: 14px;
+      }
+
+      .download-text strong {
+        font-size: 16px;
+      }
+
+      .phone-title {
+        font-size: 29px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="shell" aria-label="Cycle Care აპის ჩამოტვირთვა">
+      <div class="brand">
+        <div class="logo-row">
+          <img class="app-icon" src="assets/images/icon.png" alt="Cycle Care icon" />
+          <div class="app-name">Cycle Care</div>
+        </div>
+
+        <div class="spark" aria-hidden="true"></div>
+
+        <h1>შენი რიტმი ყოველთვის შენთან</h1>
+        <p class="lead">
+          ჩამოტვირთე Cycle Care და გამოიყენე ციკლის კალენდარი, სიმპტომების ჩანაწერი,
+          შეხსენებები და რბილი ყოველდღიური რჩევები ერთ სივრცეში.
+        </p>
+
+        <div class="actions" aria-label="ჩამოტვირთვის ღილაკები">
+          <a class="download" href="qalis-sivrce.apk" download>
+            <span class="download-icon" aria-hidden="true">▶</span>
+            <span class="download-text">
+              <strong>ჩამოტვირთე Android APK</strong>
+              <span>დააჭირე და გადმოწერე Android-ისთვის</span>
+            </span>
+          </a>
+
+          <a class="download secondary" href="https://apps.apple.com/us/app/qalis-sivrce/id6760530009" target="_blank" rel="noopener">
+            <span class="download-icon" aria-hidden="true"></span>
+            <span class="download-text">
+              <strong>ჩამოტვირთე Apple</strong>
+              <span>დააჭირე და გადმოწერე iPhone-ისთვის</span>
+            </span>
+          </a>
+        </div>
+      </div>
+
+      <div class="phone-wrap" aria-hidden="true">
+        <div class="phone">
+          <div class="phone-screen">
+            <img class="big-icon" src="assets/images/icon.png" alt="" />
+            <div>
+              <p class="phone-title">შენი რიტმი</p>
+              <p class="phone-subtitle">აღმოაჩინე შენი სხეულის ჰარმონია</p>
+            </div>
+            <div class="mini-card">
+              <div class="mini-row"><span class="dot"></span><span>ციკლის კალენდარი</span></div>
+              <div class="mini-row"><span class="dot"></span><span>დღიური და შეხსენებები</span></div>
+              <div class="mini-row"><span class="dot"></span><span>პირადი რჩევები</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

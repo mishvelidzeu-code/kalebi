@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "../../context/ThemeContext";
 
@@ -38,10 +39,13 @@ function TabIcon({ name, color, focused, isAssistant = false, primary, isDark })
 }
 
 export default function TabLayout() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, isAdmin } = useTheme();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 10);
 
   return (
     <Tabs
+      initialRouteName={isAdmin ? "admin" : "index"}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
@@ -50,8 +54,8 @@ export default function TabLayout() {
           backgroundColor: colors.tabBar,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 72,
-          paddingBottom: 10,
+          height: 62 + bottomInset,
+          paddingBottom: bottomInset,
           paddingTop: 5,
           elevation: 0,
           overflow: "visible",
@@ -63,8 +67,20 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
+        name="admin"
+        options={{
+          title: "Dashboard",
+          href: isAdmin ? undefined : null,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="grid" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="index"
         options={{
+          href: isAdmin ? null : undefined,
           title: "მთავარი",
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name="home" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
@@ -75,6 +91,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="calendar"
         options={{
+          href: isAdmin ? null : undefined,
           title: "კალენდარი",
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name="calendar" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
@@ -95,6 +112,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="statistics"
         options={{
+          href: isAdmin ? null : undefined,
           title: "სტატისტიკა",
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name="stats-chart" color={color} focused={focused} primary={colors.primary} isDark={isDark} />

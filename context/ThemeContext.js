@@ -1,6 +1,7 @@
 import { DefaultTheme } from "@react-navigation/native";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AppState } from "react-native";
+import { isAdminEmail } from "../services/adminAccess";
 import { syncPremiumStatusFromPurchases } from "../services/purchases";
 import { supabase } from "../services/supabase";
 
@@ -36,6 +37,7 @@ const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
   const [isPremium, setIsPremium] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [usePremiumTheme, setUsePremiumTheme] = useState(true);
 
   const checkPremiumStatus = useCallback(async () => {
@@ -46,6 +48,14 @@ export const ThemeProvider = ({ children }) => {
 
       if (!user) {
         setIsPremium(false);
+        setIsAdmin(false);
+        return;
+      }
+
+      const adminAccess = isAdminEmail(user.email || "");
+      setIsAdmin(adminAccess);
+      if (adminAccess) {
+        setIsPremium(true);
         return;
       }
 
@@ -74,6 +84,7 @@ export const ThemeProvider = ({ children }) => {
     } catch (error) {
       console.log("Premium status check error:", error);
       setIsPremium(false);
+      setIsAdmin(false);
     }
   }, []);
 
@@ -86,6 +97,7 @@ export const ThemeProvider = ({ children }) => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsPremium(false);
+      setIsAdmin(false);
 
       if (session?.user) {
         checkPremiumStatus();
@@ -114,6 +126,7 @@ export const ThemeProvider = ({ children }) => {
 
   const themeContextValue = {
     isPremium,
+    isAdmin,
     usePremiumTheme,
     setUsePremiumTheme,
     isDark,

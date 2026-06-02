@@ -3,6 +3,7 @@ import "dayjs/locale/ka";
 dayjs.locale("ka");
 import DateTimePicker from "@react-native-community/datetimepicker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
@@ -69,7 +70,7 @@ const getFileExtension = (asset) => {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { usePremiumTheme, setUsePremiumTheme, isDark } = useTheme();
+  const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin } = useTheme();
   const { pregnancyMode, currentWeek, enablePregnancyMode, disablePregnancyMode } = usePregnancy();
 
   const [userId, setUserId] = useState("");
@@ -134,6 +135,11 @@ export default function ProfileScreen() {
       setUserId(user.id);
       setEmail(user.email);
       const nameFromEmail = user.email.split("@")[0];
+      try {
+        await supabase.from("profiles").update({ email: user.email }).eq("id", user.id);
+      } catch (emailSyncError) {
+        console.log("Profile email sync skipped:", emailSyncError);
+      }
       const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
 
       if (data) {
@@ -375,6 +381,7 @@ export default function ProfileScreen() {
 
       const payload = {
         id: user.id,
+        email: user.email,
         name: finalName,
         phone_number: finalPhoneNumber,
         cycle_length: newCycle,
@@ -411,6 +418,14 @@ export default function ProfileScreen() {
     setPregnancySaving(true);
     try {
       const dateStr = dayjs(selectedPregnancyDate).format("YYYY-MM-DD");
+
+      if (isAdmin) {
+        await enablePregnancyMode(dateStr);
+        setShowPregnancyModal(false);
+        setSelectedPregnancyDate(null);
+        Alert.alert("ადმინ წვდომა აქტიურია ✨", "ორსულობის რეჟიმი ჩაირთო შეზღუდვების გარეშე.");
+        return;
+      }
 
       const { configured, availablePackage } = await getPregnancyOfferings();
 
@@ -495,26 +510,18 @@ export default function ProfileScreen() {
       <StatusBar style={isDark ? "light" : "dark"} />
       <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}>
         <View style={[styles.header, { backgroundColor: theme.headerBg, shadowColor: theme.primary }]}>
-          <View
-            style={[
-              styles.avatarHero,
-              {
-                backgroundColor: isDark ? "rgba(233,69,96,0.10)" : "#FFF3F7",
-                borderColor: isDark ? "rgba(233,69,96,0.18)" : "#FFD9E5",
-              },
-            ]}
-          >
-            <TouchableOpacity style={styles.avatarContainer} activeOpacity={0.88} onPress={handleAvatarPress}>
-              <View
-                style={[
-                  styles.avatarHalo,
-                  {
-                    backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "#FFFFFF",
-                    borderColor: isDark ? "rgba(255,255,255,0.06)" : "#FFE6EE",
-                  },
-                ]}
-              >
-                <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
+          <Text style={styles.profileEyebrow}>PERSONAL PROFILE</Text>
+          <TouchableOpacity style={styles.avatarContainer} activeOpacity={0.88} onPress={handleAvatarPress}>
+            <View
+              style={[
+                styles.avatarHalo,
+                {
+                  backgroundColor: isDark ? "rgba(233,69,96,0.08)" : "#FFF5F8",
+                  borderColor: isDark ? "rgba(233,69,96,0.20)" : "#FFDCE7",
+                },
+              ]}
+            >
+              <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
               {avatarUri ? (
                 <Image source={avatarUri} style={styles.avatarImage} contentFit="cover" />
               ) : (
@@ -526,21 +533,12 @@ export default function ProfileScreen() {
                 </View>
               )}
             </View>
-                <View
-                  style={[
-                    styles.editBadge,
-                    {
-                      backgroundColor: theme.primary,
-                      borderColor: theme.headerBg,
-                    },
-                  ]}
-                >
-              <Text style={{ fontSize: 12 }}>✏️</Text>
-            </View>
+              <View style={[styles.editBadge, { backgroundColor: theme.primary, borderColor: theme.headerBg }]}>
+                <Ionicons name="camera-outline" size={16} color="#FFFFFF" />
               </View>
+            </View>
           </TouchableOpacity>
           <Text style={[styles.avatarHint, { color: theme.primary }]}>{"\u10e4\u10dd\u10e2\u10dd\u10e1 \u10e8\u10d4\u10ea\u10d5\u10da\u10d8\u10e1\u10d7\u10d5\u10d8\u10e1 \u10e8\u10d4\u10d4\u10ee\u10d4"}</Text>
-          </View>
           <Text style={[styles.userName, { color: theme.text }]}>{userName}</Text>
           <Text style={[styles.emailText, { color: theme.subText }]}>{email}</Text>
           {!!phoneNumber && <Text style={[styles.emailText, { color: theme.subText }]}>{phoneNumber}</Text>}
@@ -612,6 +610,23 @@ export default function ProfileScreen() {
           <SettingRow icon="📤" bgColor={isDark ? "#2a1e3d" : "#F5F0FF"} title="მონაცემების ექსპორტი" subtitle="გაუზიარე ექიმს" onPress={exportUserData} showArrow isDarkTheme={isDark} />
         </View>
 
+        {isAdmin && (
+          <>
+            <Text style={styles.sectionHeader}>ადმინი</Text>
+            <View style={[styles.settingsBlock, { backgroundColor: theme.card }]}>
+              <SettingRow
+                icon="🛠️"
+                bgColor={isDark ? "#2a233d" : "#F5F0FF"}
+                title="ადმინ პანელი"
+                subtitle="მომხმარებლები და Prime წვდომა"
+                onPress={() => router.push("/(tabs)/admin")}
+                showArrow
+                isDarkTheme={isDark}
+              />
+            </View>
+          </>
+        )}
+
         <TouchableOpacity style={[styles.logoutBtn, { backgroundColor: theme.logoutBg }]} onPress={handleLogout}>
           <Text style={styles.logoutBtnText}>ანგარიშიდან გასვლა</Text>
         </TouchableOpacity>
@@ -640,7 +655,7 @@ export default function ProfileScreen() {
               />
             )}
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handlePregnancyEnable}>
-              {pregnancySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>ჩართვა — $3.99/თვე</Text>}
+              {pregnancySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>ჩართვა — $2.99/თვე</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowPregnancyModal(false)}>
               <Text style={styles.cancelBtnText}>გაუქმება</Text>
@@ -742,7 +757,7 @@ function SettingRow({ icon, bgColor, title, subtitle, value, showArrow, onPress,
         {subtitle && <Text style={[styles.settingSubtitle, { color: isDarkTheme ? "#888" : "#999" }]}>{subtitle}</Text>}
       </View>
       {value && <Text style={[styles.settingValue, { color: primaryColor || "#ff4d88" }]}>{value}</Text>}
-        {showArrow && <Text style={styles.arrowIcon}>›</Text>}
+      {showArrow && <Ionicons name="chevron-forward" size={18} color="#B8B8BE" style={styles.arrowIcon} />}
       {rightElement && rightElement}
     </Component>
   );
@@ -770,14 +785,14 @@ function NumberSelector({ value, setValue, min, max, primary, isDark }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { alignItems: "center", paddingTop: 70, paddingBottom: 30, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, elevation: 10, shadowOpacity: 0.15, shadowRadius: 20 },
-  avatarHero: { alignItems: "center", paddingHorizontal: 22, paddingVertical: 16, borderRadius: 28, borderWidth: 1, marginBottom: 16 },
+  header: { alignItems: "center", paddingTop: 68, paddingBottom: 28, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, elevation: 8, shadowOpacity: 0.12, shadowRadius: 18 },
+  profileEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 1.2, marginBottom: 15 },
   avatarContainer: { position: "relative" },
   avatarHalo: {
-    width: 126,
-    height: 126,
-    borderRadius: 63,
-    padding: 9,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    padding: 8,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -786,17 +801,17 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 6,
   },
-  avatar: { width: 108, height: 108, borderRadius: 54, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  avatar: { width: 144, height: 144, borderRadius: 72, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   avatarImage: { width: "100%", height: "100%" },
   avatarLoader: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.28)", alignItems: "center", justifyContent: "center" },
-  avatarText: { color: "#fff", fontSize: 36, fontWeight: "800" },
+  avatarText: { color: "#fff", fontSize: 46, fontWeight: "900" },
   editBadge: {
     position: "absolute",
-    bottom: 6,
-    right: 6,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    bottom: 8,
+    right: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
     elevation: 6,
@@ -805,24 +820,23 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     borderWidth: 3,
   },
-  editBadgeText: { color: "#FFFFFF", fontSize: 18, lineHeight: 18, fontWeight: "900" },
-  avatarHint: { marginTop: 12, fontSize: 12, fontWeight: "800", letterSpacing: 0.2 },
-  userName: { fontSize: 24, fontWeight: "800" },
+  avatarHint: { marginTop: 11, marginBottom: 14, fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
+  userName: { fontSize: 25, fontWeight: "900", letterSpacing: -0.35 },
   emailText: { fontSize: 14, marginTop: 4 },
-  inlineEditButton: { marginTop: 14, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
+  inlineEditButton: { marginTop: 15, paddingHorizontal: 17, paddingVertical: 10, borderRadius: 999 },
   inlineEditButtonText: { fontSize: 13, fontWeight: "800" },
-  sectionHeader: { fontSize: 12, fontWeight: "800", color: "#888", textTransform: "uppercase", letterSpacing: 1.5, marginTop: 35, marginBottom: 12, paddingHorizontal: 25 },
-  settingsBlock: { borderRadius: 24, marginHorizontal: 20, overflow: "hidden", elevation: 2 },
+  sectionHeader: { fontSize: 11, fontWeight: "900", color: "#888", textTransform: "uppercase", letterSpacing: 1.35, marginTop: 30, marginBottom: 11, paddingHorizontal: 22 },
+  settingsBlock: { borderRadius: 20, marginHorizontal: 20, overflow: "hidden", elevation: 2 },
   divider: { height: 1, marginLeft: 70 },
-  settingRow: { flexDirection: "row", alignItems: "center", padding: 18, paddingRight: 20 },
-  iconBox: { width: 42, height: 42, borderRadius: 12, justifyContent: "center", alignItems: "center", marginRight: 15 },
+  settingRow: { flexDirection: "row", alignItems: "center", padding: 16, paddingRight: 18 },
+  iconBox: { width: 42, height: 42, borderRadius: 13, justifyContent: "center", alignItems: "center", marginRight: 14 },
   settingTextContainer: { flex: 1 },
-  settingTitle: { fontSize: 16, fontWeight: "700" },
-  settingSubtitle: { fontSize: 12, marginTop: 2 },
+  settingTitle: { fontSize: 15, fontWeight: "800" },
+  settingSubtitle: { fontSize: 12, marginTop: 3 },
   settingValue: { fontSize: 15, fontWeight: "800" },
-  arrowIcon: { fontSize: 24, color: "#ccc", marginLeft: 10 },
-  logoutBtn: { marginHorizontal: 20, marginTop: 30, paddingVertical: 20, borderRadius: 24, alignItems: "center" },
-  logoutBtnText: { color: "#FF3B30", fontSize: 16, fontWeight: "800" },
+  arrowIcon: { marginLeft: 10 },
+  logoutBtn: { marginHorizontal: 20, marginTop: 30, minHeight: 56, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  logoutBtnText: { color: "#FF3B30", fontSize: 15, fontWeight: "800" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
   bottomSheet: { borderTopLeftRadius: 35, borderTopRightRadius: 35, padding: 25, paddingBottom: 50 },
   sheetHandle: { width: 45, height: 6, backgroundColor: "#ddd", borderRadius: 3, alignSelf: "center", marginBottom: 25 },

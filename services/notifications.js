@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
@@ -11,6 +13,51 @@ const WELLNESS_CHECKIN_INTERVAL_DAYS = 4;
 const WELLNESS_CHECKINS_TO_SCHEDULE = 12;
 const DIARY_REMINDER_INTERVAL_DAYS = 3;
 const DIARY_REMINDERS_TO_SCHEDULE = 12;
+
+function getExpoProjectId() {
+  return (
+    Constants.expoConfig?.extra?.eas?.projectId ||
+    Constants.easConfig?.projectId ||
+    null
+  );
+}
+
+export async function registerPushTokenForCurrentUser() {
+  try {
+    if (!Device.isDevice) return null;
+
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== "granted") return null;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const projectId = getExpoProjectId();
+    const tokenResponse = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
+    const expoPushToken = tokenResponse.data;
+
+    if (!expoPushToken) return null;
+
+    const { error } = await supabase.from("push_tokens").upsert(
+      {
+        user_id: user.id,
+        expo_push_token: expoPushToken,
+        platform: Platform.OS,
+      },
+      { onConflict: "expo_push_token" }
+    );
+
+    if (error) throw error;
+    return expoPushToken;
+  } catch (error) {
+    console.log("Push token registration error:", error);
+    return null;
+  }
+}
 
 const PREGNANCY_WEEK_SIZES = {
   5: ["სეზამის მარცვლის", "🌱"],
@@ -355,6 +402,8 @@ export async function syncCycleRemindersForUser() {
 
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== "granted") return [];
+
+    await registerPushTokenForCurrentUser();
 
     const {
       data: { user },

@@ -1,0 +1,528 @@
+import { Ionicons } from "@expo/vector-icons";
+import dayjs from "dayjs";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+import { useTheme } from "../context/ThemeContext";
+import { isAdminEmail } from "../services/adminAccess";
+import { supabase } from "../services/supabase";
+
+export default function AdminScreen() {
+  const router = useRouter();
+  const { isDark, refreshTheme } = useTheme();
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [profiles, setProfiles] = useState([]);
+  const [stats, setStats] = useState({ users: 0, todayUsers: 0, paidPremium: 0, adminPremium: 0, pregnancyPaid: 0 });
+  const [loading, setLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activeListTitle, setActiveListTitle] = useState("");
+  const [savingId, setSavingId] = useState("");
+  const [pushTitle, setPushTitle] = useState("");
+  const [pushBody, setPushBody] = useState("");
+  const [pushTarget, setPushTarget] = useState("me");
+  const [pushEmail, setPushEmail] = useState("");
+  const [pushSending, setPushSending] = useState(false);
+
+  const theme = {
+    bg: isDark ? "#0F0F0F" : "#F7F8FA",
+    card: isDark ? "#1A1A1A" : "#FFFFFF",
+    text: isDark ? "#FFFFFF" : "#1A1A1A",
+    subText: isDark ? "#AAAAAA" : "#777777",
+    border: isDark ? "#2A2A2A" : "#EFEFF4",
+    input: isDark ? "#242424" : "#FFFFFF",
+    primary: isDark ? "#E94560" : "#ff4d88",
+    good: "#06D6A0",
+  };
+
+  const checkAccess = useCallback(async () => {
+    setCheckingAccess(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const allowed = isAdminEmail(user?.email || "");
+      setHasAccess(allowed);
+      if (!allowed) {
+        Alert.alert("წვდომა შეზღუდულია", "ადმინ პანელი მხოლოდ ადმინისტრატორის ანგარიშისთვისაა.");
+      }
+    } catch (error) {
+      console.log("Admin access check error:", error);
+      setHasAccess(false);
+    } finally {
+      setCheckingAccess(false);
+    }
+  }, []);
+
+  const loadAdminData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const todayStart = dayjs().startOf("day").toISOString();
+      const [
+        usersCountRes,
+        todayUsersCountRes,
+        paidPremiumCountRes,
+        adminPremiumCountRes,
+        pregnancyPaidCountRes,
+      ] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", todayStart),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_premium", true),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("premium_override", true),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("has_pregnancy_subscription", true),
+      ]);
+
+      setProfiles([]);
+      setStats({
+        users: usersCountRes.count || 0,
+        todayUsers: todayUsersCountRes.count || 0,
+        paidPremium: paidPremiumCountRes.count || 0,
+        adminPremium: adminPremiumCountRes.count || 0,
+        pregnancyPaid: pregnancyPaidCountRes.count || 0,
+      });
+    } catch (error) {
+      console.log("Admin data load error:", error);
+      Alert.alert(
+        "ადმინ მონაცემები ვერ ჩაიტვირთა",
+        "შეამოწმე Supabase RLS policies. ადმინ პანელს profiles/cycles წაკითხვის უფლება სჭირდება."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAccess();
+  }, [checkAccess]);
+
+  useEffect(() => {
+    if (hasAccess) {
+      loadAdminData();
+    }
+  }, [hasAccess, loadAdminData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadAdminData();
+    setRefreshing(false);
+  }, [loadAdminData]);
+
+  const searchProfiles = useCallback(async (searchText) => {
+    const needle = searchText.trim();
+    if (needle.length < 2) {
+      return;
+    }
+
+    setActiveListTitle("ძებნის შედეგები");
+    setSearchLoading(true);
+    try {
+      const safeNeedle = needle.replace(/[(),]/g, " ").trim();
+      const pattern = `%${safeNeedle}%`;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(safeNeedle);
+      const queryBuilder = supabase
+        .from("profiles")
+        .select("id, email, name, phone_number, goal, is_premium, premium_override, pregnancy_mode, has_pregnancy_subscription")
+        .limit(20);
+
+      const response = isUuid
+        ? await queryBuilder.eq("id", safeNeedle)
+        : await queryBuilder.or(`email.ilike.${pattern},name.ilike.${pattern},phone_number.ilike.${pattern},goal.ilike.${pattern}`);
+
+      if (response.error) throw response.error;
+      setProfiles(response.data || []);
+    } catch (error) {
+      console.log("Admin search error:", error);
+      setProfiles([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  const loadProfileList = useCallback(async (type) => {
+    setQuery("");
+    setSearchLoading(true);
+    try {
+      const todayStart = dayjs().startOf("day").toISOString();
+      let request = supabase
+        .from("profiles")
+        .select("id, email, name, phone_number, goal, is_premium, premium_override, pregnancy_mode, has_pregnancy_subscription, created_at")
+        .limit(50);
+
+      if (type === "paid-prime") {
+        request = request.eq("is_premium", true);
+        setActiveListTitle("Paid Prime მომხმარებლები");
+      } else if (type === "today") {
+        request = request.gte("created_at", todayStart).order("created_at", { ascending: false });
+        setActiveListTitle("დღეს დამატებული მომხმარებლები");
+      } else if (type === "pregnancy-paid") {
+        request = request.eq("has_pregnancy_subscription", true);
+        setActiveListTitle("Pregnancy Paid მომხმარებლები");
+      }
+
+      const { data, error } = await request;
+      if (error) throw error;
+      setProfiles(data || []);
+    } catch (error) {
+      console.log("Admin list load error:", error);
+      setProfiles([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      searchProfiles(query);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [query, searchProfiles]);
+
+  const togglePremiumOverride = async (profile, value) => {
+    setSavingId(profile.id);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ premium_override: value })
+        .eq("id", profile.id);
+
+      if (error) throw error;
+
+      setProfiles((currentProfiles) =>
+        currentProfiles.map((item) =>
+          item.id === profile.id ? { ...item, premium_override: value } : item
+        )
+      );
+
+      await refreshTheme();
+    } catch (error) {
+      console.log("Premium override update error:", error);
+      Alert.alert(
+        "შენახვა ვერ მოხერხდა",
+        "ამ მოქმედებისთვის Supabase-ში admin update policy ან Edge Function დაგჭირდება."
+      );
+    } finally {
+      setSavingId("");
+    }
+  };
+
+  const sendPushNotification = async () => {
+    const title = pushTitle.trim();
+    const body = pushBody.trim();
+
+    if (!title || !body) {
+      Alert.alert("შეავსე შეტყობინება", "სათაური და ტექსტი აუცილებელია.");
+      return;
+    }
+
+    setPushSending(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("session-token-not-found");
+      }
+
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const functionUrl = `${supabaseUrl}/functions/v1/send-push-notification`;
+      const response = await fetch(functionUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          title,
+          body,
+          target: pushTarget,
+          email: pushTarget === "email" ? pushEmail.trim() : undefined,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${data?.error || data?.message || JSON.stringify(data)}`);
+      }
+
+      Alert.alert(
+        "გაიგზავნა",
+        `Target: ${data?.target || pushTarget}\nToken: ${data?.tokenCount ?? 0}`
+      );
+      setPushTitle("");
+      setPushBody("");
+      setPushEmail("");
+      setPushTarget("me");
+    } catch (error) {
+      console.log("Send push error:", error);
+      Alert.alert(
+        "გაგზავნა ვერ მოხერხდა",
+        error?.message || error?.context?.error || "სცადე თავიდან."
+      );
+    } finally {
+      setPushSending(false);
+    }
+  };
+
+  if (checkingAccess) {
+    return (
+      <View style={[styles.center, { backgroundColor: theme.bg }]}>
+        <ActivityIndicator color={theme.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (!hasAccess) {
+    return (
+      <View style={[styles.center, { backgroundColor: theme.bg, padding: 24 }]}>
+        <Ionicons name="lock-closed" size={36} color={theme.primary} />
+        <Text style={[styles.lockTitle, { color: theme.text }]}>წვდომა შეზღუდულია</Text>
+        <Text style={[styles.lockText, { color: theme.subText }]}>
+          შედი `mishvelidze.u@gmail.com` ანგარიშით, რომ ადმინ პანელი გაიხსნას.
+        </Text>
+        <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={() => router.back()}>
+          <Text style={styles.primaryBtnText}>უკან დაბრუნება</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={[styles.keyboardView, { backgroundColor: theme.bg }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+    >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
+      <View style={styles.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { color: theme.text }]}>ადმინ პანელი</Text>
+          <Text style={[styles.subtitle, { color: theme.subText }]}>მომხმარებლები და Prime წვდომა</Text>
+        </View>
+      </View>
+
+      <View style={styles.statsGrid}>
+        <StatCard label="სულ" value={stats.users} theme={theme} />
+        <StatCard label="დღეს დაემატა" value={stats.todayUsers} theme={theme} onPress={() => loadProfileList("today")} />
+        <StatCard label="Paid Prime" value={stats.paidPremium} theme={theme} onPress={() => loadProfileList("paid-prime")} />
+        <StatCard label="Admin Prime" value={stats.adminPremium} theme={theme} />
+        <StatCard label="Pregnancy Paid" value={stats.pregnancyPaid} theme={theme} onPress={() => loadProfileList("pregnancy-paid")} />
+      </View>
+
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="ძებნა email-ით, სახელით, ტელეფონით ან user id-ით"
+        placeholderTextColor={theme.subText}
+        style={[styles.searchInput, { backgroundColor: theme.input, color: theme.text, borderColor: theme.border }]}
+        autoCapitalize="none"
+      />
+
+      <View style={[styles.pushCard, { backgroundColor: theme.card }]}>
+        <Text style={[styles.pushTitle, { color: theme.text }]}>Push შეტყობინება</Text>
+        <TextInput
+          value={pushTitle}
+          onChangeText={setPushTitle}
+          placeholder="სათაური"
+          placeholderTextColor={theme.subText}
+          style={[styles.pushInput, { backgroundColor: theme.input, color: theme.text, borderColor: theme.border }]}
+        />
+        <TextInput
+          value={pushBody}
+          onChangeText={setPushBody}
+          placeholder="ტექსტი"
+          placeholderTextColor={theme.subText}
+          style={[styles.pushInput, styles.pushBodyInput, { backgroundColor: theme.input, color: theme.text, borderColor: theme.border }]}
+          multiline
+        />
+        <View style={styles.targetRow}>
+          {[
+            ["me", "Me"],
+            ["email", "Email"],
+            ["all", "All"],
+            ["paid_prime", "Paid Prime"],
+            ["pregnancy_paid", "Pregnancy"],
+            ["today_users", "Today"],
+          ].map(([value, label]) => (
+            <TouchableOpacity
+              key={value}
+              style={[
+                styles.targetChip,
+                { borderColor: theme.border, backgroundColor: pushTarget === value ? theme.primary : theme.input },
+              ]}
+              onPress={() => setPushTarget(value)}
+            >
+              <Text style={[styles.targetChipText, { color: pushTarget === value ? "#FFFFFF" : theme.text }]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {pushTarget === "email" && (
+          <TextInput
+            value={pushEmail}
+            onChangeText={setPushEmail}
+            placeholder="მომხმარებლის email"
+            placeholderTextColor={theme.subText}
+            style={[styles.pushInput, { backgroundColor: theme.input, color: theme.text, borderColor: theme.border }]}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+        )}
+        <TouchableOpacity
+          style={[styles.sendPushButton, { backgroundColor: theme.primary }, pushSending && { opacity: 0.65 }]}
+          onPress={sendPushNotification}
+          disabled={pushSending}
+        >
+          {pushSending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendPushButtonText}>Send Push</Text>}
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator color={theme.primary} style={{ marginTop: 30 }} />
+      ) : (
+        <View style={[styles.list, { backgroundColor: theme.card }]}>
+          {!!activeListTitle && !searchLoading && profiles.length > 0 && (
+            <Text style={[styles.listTitle, { color: theme.text }]}>{activeListTitle}</Text>
+          )}
+
+          {query.trim().length < 2 && !activeListTitle && (
+            <Text style={[styles.emptyText, { color: theme.subText }]}>
+              დააჭირე Paid Prime-ს, დღეს დამატებულს ან Pregnancy Paid-ს, ან ჩაწერე მინიმუმ 2 სიმბოლო ძებნაში.
+            </Text>
+          )}
+
+          {searchLoading && (
+            <View style={styles.searchLoadingRow}>
+              <ActivityIndicator color={theme.primary} size="small" />
+              <Text style={[styles.searchLoadingText, { color: theme.subText }]}>ძებნა...</Text>
+            </View>
+          )}
+
+          {!searchLoading && profiles.map((profile, index) => (
+            <View key={profile.id}>
+              <View style={styles.userRow}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{(profile.name || "U").slice(0, 1).toUpperCase()}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.userName, { color: theme.text }]} numberOfLines={1}>
+                    {profile.name || "უსახელო მომხმარებელი"}
+                  </Text>
+                  <Text style={[styles.userMeta, { color: theme.subText }]} numberOfLines={1}>
+                    {profile.email || "email ჯერ არ ჩანს"}
+                  </Text>
+                  <Text style={[styles.userMeta, { color: theme.subText }]} numberOfLines={1}>
+                    {profile.phone_number || "ტელეფონი არ არის"} · {profile.goal || "მიზანი არ არის"}
+                    {profile.has_pregnancy_subscription ? " · Pregnancy Paid" : profile.pregnancy_mode ? " · Pregnancy Mode" : ""}
+                  </Text>
+                  <Text style={[styles.userId, { color: theme.subText }]} numberOfLines={1}>
+                    {profile.id}
+                  </Text>
+                </View>
+                <View style={styles.switchBox}>
+                  {savingId === profile.id ? (
+                    <ActivityIndicator color={theme.primary} />
+                  ) : (
+                    <Switch
+                      value={Boolean(profile.premium_override)}
+                      onValueChange={(value) => togglePremiumOverride(profile, value)}
+                      trackColor={{ true: theme.good, false: "#D5D5D5" }}
+                    />
+                  )}
+                  <Text style={[styles.switchLabel, { color: profile.premium_override ? theme.good : theme.subText }]}>
+                    {profile.premium_override ? "Admin Prime" : profile.is_premium ? "Paid" : "Free"}
+                  </Text>
+                </View>
+              </View>
+              {index < profiles.length - 1 && <View style={[styles.divider, { backgroundColor: theme.border }]} />}
+            </View>
+          ))}
+
+          {!searchLoading && query.trim().length >= 2 && profiles.length === 0 && (
+            <Text style={[styles.emptyText, { color: theme.subText }]}>მომხმარებელი ვერ მოიძებნა.</Text>
+          )}
+        </View>
+      )}
+
+      <View style={{ height: 80 }} />
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function StatCard({ label, value, theme, onPress }) {
+  const Component = onPress ? TouchableOpacity : View;
+  return (
+    <Component style={[styles.statCard, { backgroundColor: theme.card }]} onPress={onPress} activeOpacity={0.82}>
+      <Text style={[styles.statValue, { color: theme.primary }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: theme.subText }]}>{label}</Text>
+    </Component>
+  );
+}
+
+const styles = StyleSheet.create({
+  keyboardView: { flex: 1 },
+  container: { flex: 1, paddingHorizontal: 20 },
+  scrollContent: { paddingTop: 58, paddingBottom: 120 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 22 },
+  backButton: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 28, fontWeight: "900" },
+  subtitle: { fontSize: 14, marginTop: 3, fontWeight: "600" },
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 18 },
+  statCard: { flexGrow: 1, flexBasis: "47%", borderRadius: 18, paddingVertical: 18, alignItems: "center" },
+  statValue: { fontSize: 24, fontWeight: "900" },
+  statLabel: { fontSize: 12, fontWeight: "700", marginTop: 4 },
+  searchInput: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 18, paddingVertical: 15, fontSize: 15, marginBottom: 16 },
+  pushCard: { borderRadius: 24, padding: 16, marginBottom: 16 },
+  pushTitle: { fontSize: 16, fontWeight: "900", marginBottom: 12 },
+  pushInput: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, marginBottom: 10 },
+  pushBodyInput: { minHeight: 82, textAlignVertical: "top" },
+  targetRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  targetChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  targetChipText: { fontSize: 12, fontWeight: "800" },
+  sendPushButton: { borderRadius: 16, paddingVertical: 14, alignItems: "center" },
+  sendPushButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
+  list: { borderRadius: 24, overflow: "hidden" },
+  listTitle: { fontSize: 15, fontWeight: "900", paddingHorizontal: 18, paddingTop: 18 },
+  userRow: { flexDirection: "row", alignItems: "center", padding: 16, gap: 12 },
+  avatar: { width: 46, height: 46, borderRadius: 16, backgroundColor: "#ff4d88", alignItems: "center", justifyContent: "center" },
+  avatarText: { color: "#FFFFFF", fontSize: 18, fontWeight: "900" },
+  userName: { fontSize: 16, fontWeight: "800" },
+  userMeta: { fontSize: 12, marginTop: 3 },
+  userId: { fontSize: 10, marginTop: 5 },
+  switchBox: { alignItems: "center", minWidth: 82 },
+  switchLabel: { fontSize: 11, fontWeight: "800", marginTop: 4 },
+  divider: { height: 1, marginLeft: 74 },
+  emptyText: { padding: 24, textAlign: "center", fontWeight: "700" },
+  searchLoadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, padding: 24 },
+  searchLoadingText: { fontSize: 14, fontWeight: "700" },
+  lockTitle: { fontSize: 22, fontWeight: "900", marginTop: 16 },
+  lockText: { textAlign: "center", lineHeight: 22, marginTop: 8, marginBottom: 22 },
+  primaryBtn: { borderRadius: 18, paddingHorizontal: 22, paddingVertical: 15 },
+  primaryBtnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
+});

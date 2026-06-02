@@ -1,5 +1,7 @@
 import dayjs from "dayjs";
 import "dayjs/locale/ka";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -19,6 +21,7 @@ import {
 } from "react-native";
 import { Calendar, LocaleConfig } from "react-native-calendars";
 
+import DiaryAvatar from "../../components/DiaryAvatar";
 import PrimePreview from "../../components/PrimePreview";
 import { getDiaryAssistantSupport, invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { useTheme } from "../../context/ThemeContext";
@@ -323,21 +326,39 @@ function PregnancyCalendarScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120, paddingTop: 60 }} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#06d6a0" />}>
 
-          <Calendar
-            key={`pregnancy-${isDark ? "dark" : "light"}-${calendarKey}`}
-            current={currentDate}
-            onMonthChange={(month) => setCurrentDate(month.dateString)}
-            markedDates={calendarMarks}
-            firstDay={1}
-            enableSwipeMonths
-            onDayPress={(day) => setSelectedDay(day.dateString)}
-            renderHeader={(date) => (
-              <TouchableOpacity style={styles.calHeader} activeOpacity={0.7} onPress={() => setShowMonthPicker(true)}>
-                <Text style={[styles.calHeaderText, { color: theme.text }]}>{dayjs(date).format("MMMM YYYY")} <Text style={{ fontSize: 14 }}>⌄</Text></Text>
-              </TouchableOpacity>
-            )}
-            theme={{ calendarBackground: theme.card, dayTextColor: theme.text, monthTextColor: theme.text, todayTextColor: "#48CAE4", arrowColor: theme.accent, textDisabledColor: isDark ? "#444" : "#d9e1e8" }}
-          />
+          <View style={styles.pageHeader}>
+            <View>
+              <Text style={styles.pageEyebrow}>MATERNITY CALENDAR</Text>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>ორსულობის კალენდარი</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>თვალი ადევნე კვირებს და მნიშვნელოვან ეტაპებს</Text>
+            </View>
+            <View style={styles.pageHeaderIcon}>
+              <Ionicons name="heart-outline" size={21} color="#06D6A0" />
+            </View>
+          </View>
+
+          <LinearGradient
+            colors={isDark ? ["#1A1D1D", "#141717"] : ["#FFFFFF", "#F5FCFA"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.calendarShell}
+          >
+            <Calendar
+              key={`pregnancy-${isDark ? "dark" : "light"}-${calendarKey}`}
+              current={currentDate}
+              onMonthChange={(month) => setCurrentDate(month.dateString)}
+              markedDates={calendarMarks}
+              firstDay={1}
+              enableSwipeMonths
+              onDayPress={(day) => setSelectedDay(day.dateString)}
+              renderHeader={(date) => (
+                <TouchableOpacity style={styles.calHeader} activeOpacity={0.7} onPress={() => setShowMonthPicker(true)}>
+                  <Text style={[styles.calHeaderText, { color: theme.text }]}>{dayjs(date).format("MMMM YYYY")} <Text style={styles.calHeaderChevron}>⌄</Text></Text>
+                </TouchableOpacity>
+              )}
+              theme={{ calendarBackground: "transparent", dayTextColor: theme.text, monthTextColor: theme.text, todayTextColor: "#48CAE4", arrowColor: theme.accent, textDisabledColor: isDark ? "#444" : "#d9e1e8" }}
+            />
+          </LinearGradient>
 
           <View style={styles.legend}>
             <LegendItem color={TRIMESTER_COLORS[1]} label="I ტრიმ." textColor={theme.text} />
@@ -394,8 +415,13 @@ function PregnancyCalendarScreen() {
 
           {symptomsLoading ? <ActivityIndicator color={theme.accent} style={{ marginTop: 30 }} /> : (
             <View style={styles.sectionContainer}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი დღიური</Text>
-              <Text style={[styles.dateSubtitle, { color: theme.accent }]}>{dayjs().format("dddd, D MMMM")}</Text>
+              <View style={styles.diaryHeading}>
+                <View style={styles.diaryHeadingCopy}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი დღიური</Text>
+                  <Text style={[styles.dateSubtitle, { color: theme.accent }]}>{dayjs().format("dddd, D MMMM")}</Text>
+                </View>
+                <DiaryAvatar accent={theme.accent} isDark={isDark} />
+              </View>
 
               <View style={[styles.card, { backgroundColor: theme.card, marginTop: 16 }]}>
                 <Text style={[styles.cardLabel, { color: theme.text }]}>როგორ გრძნობ თავს</Text>
@@ -470,12 +496,9 @@ function PregnancyCalendarScreen() {
   );
 }
 
-export default function CalendarScreen() {
+function RegularCalendarScreen() {
   const { isDark, isPremium } = useTheme();
-  const { pregnancyMode } = usePregnancy();
   const { markedDates, loadData, addCycle, deleteCycle, rawCycles } = useCycles();
-
-  if (pregnancyMode) return <PregnancyCalendarScreen />;
 
   // -- Calendar state ----------------------------------------------
   const [currentDate, setCurrentDate] = useState(dayjs().format("YYYY-MM-DD"));
@@ -797,36 +820,54 @@ export default function CalendarScreen() {
           }
         >
           {/* --------------- CALENDAR --------------- */}
-          <Calendar
-            key={`${isDark ? "dark" : "light"}-${calendarKey}`}
-            current={currentDate}
-            onMonthChange={(month) => setCurrentDate(month.dateString)}
-            markedDates={calendarMarks}
-            firstDay={1}
-            enableSwipeMonths
-            onDayPress={(day) => setSelectedDay(day.dateString)}
-            renderHeader={(date) => (
-              <TouchableOpacity
-                style={styles.calHeader}
-                activeOpacity={0.7}
-                onPress={() => setShowMonthPicker(true)}
-              >
-                <Text style={[styles.calHeaderText, { color: theme.text }]}>
-                  {dayjs(date).format("MMMM YYYY")}{" "}
-                  <Text style={{ fontSize: 14 }}>⌄</Text>
-                </Text>
-              </TouchableOpacity>
-            )}
-            theme={{
-              calendarBackground: theme.calendarBg,
-              dayTextColor: theme.text,
-              monthTextColor: theme.text,
-              todayTextColor: "#48CAE4",
-              arrowColor: theme.accent,
-              textDisabledColor: isDark ? "#444" : "#d9e1e8",
-              selectedDayTextColor: "#ffffff",
-            }}
-          />
+          <View style={styles.pageHeader}>
+            <View>
+              <Text style={styles.pageEyebrow}>CYCLE CALENDAR</Text>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>შენი კალენდარი</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>მართე ციკლი და დღიური ერთ სივრცეში</Text>
+            </View>
+            <View style={styles.pageHeaderIcon}>
+              <Ionicons name="calendar-outline" size={21} color="#E94560" />
+            </View>
+          </View>
+
+          <LinearGradient
+            colors={isDark ? ["#1D191E", "#151417"] : ["#FFFFFF", "#FFF8FA"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.calendarShell}
+          >
+            <Calendar
+              key={`${isDark ? "dark" : "light"}-${calendarKey}`}
+              current={currentDate}
+              onMonthChange={(month) => setCurrentDate(month.dateString)}
+              markedDates={calendarMarks}
+              firstDay={1}
+              enableSwipeMonths
+              onDayPress={(day) => setSelectedDay(day.dateString)}
+              renderHeader={(date) => (
+                <TouchableOpacity
+                  style={styles.calHeader}
+                  activeOpacity={0.7}
+                  onPress={() => setShowMonthPicker(true)}
+                >
+                  <Text style={[styles.calHeaderText, { color: theme.text }]}>
+                    {dayjs(date).format("MMMM YYYY")}{" "}
+                    <Text style={styles.calHeaderChevron}>⌄</Text>
+                  </Text>
+                </TouchableOpacity>
+              )}
+              theme={{
+                calendarBackground: "transparent",
+                dayTextColor: theme.text,
+                monthTextColor: theme.text,
+                todayTextColor: "#48CAE4",
+                arrowColor: theme.accent,
+                textDisabledColor: isDark ? "#444" : "#d9e1e8",
+                selectedDayTextColor: "#ffffff",
+              }}
+            />
+          </LinearGradient>
 
           {/* Legend */}
           <View style={styles.legend}>
@@ -972,10 +1013,15 @@ export default function CalendarScreen() {
             <ActivityIndicator color={theme.accent} style={{ marginTop: 30 }} />
           ) : (
             <View style={styles.sectionContainer}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი დღიური</Text>
-              <Text style={[styles.dateSubtitle, { color: theme.accent }]}>
-                {dayjs().format("dddd, D MMMM")}
-              </Text>
+              <View style={styles.diaryHeading}>
+                <View style={styles.diaryHeadingCopy}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი დღიური</Text>
+                  <Text style={[styles.dateSubtitle, { color: theme.accent }]}>
+                    {dayjs().format("dddd, D MMMM")}
+                  </Text>
+                </View>
+                <DiaryAvatar accent={theme.accent} isDark={isDark} />
+              </View>
 
               {/* Assistant advice — shown at top of diary after save */}
               {(assistantSupport.loading || assistantSupport.text || (!isPremium && todayDiarySaved)) && (
@@ -1155,6 +1201,11 @@ export default function CalendarScreen() {
   );
 }
 
+export default function CalendarScreen() {
+  const { pregnancyMode } = usePregnancy();
+  return pregnancyMode ? <PregnancyCalendarScreen /> : <RegularCalendarScreen />;
+}
+
 const LegendItem = ({ color, label, textColor }) => (
   <View style={styles.legendItem}>
     <View style={[styles.legendColor, { backgroundColor: color }]} />
@@ -1164,63 +1215,72 @@ const LegendItem = ({ color, label, textColor }) => (
 
 const styles = StyleSheet.create({
   // -- Calendar ----------------------------------------------------
+  pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 18 },
+  pageEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 1.1, marginBottom: 6 },
+  pageTitle: { fontSize: 25, fontWeight: "900", letterSpacing: -0.4 },
+  pageSubtitle: { fontSize: 13, fontWeight: "600", marginTop: 5 },
+  pageHeaderIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: "rgba(233,69,96,0.12)", alignItems: "center", justifyContent: "center" },
+  calendarShell: { marginHorizontal: 20, borderRadius: 26, paddingHorizontal: 5, paddingTop: 5, paddingBottom: 10, elevation: 5, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 14, overflow: "hidden" },
   calHeader: { alignItems: "center", padding: 10, paddingHorizontal: 20 },
-  calHeaderText: { fontSize: 18, fontWeight: "700", textTransform: "capitalize" },
-  legend: { flexDirection: "row", justifyContent: "space-around", marginTop: 25, paddingHorizontal: 20 },
-  legendItem: { flexDirection: "row", alignItems: "center" },
-  legendColor: { width: 12, height: 12, borderRadius: 6, marginRight: 6 },
-  legendText: { fontSize: 12, fontWeight: "500" },
+  calHeaderText: { fontSize: 17, fontWeight: "800", textTransform: "capitalize" },
+  calHeaderChevron: { color: "#E94560", fontSize: 14, fontWeight: "900" },
+  legend: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 9, marginTop: 16, marginHorizontal: 20, paddingHorizontal: 12, paddingVertical: 11, borderRadius: 16, backgroundColor: "rgba(150,150,150,0.08)" },
+  legendItem: { flexDirection: "row", alignItems: "center", paddingHorizontal: 2 },
+  legendColor: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  legendText: { fontSize: 11, fontWeight: "700" },
   // -- Shared ------------------------------------------------------
-  sectionContainer: { paddingHorizontal: 20, marginTop: 30 },
-  sectionTitle: { fontSize: 22, fontWeight: "800", textTransform: "capitalize" },
-  card: { borderRadius: 24, padding: 20, elevation: 3, shadowColor: "#000", shadowOpacity: 0.07, shadowRadius: 10 },
-  divider: { borderBottomWidth: 1, marginHorizontal: 20, marginTop: 36 },
+  sectionContainer: { paddingHorizontal: 20, marginTop: 28 },
+  sectionTitle: { fontSize: 21, fontWeight: "900", textTransform: "capitalize", letterSpacing: -0.3 },
+  card: { borderRadius: 22, padding: 18, elevation: 3, shadowColor: "#000", shadowOpacity: 0.07, shadowRadius: 12 },
+  divider: { borderBottomWidth: 1, marginHorizontal: 20, marginTop: 32, opacity: 0.65 },
   // -- Selected-day card --------------------------------------------
-  detailsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
-  actionBtn: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 15 },
-  actionBtnText: { fontWeight: "700", fontSize: 13 },
-  statusRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  statusLabel: { fontSize: 14 },
-  statusValue: { fontWeight: "700" },
-  countBtn: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  detailsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  actionBtn: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
+  actionBtnText: { fontWeight: "800", fontSize: 12 },
+  statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 11 },
+  statusLabel: { fontSize: 13, fontWeight: "600" },
+  statusValue: { fontSize: 13, fontWeight: "800" },
+  countBtn: { width: 32, height: 32, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   symptomsList: { flexDirection: "row", flexWrap: "wrap", marginTop: 15, borderTopWidth: 1, paddingTop: 15 },
-  symptomPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginRight: 8, marginBottom: 8 },
-  symptomPillText: { fontSize: 13, fontWeight: "500" },
-  noteBox: { marginTop: 10, padding: 12, borderRadius: 12, borderLeftWidth: 3 },
-  noteText: { fontStyle: "italic", fontSize: 13 },
+  symptomPill: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999, marginRight: 7, marginBottom: 7 },
+  symptomPillText: { fontSize: 12, fontWeight: "700" },
+  noteBox: { marginTop: 10, padding: 13, borderRadius: 13, borderLeftWidth: 3 },
+  noteText: { fontStyle: "italic", fontSize: 13, lineHeight: 19 },
   emptyText: { fontSize: 13, marginTop: 15, fontStyle: "italic", borderTopWidth: 1, paddingTop: 15 },
-  assistantBox: { marginTop: 18, borderRadius: 18, borderWidth: 1, padding: 16, gap: 8 },
+  assistantBox: { marginTop: 18, borderRadius: 18, borderWidth: 1, padding: 15, gap: 8 },
   assistantTitle: { fontSize: 15, fontWeight: "800" },
   assistantText: { fontSize: 14, lineHeight: 21 },
   assistantLoadingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   assistantHiddenPreview: { minHeight: 92 },
   // -- Diary -------------------------------------------------------
-  dateSubtitle: { fontSize: 15, fontWeight: "600", textTransform: "capitalize", marginTop: 4 },
-  cardLabel: { fontSize: 18, fontWeight: "700", marginBottom: 14 },
+  diaryHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  diaryHeadingCopy: { flex: 1, paddingRight: 12 },
+  dateSubtitle: { fontSize: 14, fontWeight: "700", textTransform: "capitalize", marginTop: 5 },
+  cardLabel: { fontSize: 17, fontWeight: "800", marginBottom: 14 },
   moodGrid: { flexDirection: "row", justifyContent: "space-between" },
-  moodItem: { alignItems: "center", width: "19%", paddingVertical: 10, borderRadius: 15 },
-  activeMood: { backgroundColor: "rgba(233, 69, 96, 0.1)", borderWidth: 1, borderColor: "#E94560" },
+  moodItem: { alignItems: "center", width: "19%", paddingVertical: 10, borderRadius: 14 },
+  activeMood: { backgroundColor: "rgba(233,69,96,0.10)", borderWidth: 1, borderColor: "rgba(233,69,96,0.55)" },
   moodEmoji: { fontSize: 26, marginBottom: 5 },
-  moodLabel: { fontSize: 10, textAlign: "center" },
-  chipGrid: { flexDirection: "row", flexWrap: "wrap" },
-  chip: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 16, borderRadius: 20, marginRight: 10, marginBottom: 10 },
+  moodLabel: { fontSize: 10, fontWeight: "600", textAlign: "center" },
+  chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { flexDirection: "row", alignItems: "center", paddingVertical: 11, paddingHorizontal: 14, borderRadius: 999 },
   activeChip: { backgroundColor: "#E94560" },
   chipIcon: { marginRight: 6, fontSize: 16 },
-  chipText: { fontSize: 14 },
-  activeChipText: { color: "#FFF", fontWeight: "600" },
-  noteInput: { borderRadius: 20, padding: 18, height: 100, textAlignVertical: "top", fontSize: 15 },
-  saveBtn: { padding: 20, borderRadius: 22, alignItems: "center", marginTop: 24 },
-  saveBtnText: { color: "#FFF", fontSize: 18, fontWeight: "700" },
+  chipText: { fontSize: 13, fontWeight: "600" },
+  activeChipText: { color: "#FFF", fontWeight: "800" },
+  noteInput: { borderRadius: 17, padding: 16, height: 108, textAlignVertical: "top", fontSize: 14, borderWidth: 1, borderColor: "rgba(150,150,150,0.12)" },
+  saveBtn: { minHeight: 56, borderRadius: 17, alignItems: "center", justifyContent: "center", marginTop: 24, elevation: 3 },
+  saveBtnText: { color: "#FFF", fontSize: 16, fontWeight: "800" },
   // -- Month picker modal -------------------------------------------
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", padding: 20 },
-  monthPickerCard: { borderRadius: 28, padding: 25, elevation: 10, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 15 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.68)", justifyContent: "center", padding: 20 },
+  monthPickerCard: { borderRadius: 24, padding: 22, elevation: 10, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 15 },
   yearSelector: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
   yearText: { fontSize: 22, fontWeight: "800" },
-  yearBtn: { paddingVertical: 8, paddingHorizontal: 15, backgroundColor: "rgba(150,150,150,0.1)", borderRadius: 12 },
+  yearBtn: { paddingVertical: 8, paddingHorizontal: 15, backgroundColor: "rgba(150,150,150,0.1)", borderRadius: 11 },
   yearBtnText: { fontSize: 18, fontWeight: "800" },
   monthsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  monthBtn: { width: "31%", paddingVertical: 15, borderRadius: 15, alignItems: "center", marginBottom: 12 },
-  monthBtnText: { fontSize: 15, fontWeight: "700" },
+  monthBtn: { width: "31%", paddingVertical: 14, borderRadius: 13, alignItems: "center", marginBottom: 10 },
+  monthBtnText: { fontSize: 14, fontWeight: "800" },
   closeModalBtn: { marginTop: 10, alignItems: "center", paddingVertical: 15 },
   closeModalBtnText: { fontSize: 16, fontWeight: "700", color: "#888" },
 });

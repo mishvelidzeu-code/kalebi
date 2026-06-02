@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import dayjs from "dayjs";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
@@ -109,7 +111,7 @@ const formatSymptomsText = (symptoms) =>
 
 export default function AssistantScreen() {
   const router = useRouter();
-  const { isDark, isPremium } = useTheme();
+  const { isDark, isPremium, isAdmin } = useTheme();
   const { pregnancyMode, currentWeek, currentTrimester, daysRemaining } = usePregnancy();
   const scrollRef = useRef(null);
 
@@ -136,7 +138,9 @@ export default function AssistantScreen() {
     assistantBubble: isDark ? "#1E1E1E" : "#FFFFFF",
   };
 
-  const dailyQuestionLimit = isPremium
+  const dailyQuestionLimit = isAdmin
+    ? 999999
+    : isPremium
     ? PRIME_DAILY_QUESTION_LIMIT
     : pregnancyMode ? 10 : FREE_DAILY_QUESTION_LIMIT;
   const remainingQuestions = Math.max(
@@ -211,55 +215,20 @@ export default function AssistantScreen() {
     const prompt = (forcedPrompt ?? input).trim();
     if (!prompt || sending) return;
     if (!hasQuestionLeft) {
-      setSending(true);
-      try {
-        const localReply = await askAssistant({
-          prompt,
-          history: messages.filter((message) => !message.synthetic),
-          allowAi: false,
-        });
-
-        await saveAssistantChatHistory({
-          userId: assistantUserId,
-          question: prompt,
-          answer: localReply.text,
-          source: localReply.source || "local",
-          metadata: {
-            limitReached: true,
-            isPremium,
-          },
-        });
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `user-${Date.now()}`,
-            role: "user",
-            text: prompt,
-          },
-          {
-            id: `assistant-${Date.now()}`,
-            role: "assistant",
-            text: localReply.text,
-          },
-        ]);
-        setInput("");
-      } catch {
-        Alert.alert(
-          "დღის ლიმიტი ამოიწურა",
-          isPremium
-            ? "დღეს Prime ასისტენტთან 20 კითხვა უკვე გამოიყენე. ახალი კითხვები ხვალ განახლდება."
-            : pregnancyMode
-              ? "დღეს ორსულობის ასისტენტთან 10 კითხვა უკვე გამოიყენე. ახალი კითხვები ხვალ განახლდება."
-              : "დღეს ასისტენტთან 1 უფასო კითხვა უკვე გამოიყენე. ახალი კითხვა ხვალ გახდება ხელმისაწვდომი.",
-          [
-            { text: "კარგი", style: "cancel" },
-            ...(!isPremium && !pregnancyMode ? [{ text: "Prime", onPress: () => router.push("/premium") }] : []),
-          ]
-        );
-      } finally {
-        setSending(false);
-      }
+      Alert.alert(
+        "დღის ლიმიტი ამოიწურა",
+        isAdmin
+          ? "ადმინ ანგარიშზე ასისტენტის ლიმიტი არ მოქმედებს."
+          : isPremium
+          ? "დღეს Prime ასისტენტთან 20 კითხვა უკვე გამოიყენე. ახალი კითხვები ხვალ განახლდება."
+          : pregnancyMode
+            ? "დღეს ორსულობის ასისტენტთან 10 კითხვა უკვე გამოიყენე. ახალი კითხვები ხვალ განახლდება."
+            : "დღეს ასისტენტთან 1 უფასო კითხვა უკვე გამოიყენე. ახალი კითხვა ხვალ გახდება ხელმისაწვდომი.",
+        [
+          { text: "კარგი", style: "cancel" },
+          ...(!isPremium && !pregnancyMode ? [{ text: "Prime", onPress: () => router.push("/premium") }] : []),
+        ]
+      );
       return;
     }
 
@@ -335,14 +304,20 @@ export default function AssistantScreen() {
         style={{ flex: 1 }}
       >
         <View style={[styles.header, { backgroundColor: theme.bg }]}>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>
-            ასისტენტი
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: theme.subText }]}>
-            {userName
-              ? `${userName}, მკითხე რაც გაინტერესებს`
-              : "მკითხე რაც გაინტერესებს"}
-          </Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headerCopy}>
+              <Text style={styles.headerEyebrow}>PERSONAL HEALTH ASSISTANT</Text>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>ასისტენტი</Text>
+              <Text style={[styles.headerSubtitle, { color: theme.subText }]}>
+                {userName
+                  ? `${userName}, მკითხე რაც გაინტერესებს`
+                  : "მკითხე რაც გაინტერესებს"}
+              </Text>
+            </View>
+            <View style={styles.headerIcon}>
+              <Ionicons name="sparkles-outline" size={22} color={theme.primary} />
+            </View>
+          </View>
         </View>
 
         <ScrollView
@@ -355,10 +330,23 @@ export default function AssistantScreen() {
             scrollRef.current?.scrollToEnd({ animated: true })
           }
         >
-          <View style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.noticeTitle, { color: theme.text }]}>
-              {pregnancyMode ? "შენი ორსულობა 🤰" : "შენი დღევანდელი სურათი"}
-            </Text>
+          <LinearGradient
+            colors={isDark ? ["#1D191E", "#151417"] : ["#FFFFFF", "#FFF8FA"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.noticeCard, { borderColor: theme.border }]}
+          >
+            <View style={styles.noticeHeader}>
+              <View>
+                <Text style={styles.noticeEyebrow}>{pregnancyMode ? "MATERNITY OVERVIEW" : "DAILY OVERVIEW"}</Text>
+                <Text style={[styles.noticeTitle, { color: theme.text }]}>
+                  {pregnancyMode ? "შენი ორსულობა 🤰" : "შენი დღევანდელი სურათი"}
+                </Text>
+              </View>
+              <View style={styles.noticeIcon}>
+                <Ionicons name={pregnancyMode ? "heart-outline" : "analytics-outline"} size={18} color={theme.primary} />
+              </View>
+            </View>
 
             {loadingSummary ? (
               <View style={styles.summaryLoadingRow}>
@@ -413,8 +401,12 @@ export default function AssistantScreen() {
                 </View>
               </>
             )}
-          </View>
+          </LinearGradient>
 
+          <View style={styles.quickHeader}>
+            <Text style={[styles.quickTitle, { color: theme.text }]}>სწრაფი კითხვები</Text>
+            <Text style={[styles.quickSubtitle, { color: theme.subText }]}>აირჩიე თემა ან დაწერე შენი კითხვა</Text>
+          </View>
           <View style={styles.quickRow}>
             {(pregnancyMode ? PREGNANCY_QUICK_PROMPTS : QUICK_PROMPTS).map((prompt) => (
               <TouchableOpacity
@@ -439,6 +431,11 @@ export default function AssistantScreen() {
                   isUser ? styles.messageRowRight : styles.messageRowLeft,
                 ]}
               >
+                {!isUser && (
+                  <View style={[styles.assistantAvatar, { backgroundColor: `${theme.primary}1A` }]}>
+                    <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
+                  </View>
+                )}
                 <View style={{ maxWidth: "80%" }}>
                 <View
                   style={[
@@ -472,6 +469,9 @@ export default function AssistantScreen() {
 
           {sending && (
             <View style={styles.typingRow}>
+              <View style={[styles.assistantAvatar, { backgroundColor: `${theme.primary}1A` }]}>
+                <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
+              </View>
               <View
                 style={[
                   styles.typingBubble,
@@ -504,7 +504,9 @@ export default function AssistantScreen() {
               style={styles.limitTextButton}
             >
               <Text style={[styles.limitText, styles.limitTextAction, { color: theme.primary }]}>
-                {isPremium
+                {isAdmin
+                  ? "ადმინ ანგარიშზე ასისტენტის ლიმიტი არ მოქმედებს."
+                  : isPremium
                   ? "დღეს Prime კითხვები უკვე გამოიყენე. ახალი კითხვები ხვალ განახლდება."
                   : pregnancyMode
                     ? "დღეს 10 კითხვა გამოიყენე. ახალი კითხვები ხვალ განახლდება."
@@ -534,7 +536,7 @@ export default function AssistantScreen() {
               placeholder={
                 hasQuestionLeft
                   ? "დაწერე კითხვა..."
-                  : "დაწერე კითხვა... მარტივ პასუხებს ლიმიტის გარეშეც გიპასუხებ"
+                  : "დღის ლიმიტი ამოიწურა"
               }
               placeholderTextColor={theme.subText}
               multiline
@@ -553,7 +555,10 @@ export default function AssistantScreen() {
               {sending ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.sendButtonText}>გაგზავნა</Text>
+                <>
+                  <Text style={styles.sendButtonText}>გაგზავნა</Text>
+                  <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
+                </>
               )}
             </TouchableOpacity>
           </View>
@@ -565,53 +570,65 @@ export default function AssistantScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { paddingTop: 64, paddingHorizontal: 20, paddingBottom: 16 },
-  headerTitle: { fontSize: 30, fontWeight: "800" },
-  headerSubtitle: { marginTop: 6, fontSize: 14, lineHeight: 20 },
+  header: { paddingTop: 62, paddingHorizontal: 20, paddingBottom: 18 },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  headerCopy: { flex: 1, paddingRight: 14 },
+  headerEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 1.05, marginBottom: 6 },
+  headerTitle: { fontSize: 29, fontWeight: "900", letterSpacing: -0.5 },
+  headerSubtitle: { marginTop: 6, fontSize: 14, fontWeight: "600", lineHeight: 20 },
+  headerIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: "rgba(233,69,96,0.12)", alignItems: "center", justifyContent: "center" },
   chatScroll: { flex: 1 },
   chatContent: { paddingHorizontal: 20, paddingBottom: 20 },
   noticeCard: {
-    borderRadius: 24,
+    borderRadius: 22,
     padding: 18,
     borderWidth: 1,
-    marginBottom: 18,
+    marginBottom: 20,
+    overflow: "hidden",
+    elevation: 3,
   },
-  noticeTitle: { fontSize: 16, fontWeight: "800", marginBottom: 8 },
+  noticeHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 11 },
+  noticeEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 0.95, marginBottom: 5 },
+  noticeIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: "rgba(233,69,96,0.11)", alignItems: "center", justifyContent: "center" },
+  noticeTitle: { fontSize: 17, fontWeight: "900" },
   noticeText: { fontSize: 14, lineHeight: 21 },
   summaryLoadingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  summaryGrid: { marginTop: 14, gap: 12 },
-  summaryItem: { flex: 1 },
-  summaryItemFull: { width: "100%" },
+  summaryGrid: { marginTop: 14, gap: 9 },
+  summaryItem: { flex: 1, borderRadius: 13, padding: 11, backgroundColor: "rgba(150,150,150,0.07)" },
+  summaryItemFull: { width: "100%", borderRadius: 13, padding: 11, backgroundColor: "rgba(150,150,150,0.07)" },
   summaryLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 4,
+    fontSize: 10,
+    fontWeight: "800",
+    marginBottom: 5,
     textTransform: "uppercase",
+    letterSpacing: 0.35,
   },
-  summaryValue: { fontSize: 14, lineHeight: 21, fontWeight: "600" },
-  quickRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 14 },
+  summaryValue: { fontSize: 13, lineHeight: 19, fontWeight: "700" },
+  quickHeader: { marginBottom: 10 },
+  quickTitle: { fontSize: 15, fontWeight: "800" },
+  quickSubtitle: { fontSize: 12, fontWeight: "600", marginTop: 3 },
+  quickRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 17 },
   quickChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
     borderWidth: 1,
-    marginRight: 10,
-    marginBottom: 10,
   },
   quickChipDisabled: { opacity: 0.45 },
-  quickChipText: { fontSize: 13, fontWeight: "700" },
-  messageRow: { marginBottom: 12, flexDirection: "row" },
+  quickChipText: { fontSize: 12, fontWeight: "800" },
+  messageRow: { marginBottom: 13, flexDirection: "row", alignItems: "flex-end", gap: 7 },
   messageRowLeft: { justifyContent: "flex-start" },
   messageRowRight: { justifyContent: "flex-end" },
+  assistantAvatar: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   messageBubble: {
     maxWidth: "84%",
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    borderRadius: 18,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
     borderWidth: 1,
   },
-  messageText: { fontSize: 15, lineHeight: 22 },
-  typingRow: { marginTop: 4, marginBottom: 10 },
+  messageText: { fontSize: 14, lineHeight: 21 },
+  typingRow: { marginTop: 4, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 7 },
   typingBubble: {
     alignSelf: "flex-start",
     flexDirection: "row",
@@ -625,8 +642,8 @@ const styles = StyleSheet.create({
   typingText: { fontSize: 13, fontWeight: "600" },
   composer: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 20,
+    paddingTop: 10,
+    paddingBottom: 18,
     borderTopWidth: 1,
   },
   composerMeta: {
@@ -640,7 +657,7 @@ const styles = StyleSheet.create({
   limitText: { flex: 1, fontSize: 12, fontWeight: "600", lineHeight: 18 },
   limitTextAction: { textDecorationLine: "underline" },
   limitLink: { fontSize: 13, fontWeight: "800" },
-  inputWrap: { borderRadius: 24, borderWidth: 1, padding: 8 },
+  inputWrap: { borderRadius: 20, borderWidth: 1, padding: 7 },
   input: {
     minHeight: 46,
     maxHeight: 120,
@@ -651,9 +668,12 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     alignSelf: "flex-end",
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 14,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
     marginTop: 8,
   },
   sendButtonDisabled: { opacity: 0.5 },

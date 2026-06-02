@@ -1,6 +1,8 @@
 import dayjs from "dayjs";
 import "dayjs/locale/ka";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -590,46 +592,103 @@ export default function HomeScreen() {
     <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}>
       <Text style={[styles.topDate, { color: theme.subText }]}>{dayjs().format("D MMMM, dddd")}</Text>
 
-      <View style={[styles.mainCard, { backgroundColor: theme.card }]}>
-        <View style={styles.infoRow}>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>ფაზა</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>{phase}</Text>
+      <LinearGradient
+        colors={isDark ? ["#1C1820", "#121216"] : ["#FFFFFF", "#FFF8FA"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.cycleMainCard}
+      >
+        <View style={styles.cycleCardHeader}>
+          <View>
+            <Text style={styles.cycleEyebrow}>CYCLE OVERVIEW</Text>
+            <Text style={[styles.cycleCardTitle, { color: theme.text }]}>შენი ციკლის სტატუსი</Text>
           </View>
-          <View style={[styles.infoItem, { borderLeftWidth: 1, borderLeftColor: isDark ? "#333" : "#eee" }]}>
-            <Text style={styles.infoLabel}>{userGoal === "დაორსულება" ? "ნაყოფიერება" : "დაორსულების შანსი"}</Text>
-            <Text style={[styles.infoValue, { color: pregnancyChance.includes("მაღალი") || pregnancyChance.includes("უმაღლესი") ? "#06d6a0" : theme.primary }]}>{pregnancyChance}</Text>
-          </View>
-        </View>
-
-        <View style={[styles.circleContainer, { backgroundColor: theme.bg, borderColor: theme.circleBg }]}>
-          <View style={styles.outerCircle}>
-            <Text style={[styles.cycleDayNumber, { color: phaseColor }]}>{cycleDay}</Text>
-            <Text style={[styles.cycleDayText, { color: phaseColor }]}>დღე</Text>
+          <View style={styles.cycleHeaderIcon}>
+            <Ionicons name="calendar-outline" size={19} color="#E94560" />
           </View>
         </View>
 
-        <View style={[styles.progressBarContainer, { backgroundColor: isDark ? "#222" : "#f0f0f0" }]}>
-          <View style={[styles.progressFill, { width: `${Math.min(progress, 100)}%`, backgroundColor: theme.primary }]} />
+        <View style={styles.cycleStatusRow}>
+          <View style={[styles.cycleStatusItem, { backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(233,69,96,0.05)" }]}>
+            <View style={styles.cycleStatusLabelRow}>
+              <Ionicons name="pulse-outline" size={14} color="#E94560" />
+              <Text style={styles.cycleStatusLabel}>ფაზა</Text>
+            </View>
+            <Text style={[styles.cycleStatusValue, { color: theme.text }]}>{phase}</Text>
+          </View>
+          <View style={[styles.cycleStatusItem, { backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(233,69,96,0.05)" }]}>
+            <View style={styles.cycleStatusLabelRow}>
+              <Ionicons name="heart-outline" size={14} color="#E94560" />
+              <Text style={styles.cycleStatusLabel}>{userGoal === "დაორსულება" ? "ნაყოფიერება" : "დაორსულების შანსი"}</Text>
+            </View>
+            <Text style={[styles.cycleStatusValue, { color: pregnancyChance.includes("მაღალი") || pregnancyChance.includes("უმაღლესი") ? "#06D6A0" : theme.primary }]}>{pregnancyChance}</Text>
+          </View>
         </View>
 
-        <Text style={[styles.daysLeftLabel, { color: theme.subText }]}>შემდეგ პერიოდამდე დარჩა</Text>
-        <Text style={[styles.daysLeftNumber, { color: theme.text }]}>{daysLeft} დღე</Text>
-        <Text style={[styles.nextDateText, { color: theme.subText }]}>სავარაუდო თარიღი: {nextPeriod}</Text>
+        <View style={styles.cycleDayArea}>
+          <View style={[styles.cycleCircleOuter, { borderColor: isDark ? "rgba(233,69,96,0.18)" : "rgba(233,69,96,0.14)" }]}>
+            <View style={[styles.cycleCircleInner, { backgroundColor: isDark ? "rgba(233,69,96,0.08)" : "rgba(233,69,96,0.06)", borderColor: theme.primary }]}>
+              <Text style={[styles.cycleDayNumber, { color: phaseColor }]}>{cycleDay}</Text>
+              <Text style={[styles.cycleDayText, { color: phaseColor }]}>დღე</Text>
+            </View>
+          </View>
+        </View>
 
-        <TouchableOpacity style={[styles.logButton, { backgroundColor: theme.primary }]} onPress={logPeriod}>
+        <View style={styles.cycleProgressHeader}>
+          <Text style={[styles.cycleProgressLabel, { color: theme.subText }]}>მიმდინარე ციკლის პროგრესი</Text>
+          <Text style={styles.cycleProgressPercent}>{Math.round(Math.min(progress, 100))}%</Text>
+        </View>
+        <View style={[styles.cycleProgressTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(233,69,96,0.10)" }]}>
+          <LinearGradient
+            colors={["#FF6B91", "#E94560"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.cycleProgressFill, { width: `${Math.min(progress, 100)}%` }]}
+          />
+        </View>
+
+        <View style={styles.cyclePeriodSummary}>
+          <View>
+            <Text style={[styles.daysLeftLabel, { color: theme.subText }]}>შემდეგ პერიოდამდე დარჩა</Text>
+            <Text style={[styles.daysLeftNumber, { color: theme.text }]}>{daysLeft} დღე</Text>
+          </View>
+          <View style={styles.cycleDatePill}>
+            <Ionicons name="calendar-clear-outline" size={14} color="#E94560" />
+            <Text style={styles.cycleDateText}>{nextPeriod}</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity activeOpacity={0.86} style={styles.cycleLogButton} onPress={logPeriod}>
+          <Ionicons name="add-circle-outline" size={19} color="#FFFFFF" />
           <Text style={styles.logButtonText}>პერიოდი დამეწყო დღეს</Text>
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
       <View>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი მაჩვენებლები</Text>
-        <View style={[styles.statsCard, { backgroundColor: theme.card, overflow: "hidden" }]}>
-          <StatMeter label="გაღიზიანება" percent={stats.anger} color="#FF5A5F" textColor={theme.text} />
-          <StatMeter label="ენერგიის დონე" percent={stats.energy} color="#48CAE4" textColor={theme.text} />
-          <StatMeter label="მადა" percent={stats.appetite} color="#FF9F1C" textColor={theme.text} />
-          <StatMeter label="სტაბილურობა" percent={stats.stability} color="#06D6A0" textColor={theme.text} />
-        </View>
+        <LinearGradient
+          colors={isDark ? ["#19191D", "#121217"] : ["#FFFFFF", "#FCFAFC"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.statsCard}
+        >
+          <View style={styles.statsCardHeader}>
+            <View>
+              <Text style={styles.statsEyebrow}>DAILY OVERVIEW</Text>
+              <Text style={[styles.statsCardTitle, { color: theme.text }]}>შენი დღიური სურათი</Text>
+            </View>
+            <View style={styles.statsHeaderIcon}>
+              <Ionicons name="analytics-outline" size={19} color="#E94560" />
+            </View>
+          </View>
+
+          <View style={styles.statsDivider} />
+
+          <StatMeter icon="flame-outline" label="გაღიზიანება" percent={stats.anger} color="#FF6B6B" textColor={theme.text} />
+          <StatMeter icon="flash-outline" label="ენერგიის დონე" percent={stats.energy} color="#48CAE4" textColor={theme.text} />
+          <StatMeter icon="restaurant-outline" label="მადა" percent={stats.appetite} color="#FFB347" textColor={theme.text} />
+          <StatMeter icon="leaf-outline" label="სტაბილურობა" percent={stats.stability} color="#06D6A0" textColor={theme.text} isLast />
+        </LinearGradient>
       </View>
 
       <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი რჩევა</Text>
@@ -666,21 +725,33 @@ export default function HomeScreen() {
       {!isPremium && !pregnancyMode && (
         <TouchableOpacity
           activeOpacity={0.82}
-          style={[styles.pregnancyBanner, { backgroundColor: theme.card }]}
+          style={styles.pregnancyBanner}
           onPress={() => router.push("/pregnancy-premium")}
         >
-          <View style={styles.pregnancyBannerLeft}>
-            <View style={styles.pregnancyBannerIcon}>
-              <Text style={{ fontSize: 26 }}>🤰</Text>
+          <LinearGradient
+            colors={isDark ? ["#19171C", "#14211F"] : ["#FFFFFF", "#F2FBF8"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.pregnancyBannerGradient}
+          >
+            <View style={styles.pregnancyBannerLeft}>
+              <View style={styles.pregnancyBannerIcon}>
+                <Ionicons name="heart" size={23} color="#06B98A" />
+              </View>
+              <View style={styles.pregnancyBannerCopy}>
+                <View style={styles.pregnancyBannerEyebrow}>
+                  <Text style={styles.pregnancyBannerEyebrowText}>MATERNITY</Text>
+                  <View style={styles.pregnancyBannerDot} />
+                  <Text style={styles.pregnancyBannerEyebrowText}>PREMIUM</Text>
+                </View>
+                <Text style={[styles.pregnancyBannerTitle, { color: theme.text }]}>ორსულობის რეჟიმი</Text>
+                <Text style={[styles.pregnancyBannerSub, { color: theme.subText }]}>კვირეული AI რჩევა, ნოტიფიკაციები და ნაყოფის ვიზუალიზაცია</Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.pregnancyBannerTitle, { color: theme.text }]}>ორსულობის რეჟიმი</Text>
-              <Text style={[styles.pregnancyBannerSub, { color: theme.subText }]}>კვირეული AI რჩევა, ნოტიფიკაციები და ნაყოფის ვიზუალიზაცია</Text>
+            <View style={styles.pregnancyBannerArrow}>
+              <Ionicons name="chevron-forward" size={16} color="#06B98A" />
             </View>
-          </View>
-          <View style={styles.pregnancyBannerBadge}>
-            <Text style={styles.pregnancyBannerBadgeText}>$3.99</Text>
-          </View>
+          </LinearGradient>
         </TouchableOpacity>
       )}
 
@@ -748,15 +819,24 @@ function WeeklyAdviceCard({ text, trimesterColor, isDark, theme }) {
   );
 }
 
-function StatMeter({ label, percent, color, textColor }) {
+function StatMeter({ icon, label, percent, color, textColor, isLast = false }) {
+  const safePercent = Math.max(0, Math.min(percent, 100));
+
   return (
-    <View style={styles.meterWrapper}>
+    <View style={[styles.meterWrapper, isLast && styles.meterWrapperLast]}>
       <View style={styles.meterLabelRow}>
-        <Text style={[styles.meterLabel, { color: textColor }]}>{label}</Text>
-        <Text style={[styles.meterPercent, { color }]}>{percent}%</Text>
+        <View style={styles.meterIdentity}>
+          <View style={[styles.meterIcon, { backgroundColor: `${color}1A` }]}>
+            <Ionicons name={icon} size={15} color={color} />
+          </View>
+          <Text style={[styles.meterLabel, { color: textColor }]}>{label}</Text>
+        </View>
+        <View style={[styles.meterPercentPill, { backgroundColor: `${color}1A` }]}>
+          <Text style={[styles.meterPercent, { color }]}>{safePercent}%</Text>
+        </View>
       </View>
       <View style={styles.meterBg}>
-        <View style={[styles.meterFill, { width: `${percent}%`, backgroundColor: color }]} />
+        <View style={[styles.meterFill, { width: `${safePercent}%`, backgroundColor: color }]} />
       </View>
     </View>
   );
@@ -766,6 +846,28 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 60 },
   topDate: { textAlign: "center", fontSize: 16, marginBottom: 20, textTransform: "capitalize" },
   mainCard: { borderRadius: 30, padding: 25, alignItems: "center", elevation: 8, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 15, marginBottom: 30 },
+  cycleMainCard: { borderRadius: 28, padding: 18, elevation: 8, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 15, marginBottom: 30, overflow: "hidden" },
+  cycleCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
+  cycleEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 1, marginBottom: 5 },
+  cycleCardTitle: { fontSize: 18, fontWeight: "800" },
+  cycleHeaderIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: "rgba(233,69,96,0.12)", justifyContent: "center", alignItems: "center" },
+  cycleStatusRow: { flexDirection: "row", gap: 10 },
+  cycleStatusItem: { flex: 1, minHeight: 72, borderRadius: 15, padding: 11, justifyContent: "space-between" },
+  cycleStatusLabelRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  cycleStatusLabel: { color: "#A9A4AA", fontSize: 10, fontWeight: "700" },
+  cycleStatusValue: { fontSize: 13, fontWeight: "800" },
+  cycleDayArea: { alignItems: "center", paddingVertical: 20 },
+  cycleCircleOuter: { width: 166, height: 166, borderRadius: 83, borderWidth: 1, justifyContent: "center", alignItems: "center" },
+  cycleCircleInner: { width: 140, height: 140, borderRadius: 70, borderWidth: 7, justifyContent: "center", alignItems: "center" },
+  cycleProgressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  cycleProgressLabel: { fontSize: 12, fontWeight: "700" },
+  cycleProgressPercent: { color: "#E94560", fontSize: 12, fontWeight: "900" },
+  cycleProgressTrack: { height: 7, borderRadius: 999, overflow: "hidden", marginBottom: 18 },
+  cycleProgressFill: { height: "100%", borderRadius: 999 },
+  cyclePeriodSummary: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 17 },
+  cycleDatePill: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(233,69,96,0.11)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
+  cycleDateText: { color: "#E94560", fontSize: 11, fontWeight: "800" },
+  cycleLogButton: { minHeight: 52, borderRadius: 16, backgroundColor: "#E94560", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, elevation: 3 },
   infoRow: { flexDirection: "row", marginBottom: 30, width: "100%" },
   infoItem: { flex: 1, alignItems: "center", paddingHorizontal: 5 },
   infoLabel: { fontSize: 12, color: "#aaa", marginBottom: 5 },
@@ -782,14 +884,23 @@ const styles = StyleSheet.create({
   logButton: { paddingVertical: 15, paddingHorizontal: 40, borderRadius: 20, elevation: 5 },
   logButtonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   sectionTitle: { fontSize: 20, fontWeight: "700", marginBottom: 15 },
-  statsCard: { borderRadius: 25, padding: 20, marginBottom: 25, elevation: 4, position: "relative" },
-  meterWrapper: { marginBottom: 15 },
-  meterLabelRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
-  meterLabel: { fontSize: 14, fontWeight: "600" },
-  meterPercent: { fontSize: 13, fontWeight: "700" },
-  meterBg: { height: 8, backgroundColor: "rgba(150,150,150,0.1)", borderRadius: 4, overflow: "hidden" },
+  statsCard: { borderRadius: 24, padding: 18, marginBottom: 25, elevation: 4, position: "relative", overflow: "hidden" },
+  statsCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  statsEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 1, marginBottom: 5 },
+  statsCardTitle: { fontSize: 16, fontWeight: "800" },
+  statsHeaderIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: "rgba(233,69,96,0.12)", justifyContent: "center", alignItems: "center" },
+  statsDivider: { height: 1, backgroundColor: "rgba(150,150,150,0.12)", marginVertical: 17 },
+  meterWrapper: { marginBottom: 16 },
+  meterWrapperLast: { marginBottom: 0 },
+  meterLabelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  meterIdentity: { flexDirection: "row", alignItems: "center", gap: 9 },
+  meterIcon: { width: 28, height: 28, borderRadius: 9, justifyContent: "center", alignItems: "center" },
+  meterLabel: { fontSize: 13, fontWeight: "700" },
+  meterPercentPill: { minWidth: 46, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, alignItems: "center" },
+  meterPercent: { fontSize: 12, fontWeight: "800" },
+  meterBg: { height: 6, backgroundColor: "rgba(150,150,150,0.12)", borderRadius: 999, overflow: "hidden" },
   meterFill: { height: "100%", borderRadius: 4 },
-  insightCard: { borderRadius: 24, padding: 22, elevation: 3 },
+  insightCard: { borderRadius: 24, padding: 8, elevation: 3, overflow: "hidden" },
   insightIconBox: { display: "none" },
   insightContent: { gap: 10 },
   insightPreview: { alignSelf: "stretch" },
@@ -797,32 +908,43 @@ const styles = StyleSheet.create({
   insightHint: { fontSize: 12, fontWeight: "600" },
   insightText: { fontSize: 14, lineHeight: 21 },
   pregnancyBanner: {
-    borderRadius: 20,
-    padding: 16,
     marginTop: 14,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(6,185,138,0.26)",
+    overflow: "hidden",
+  },
+  pregnancyBannerGradient: {
+    minHeight: 112,
+    padding: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: "rgba(6,214,160,0.25)",
   },
-  pregnancyBannerLeft: { flexDirection: "row", alignItems: "center", gap: 14, flex: 1 },
+  pregnancyBannerLeft: { flexDirection: "row", alignItems: "center", gap: 13, flex: 1 },
   pregnancyBannerIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
-    backgroundColor: "rgba(6,214,160,0.12)",
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: "rgba(6,185,138,0.13)",
+    borderColor: "rgba(6,185,138,0.18)",
+    borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  pregnancyBannerTitle: { fontSize: 15, fontWeight: "800", marginBottom: 2 },
-  pregnancyBannerSub: { fontSize: 12, lineHeight: 17 },
-  pregnancyBannerBadge: {
-    backgroundColor: "#06D6A0",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 12,
-    marginLeft: 10,
+  pregnancyBannerCopy: { flex: 1 },
+  pregnancyBannerEyebrow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  pregnancyBannerEyebrowText: { color: "#06B98A", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  pregnancyBannerDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: "#06B98A" },
+  pregnancyBannerTitle: { fontSize: 16, fontWeight: "800", marginBottom: 3 },
+  pregnancyBannerSub: { fontSize: 12, lineHeight: 17, paddingRight: 4 },
+  pregnancyBannerArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(6,185,138,0.12)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
   },
-  pregnancyBannerBadgeText: { color: "white", fontSize: 13, fontWeight: "900" },
 });

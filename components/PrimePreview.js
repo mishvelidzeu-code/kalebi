@@ -1,4 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -34,19 +36,24 @@ export default function PrimePreview({
         tint={isDark ? "dark" : "light"}
         style={[styles.overlay, concealCompletely && styles.overlayFull]}
       >
-        <View
-          style={[
-            styles.overlayShade,
-            {
-              backgroundColor: isDark
-                ? "rgba(15, 15, 15, 0.32)"
-                : "rgba(255, 255, 255, 0.42)",
-            },
-          ]}
+        <LinearGradient
+          colors={
+            isDark
+              ? ["rgba(32, 15, 25, 0.82)", "rgba(12, 12, 16, 0.96)"]
+              : ["rgba(255, 245, 248, 0.90)", "rgba(255, 255, 255, 0.98)"]
+          }
+          style={styles.overlayShade}
         />
 
         <View style={styles.overlayContent}>
-          <Text style={styles.message}>{message}</Text>
+          <View style={styles.primePill}>
+            <Ionicons name="sparkles-outline" size={13} color="#E94560" />
+            <Text style={styles.primePillText}>PRIME ACCESS</Text>
+          </View>
+
+          <Text style={[styles.message, { color: isDark ? "#FFFFFF" : "#34212A" }]}>
+            {message}
+          </Text>
 
           <TouchableOpacity
             activeOpacity={0.85}
@@ -54,6 +61,7 @@ export default function PrimePreview({
             onPress={() => router.push("/premium")}
           >
             <Text style={styles.buttonText}>{buttonLabel}</Text>
+            <Ionicons name="arrow-forward" size={15} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </BlurView>
@@ -92,27 +100,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 18,
-    paddingVertical: 18,
-    gap: 16,
+    paddingVertical: 16,
+    gap: 11,
+  },
+  primePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(233, 69, 96, 0.12)",
+    borderColor: "rgba(233, 69, 96, 0.26)",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  primePillText: {
+    color: "#E94560",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.9,
   },
   message: {
-    color: "#FFFFFF",
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
     lineHeight: 19,
     textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.18)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
   button: {
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 20,
-    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: "#E94560",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
     borderRadius: 999,
   },
   buttonText: {
-    color: "#E94560",
+    color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "800",
   },

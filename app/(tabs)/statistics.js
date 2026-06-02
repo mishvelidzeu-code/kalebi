@@ -1,5 +1,7 @@
 import dayjs from "dayjs";
 import "dayjs/locale/ka";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
@@ -92,7 +94,16 @@ function PregnancyStatisticsScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>ორსულობის ანალიტიკა 🤰</Text>
+        <View style={styles.pageHeader}>
+          <View>
+            <Text style={styles.pageEyebrow}>MATERNITY INSIGHTS</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>ორსულობის ანალიტიკა</Text>
+            <Text style={[styles.pageSubtitle, { color: theme.subText }]}>შენი პროგრესი და მნიშვნელოვანი ეტაპები</Text>
+          </View>
+          <View style={styles.pageHeaderIcon}>
+            <Ionicons name="heart-outline" size={21} color="#06D6A0" />
+          </View>
+        </View>
 
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
 
@@ -108,7 +119,12 @@ function PregnancyStatisticsScreen() {
 
           {/* Progress */}
           <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.cardTitle, { color: theme.text }]}>ორსულობის პროგრესი</Text>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>ორსულობის პროგრესი</Text>
+              <View style={styles.cardHeaderIcon}>
+                <Ionicons name="trending-up-outline" size={17} color={trimesterColor} />
+              </View>
+            </View>
             <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 10 }}>
               <Text style={[{ color: theme.subText, fontSize: 13, fontWeight: "600" }]}>კვირა {currentWeek} / 40</Text>
               <Text style={[{ color: trimesterColor, fontSize: 13, fontWeight: "700" }]}>{Math.round(progress)}%</Text>
@@ -156,7 +172,12 @@ function PregnancyStatisticsScreen() {
           {/* Symptoms */}
           {topSymptoms.length > 0 && (
             <View style={[styles.symptomsCard, { backgroundColor: theme.card }]}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>ხშირი სიმპტომები</Text>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>ხშირი სიმპტომები</Text>
+                <View style={styles.cardHeaderIcon}>
+                  <Ionicons name="pulse-outline" size={17} color={trimesterColor} />
+                </View>
+              </View>
               {topSymptoms.map((s, i) => {
                 const maxCount = topSymptoms[0].count;
                 const percent = (s.count / maxCount) * 100;
@@ -217,11 +238,8 @@ const AnimatedBar = ({ value, maxValue, label, index, isDark }) => {
   );
 };
 
-export default function StatisticsScreen() {
+function RegularStatisticsScreen() {
   const { isDark } = useTheme();
-  const { pregnancyMode } = usePregnancy();
-
-  if (pregnancyMode) return <PregnancyStatisticsScreen />;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -370,10 +388,24 @@ export default function StatisticsScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? "#E94560" : "#ff4d88"} />}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>შენი ანალიტიკა ✨</Text>
+        <View style={styles.pageHeader}>
+          <View>
+            <Text style={styles.pageEyebrow}>CYCLE INSIGHTS</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>შენი ანალიტიკა</Text>
+            <Text style={[styles.pageSubtitle, { color: theme.subText }]}>ციკლის დინამიკა და პერსონალური მაჩვენებლები</Text>
+          </View>
+          <View style={styles.pageHeaderIcon}>
+            <Ionicons name="analytics-outline" size={21} color="#E94560" />
+          </View>
+        </View>
 
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          <View style={[styles.heroCard, { backgroundColor: "#E94560" }]}>
+          <LinearGradient
+            colors={["#F05A76", "#D93656"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroCard}
+          >
             <View style={styles.heroGlow} />
             <Text style={styles.heroLabel}>მომდევნო პერიოდამდე დარჩა</Text>
             <Text style={styles.heroNumber}>
@@ -382,11 +414,17 @@ export default function StatisticsScreen() {
             <View style={styles.heroDateBadge}>
               <Text style={styles.heroDate}>{stats.nextPeriod}</Text>
             </View>
-          </View>
+          </LinearGradient>
 
           {stats.history.length > 0 && (
             <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>ციკლის დინამიკა (დღეები)</Text>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>ციკლის დინამიკა</Text>
+                <View style={styles.cardHeaderIcon}>
+                  <Ionicons name="stats-chart-outline" size={17} color="#E94560" />
+                </View>
+              </View>
+              <Text style={[styles.cardSubtitle, { color: theme.subText }]}>ბოლო ჩანაწერები დღეების მიხედვით</Text>
               <View style={styles.chartContainer}>
                 {stats.history.map((item, index) => (
                   <AnimatedBar key={index} index={index} value={item.length} maxValue={maxChartValue} label={item.month} isDark={isDark} />
@@ -436,7 +474,12 @@ export default function StatisticsScreen() {
 
           {stats.topSymptoms.length > 0 && (
             <View style={[styles.symptomsCard, { backgroundColor: theme.card }]}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>ხშირი სიმპტომები</Text>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>ხშირი სიმპტომები</Text>
+                <View style={styles.cardHeaderIcon}>
+                  <Ionicons name="pulse-outline" size={17} color="#E94560" />
+                </View>
+              </View>
               {stats.topSymptoms.map((s, i) => {
                 const maxCount = stats.topSymptoms[0].count;
                 const percent = (s.count / maxCount) * 100;
@@ -463,42 +506,54 @@ export default function StatisticsScreen() {
   );
 }
 
+export default function StatisticsScreen() {
+  const { pregnancyMode } = usePregnancy();
+  return pregnancyMode ? <PregnancyStatisticsScreen /> : <RegularStatisticsScreen />;
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
+  container: { flex: 1, paddingHorizontal: 20, paddingTop: 12 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  headerTitle: { fontSize: 32, fontWeight: "900", marginBottom: 25, letterSpacing: -0.5 },
-  heroCard: { borderRadius: 32, padding: 35, alignItems: "center", marginBottom: 25, overflow: "hidden", elevation: 10, shadowColor: "#E94560", shadowOpacity: 0.4, shadowRadius: 20 },
+  pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 22 },
+  pageEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 1.1, marginBottom: 6 },
+  pageSubtitle: { fontSize: 13, fontWeight: "600", marginTop: 5 },
+  pageHeaderIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: "rgba(233,69,96,0.12)", alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5 },
+  heroCard: { borderRadius: 26, padding: 30, alignItems: "center", marginBottom: 20, overflow: "hidden", elevation: 8, shadowColor: "#E94560", shadowOpacity: 0.28, shadowRadius: 18 },
   heroGlow: { position: "absolute", top: -50, right: -50, width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(255,255,255,0.15)" },
-  heroLabel: { color: "rgba(255,255,255,0.9)", fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 },
-  heroNumber: { color: "#fff", fontSize: 64, fontWeight: "900", lineHeight: 70 },
-  heroSubText: { fontSize: 24, fontWeight: "600", color: "rgba(255,255,255,0.8)" },
-  heroDateBadge: { marginTop: 15, backgroundColor: "rgba(0,0,0,0.15)", paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20 },
-  heroDate: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  chartCard: { borderRadius: 28, padding: 25, marginBottom: 20, elevation: 4 },
-  cardTitle: { fontSize: 18, fontWeight: "800", marginBottom: 25 },
+  heroLabel: { color: "rgba(255,255,255,0.9)", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.4, marginBottom: 9 },
+  heroNumber: { color: "#fff", fontSize: 60, fontWeight: "900", lineHeight: 66 },
+  heroSubText: { fontSize: 22, fontWeight: "700", color: "rgba(255,255,255,0.82)" },
+  heroDateBadge: { marginTop: 14, backgroundColor: "rgba(0,0,0,0.14)", paddingVertical: 8, paddingHorizontal: 18, borderRadius: 999 },
+  heroDate: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  chartCard: { borderRadius: 22, padding: 19, marginBottom: 18, elevation: 3 },
+  cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 15 },
+  cardHeaderIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: "rgba(233,69,96,0.11)", alignItems: "center", justifyContent: "center" },
+  cardTitle: { fontSize: 17, fontWeight: "900" },
+  cardSubtitle: { fontSize: 12, fontWeight: "600", marginTop: -7, marginBottom: 12 },
   chartContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", height: 160, paddingHorizontal: 10 },
   barWrapper: { alignItems: "center", width: 40 },
-  barValue: { fontSize: 12, fontWeight: "700", marginBottom: 8 },
-  barTrack: { height: 100, width: 14, borderRadius: 10, justifyContent: "flex-end", overflow: "hidden" },
+  barValue: { fontSize: 12, fontWeight: "800", marginBottom: 8 },
+  barTrack: { height: 100, width: 12, borderRadius: 999, justifyContent: "flex-end", overflow: "hidden" },
   barFill: { width: "100%", borderRadius: 10 },
-  barLabel: { fontSize: 11, marginTop: 10, fontWeight: "600" },
-  metricsRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
-  metricCard: { width: "48%", padding: 20, borderRadius: 28, elevation: 4 },
-  iconBox: { width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center", marginBottom: 15 },
-  metricValue: { fontSize: 28, fontWeight: "800" },
-  metricUnit: { fontSize: 14, fontWeight: "600", color: "#999" },
-  metricLabel: { fontSize: 13, marginTop: 5, fontWeight: "600" },
-  datesCard: { borderRadius: 28, padding: 25, marginBottom: 20, elevation: 4 },
+  barLabel: { fontSize: 11, marginTop: 10, fontWeight: "700" },
+  metricsRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 18 },
+  metricCard: { width: "48%", padding: 17, borderRadius: 20, elevation: 3 },
+  iconBox: { width: 40, height: 40, borderRadius: 13, justifyContent: "center", alignItems: "center", marginBottom: 13 },
+  metricValue: { fontSize: 27, fontWeight: "900" },
+  metricUnit: { fontSize: 13, fontWeight: "700", color: "#999" },
+  metricLabel: { fontSize: 12, marginTop: 5, fontWeight: "700" },
+  datesCard: { borderRadius: 22, padding: 19, marginBottom: 18, elevation: 3 },
   dateItem: { flexDirection: "row", alignItems: "center" },
-  dateIcon: { fontSize: 32, marginRight: 15 },
-  dateLabel: { fontSize: 13, fontWeight: "600", marginBottom: 4 },
-  dateValue: { fontSize: 17, fontWeight: "800" },
-  dateDivider: { height: 1, marginVertical: 20 },
-  symptomsCard: { borderRadius: 28, padding: 25, marginBottom: 20, elevation: 4 },
-  symptomRow: { marginBottom: 18 },
+  dateIcon: { fontSize: 28, marginRight: 14 },
+  dateLabel: { fontSize: 12, fontWeight: "700", marginBottom: 4 },
+  dateValue: { fontSize: 16, fontWeight: "900" },
+  dateDivider: { height: 1, marginVertical: 17 },
+  symptomsCard: { borderRadius: 22, padding: 19, marginBottom: 18, elevation: 3 },
+  symptomRow: { marginBottom: 16 },
   symptomHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  symptomName: { fontSize: 15, fontWeight: "600" },
-  symptomCount: { fontSize: 13, fontWeight: "700" },
-  symptomTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
-  symptomFill: { height: "100%", borderRadius: 4 },
+  symptomName: { fontSize: 14, fontWeight: "700" },
+  symptomCount: { fontSize: 12, fontWeight: "800" },
+  symptomTrack: { height: 7, borderRadius: 999, overflow: "hidden" },
+  symptomFill: { height: "100%", borderRadius: 999 },
 });

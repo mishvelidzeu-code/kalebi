@@ -25,7 +25,7 @@ import {
 } from "../services/purchases";
 
 const ACCENT = "#06D6A0";
-const FALLBACK_PRICE_LABEL = "$3.99 / თვე";
+const FALLBACK_PRICE_LABEL = "$2.99 / თვე";
 
 const features = [
   {
