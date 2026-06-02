@@ -648,10 +648,8 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.cyclePeriodSummary}>
-          <View>
-            <Text style={[styles.daysLeftLabel, { color: theme.subText }]}>შემდეგ პერიოდამდე დარჩა</Text>
-            <Text style={[styles.daysLeftNumber, { color: theme.text }]}>{daysLeft} დღე</Text>
-          </View>
+          <Text style={[styles.daysLeftLabel, { color: theme.subText }]}>შემდეგ პერიოდამდე დარჩა</Text>
+          <Text style={[styles.daysLeftNumber, { color: theme.text }]}>{daysLeft} დღე</Text>
           <View style={styles.cycleDatePill}>
             <Ionicons name="calendar-clear-outline" size={14} color="#E94560" />
             <Text style={styles.cycleDateText}>{nextPeriod}</Text>
@@ -864,7 +862,7 @@ const styles = StyleSheet.create({
   cycleProgressPercent: { color: "#E94560", fontSize: 12, fontWeight: "900" },
   cycleProgressTrack: { height: 7, borderRadius: 999, overflow: "hidden", marginBottom: 18 },
   cycleProgressFill: { height: "100%", borderRadius: 999 },
-  cyclePeriodSummary: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 17 },
+  cyclePeriodSummary: { alignItems: "center", marginBottom: 17 },
   cycleDatePill: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(233,69,96,0.11)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
   cycleDateText: { color: "#E94560", fontSize: 11, fontWeight: "800" },
   cycleLogButton: { minHeight: 52, borderRadius: 16, backgroundColor: "#E94560", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, elevation: 3 },
