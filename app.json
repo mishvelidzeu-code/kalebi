@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cycle Care",
     "slug": "kalebi",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "cycleapp",
@@ -11,7 +11,7 @@
     "owner": "qalebi",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "16",
+      "buildNumber": "18",
       "bundleIdentifier": "com.mishvela.kalebi",
       "infoPlist": {
         "NSFaceIDUsageDescription": "აპლიკაციაში სწრაფად და უსაფრთხოდ შესასვლელად გამოიყენება Face ID.",
