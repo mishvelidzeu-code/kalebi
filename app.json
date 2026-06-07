@@ -11,10 +11,11 @@
     "owner": "qalebi",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "15",
+      "buildNumber": "16",
       "bundleIdentifier": "com.mishvela.kalebi",
       "infoPlist": {
         "NSFaceIDUsageDescription": "აპლიკაციაში სწრაფად და უსაფრთხოდ შესასვლელად გამოიყენება Face ID.",
+        "NSUserTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you and measure app install campaigns.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -61,11 +62,25 @@
       "expo-secure-store",
       "expo-local-authentication",
       [
+        "react-native-fbsdk-next",
+        {
+          "appID": "27035787409435730",
+          "clientToken": "97899ee6a326f5d2cd01705080b8b426",
+          "displayName": "Qalis Sivrce",
+          "scheme": "fb27035787409435730",
+          "advertiserIDCollectionEnabled": true,
+          "autoLogAppEventsEnabled": true,
+          "isAutoInitEnabled": true,
+          "iosUserTrackingPermission": "This identifier will be used to deliver personalized ads to you and measure app install campaigns."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "აირჩიე ფოტო პროფილის სურათისთვის."
         }
-      ]
+      ],
+      "expo-tracking-transparency"
     ],
     "experiments": {
       "typedRoutes": true,

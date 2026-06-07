@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import Purchases, { LOG_LEVEL } from "react-native-purchases";
 
+import { logMetaPregnancyPurchase, logMetaPrimePurchase } from "./metaAppEvents";
 import { supabase } from "./supabase";
 
 const DEFAULT_ENTITLEMENT_ID = "prime";
@@ -169,7 +170,11 @@ export async function purchasePrimePackage(packageToPurchase) {
   const purchaseResult = await Purchases.purchasePackage(packageToPurchase);
   const isPremium = hasActiveEntitlement(purchaseResult.customerInfo);
 
-  await writePremiumStatusToProfile(user.id, isPremium);
+  await writePremiumStatusToProfile(user, isPremium);
+
+  if (isPremium) {
+    logMetaPrimePurchase(packageToPurchase, purchaseResult.customerInfo);
+  }
 
   return {
     isPremium,
@@ -219,6 +224,10 @@ export async function purchasePregnancyPackage(packageToPurchase) {
 
   await writePregnancyStatusToProfile(user.id, hasSub);
 
+  if (hasSub) {
+    logMetaPregnancyPurchase(packageToPurchase, purchaseResult.customerInfo);
+  }
+
   return { hasSubscription: hasSub, customerInfo: purchaseResult.customerInfo };
 }
 
@@ -266,7 +275,7 @@ export async function restorePrimePurchases() {
   const customerInfo = await Purchases.restorePurchases();
   const isPremium = hasActiveEntitlement(customerInfo);
 
-  await writePremiumStatusToProfile(user.id, isPremium);
+  await writePremiumStatusToProfile(user, isPremium);
 
   return {
     isPremium,

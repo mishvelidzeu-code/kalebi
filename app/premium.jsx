@@ -20,6 +20,7 @@ import {
   purchasePrimePackage,
   restorePrimePurchases,
 } from "../services/purchases";
+import { logMetaPaywallViewed } from "../services/metaAppEvents";
 
 const FALLBACK_PRICE_LABEL = "$0.99 / თვე";
 
@@ -74,6 +75,7 @@ export default function PremiumScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      logMetaPaywallViewed("prime");
       loadPaywall();
     }, [loadPaywall])
   );

@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { OnboardingProvider } from "../components/OnboardingContext";
 import { PregnancyProvider } from "../context/PregnancyContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
+import { initializeMetaAppEvents } from "../services/metaAppEvents";
 import { registerPushTokenForCurrentUser } from "../services/notifications";
 import { syncProfileEmailForCurrentUser, syncProfileEmailForUser } from "../services/profileSync";
 import { supabase } from "../services/supabase";
@@ -24,6 +25,7 @@ function LayoutContent() {
   const { isDark, navigationTheme, colors } = useTheme();
 
   useEffect(() => {
+    initializeMetaAppEvents();
     syncProfileEmailForCurrentUser();
     registerPushTokenForCurrentUser();
 
@@ -36,7 +38,7 @@ function LayoutContent() {
       }
     });
 
-    return () => subscription.remove();
+    return () => subscription.unsubscribe();
   }, []);
 
   return (
