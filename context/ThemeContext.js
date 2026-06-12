@@ -1,8 +1,12 @@
 import { DefaultTheme } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { isAdminEmail } from "../services/adminAccess";
-import { syncPremiumStatusFromPurchases } from "../services/purchases";
+import {
+  resolvePremiumAccessFromProfile,
+  syncPremiumStatusFromPurchases,
+} from "../services/purchases";
 import { supabase } from "../services/supabase";
 
 const PremiumTheme = {
@@ -34,11 +38,12 @@ const StandardTheme = {
 };
 
 const ThemeContext = createContext();
+const THEME_PREFERENCE_KEY = "cycle_app_use_premium_theme";
 
 export const ThemeProvider = ({ children }) => {
   const [isPremium, setIsPremium] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [usePremiumTheme, setUsePremiumTheme] = useState(true);
+  const [usePremiumTheme, setUsePremiumThemeState] = useState(false);
 
   const checkPremiumStatus = useCallback(async () => {
     try {
@@ -61,7 +66,7 @@ export const ThemeProvider = ({ children }) => {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("is_premium, premium_override")
+        .select("is_premium, premium_override, premium_until")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -73,9 +78,9 @@ export const ThemeProvider = ({ children }) => {
         return;
       }
 
-      const profilePremiumStatus = Boolean(data?.is_premium);
+      const profilePremiumStatus = resolvePremiumAccessFromProfile(data);
       const syncedStatus = await syncPremiumStatusFromPurchases();
-      if (syncedStatus.source === "revenuecat") {
+      if (syncedStatus.source === "revenuecat" || syncedStatus.source === "supabase") {
         setIsPremium(Boolean(syncedStatus.isPremium));
         return;
       }
@@ -91,6 +96,21 @@ export const ThemeProvider = ({ children }) => {
   useEffect(() => {
     checkPremiumStatus();
   }, [checkPremiumStatus]);
+
+  useEffect(() => {
+    const loadSavedThemePreference = async () => {
+      try {
+        const savedPreference = await AsyncStorage.getItem(THEME_PREFERENCE_KEY);
+        if (savedPreference != null) {
+          setUsePremiumThemeState(savedPreference === "true");
+        }
+      } catch (error) {
+        console.log("Theme preference load error:", error);
+      }
+    };
+
+    loadSavedThemePreference();
+  }, []);
 
   useEffect(() => {
     const {
@@ -120,6 +140,19 @@ export const ThemeProvider = ({ children }) => {
   const refreshTheme = useCallback(async () => {
     await checkPremiumStatus();
   }, [checkPremiumStatus]);
+
+  const setUsePremiumTheme = useCallback(async (nextValue) => {
+    const resolvedValue =
+      typeof nextValue === "function" ? nextValue(usePremiumTheme) : nextValue;
+
+    setUsePremiumThemeState(Boolean(resolvedValue));
+
+    try {
+      await AsyncStorage.setItem(THEME_PREFERENCE_KEY, String(Boolean(resolvedValue)));
+    } catch (error) {
+      console.log("Theme preference save error:", error);
+    }
+  }, [usePremiumTheme]);
 
   const isDark = usePremiumTheme;
   const currentTheme = isDark ? PremiumTheme : StandardTheme;

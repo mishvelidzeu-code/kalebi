@@ -42,6 +42,19 @@ function getTodayIsoStart() {
   return date.toISOString();
 }
 
+function isPaidPrimeProfile(profile: { is_premium?: boolean | null; premium_until?: string | null }) {
+  if (!profile?.is_premium) {
+    return false;
+  }
+
+  if (!profile?.premium_until) {
+    return true;
+  }
+
+  const timestamp = Date.parse(profile.premium_until);
+  return Number.isNaN(timestamp) ? false : timestamp > Date.now();
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -111,14 +124,16 @@ Deno.serve(async (request) => {
     } else if (target === "paid_prime") {
       const { data: profileRows, error: profileError } = await adminClient
         .from("profiles")
-        .select("id")
+        .select("id, is_premium, premium_until")
         .eq("is_premium", true);
 
       if (profileError) {
         return jsonResponse({ error: "profile-query-failed", details: profileError }, 500);
       }
 
-      targetUserIds = (profileRows || []).map((profile) => profile.id);
+      targetUserIds = (profileRows || [])
+        .filter(isPaidPrimeProfile)
+        .map((profile) => profile.id);
     } else if (target === "pregnancy_paid") {
       const { data: profileRows, error: profileError } = await adminClient
         .from("profiles")

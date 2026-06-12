@@ -21,6 +21,19 @@ import { useTheme } from "../context/ThemeContext";
 import { isAdminEmail } from "../services/adminAccess";
 import { supabase } from "../services/supabase";
 
+function isProfilePaidPrime(profile) {
+  if (!profile?.is_premium) {
+    return false;
+  }
+
+  if (!profile?.premium_until) {
+    return true;
+  }
+
+  const timestamp = Date.parse(profile.premium_until);
+  return Number.isNaN(timestamp) ? false : timestamp > Date.now();
+}
+
 export default function AdminScreen() {
   const router = useRouter();
   const { isDark, refreshTheme } = useTheme();
@@ -77,14 +90,14 @@ export default function AdminScreen() {
       const todayStart = dayjs().startOf("day").toISOString();
       const [
         usersCountRes,
-        todayUsersCountRes,
-        paidPremiumCountRes,
+        todayUsersRes,
+        paidPremiumRes,
         adminPremiumCountRes,
         pregnancyPaidCountRes,
       ] = await Promise.all([
         supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", todayStart),
-        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_premium", true),
+        supabase.from("profiles").select("id, is_premium, premium_until").gte("created_at", todayStart),
+        supabase.from("profiles").select("id, is_premium, premium_until").eq("is_premium", true),
         supabase.from("profiles").select("id", { count: "exact", head: true }).eq("premium_override", true),
         supabase.from("profiles").select("id", { count: "exact", head: true }).eq("has_pregnancy_subscription", true),
       ]);
@@ -92,8 +105,8 @@ export default function AdminScreen() {
       setProfiles([]);
       setStats({
         users: usersCountRes.count || 0,
-        todayUsers: todayUsersCountRes.count || 0,
-        paidPremium: paidPremiumCountRes.count || 0,
+        todayUsers: (todayUsersRes.data || []).length,
+        paidPremium: (paidPremiumRes.data || []).filter(isProfilePaidPrime).length,
         adminPremium: adminPremiumCountRes.count || 0,
         pregnancyPaid: pregnancyPaidCountRes.count || 0,
       });
@@ -138,7 +151,7 @@ export default function AdminScreen() {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(safeNeedle);
       const queryBuilder = supabase
         .from("profiles")
-        .select("id, email, name, phone_number, goal, is_premium, premium_override, pregnancy_mode, has_pregnancy_subscription")
+        .select("id, email, name, phone_number, goal, is_premium, premium_until, premium_override, pregnancy_mode, has_pregnancy_subscription")
         .limit(20);
 
       const response = isUuid
@@ -162,7 +175,7 @@ export default function AdminScreen() {
       const todayStart = dayjs().startOf("day").toISOString();
       let request = supabase
         .from("profiles")
-        .select("id, email, name, phone_number, goal, is_premium, premium_override, pregnancy_mode, has_pregnancy_subscription, created_at")
+        .select("id, email, name, phone_number, goal, is_premium, premium_until, premium_override, pregnancy_mode, has_pregnancy_subscription, created_at")
         .limit(50);
 
       if (type === "paid-prime") {
@@ -178,7 +191,7 @@ export default function AdminScreen() {
 
       const { data, error } = await request;
       if (error) throw error;
-      setProfiles(data || []);
+      setProfiles(type === "paid-prime" ? (data || []).filter(isProfilePaidPrime) : (data || []));
     } catch (error) {
       console.log("Admin list load error:", error);
       setProfiles([]);
@@ -454,7 +467,7 @@ export default function AdminScreen() {
                     />
                   )}
                   <Text style={[styles.switchLabel, { color: profile.premium_override ? theme.good : theme.subText }]}>
-                    {profile.premium_override ? "Admin Prime" : profile.is_premium ? "Paid" : "Free"}
+                    {profile.premium_override ? "Admin Prime" : isProfilePaidPrime(profile) ? "Paid" : "Free"}
                   </Text>
                 </View>
               </View>

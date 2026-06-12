@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Linking,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -17,12 +19,18 @@ import {
 import { useTheme } from "../context/ThemeContext";
 import {
   getPremiumOfferings,
+  hasAndroidPrimeCheckoutConfigured,
+  openAndroidPrimeCheckout,
   purchasePrimePackage,
   restorePrimePurchases,
 } from "../services/purchases";
 import { logMetaPaywallViewed } from "../services/metaAppEvents";
 
 const FALLBACK_PRICE_LABEL = "$0.99 / თვე";
+const IOS_AUTO_RENEW_COPY =
+  "გამოწერა ავტომატურად განახლდება ყოველთვიურად. თანხა ჩამოიჭრება თქვენი Apple ID ანგარიშიდან. გამოწერის გაუქმება შესაძლებელია მიმდინარე პერიოდის დასრულებამდე მინიმუმ 24 საათით ადრე App Store-ის პარამეტრებიდან.";
+const ANDROID_CHECKOUT_COPY =
+  "Android-ზე გადახდა გადაიყვანს გარე უსაფრთხო ვებსაიტზე. წარმატებული გადახდის შემდეგ Prime სტატუსი შენს ანგარიშზე Supabase-დან განახლდება.";
 
 export default function PremiumScreen() {
   const router = useRouter();
@@ -33,12 +41,13 @@ export default function PremiumScreen() {
   const [restoring, setRestoring] = useState(false);
   const [availablePackage, setAvailablePackage] = useState(null);
   const [storeConfigured, setStoreConfigured] = useState(true);
+  const [pendingAndroidCheckout, setPendingAndroidCheckout] = useState(false);
 
   const features = [
     {
       icon: "sparkles-outline",
       title: "სრული AI რჩევები",
-      desc: "ჰოუმისა და დღიურის რჩევები სრულად იხსნება და blur მთლიანად ქრება.",
+      desc: "ჰორმონისა და დღიურის რჩევები სრულად იხსნება და blur მთლიანად ქრება.",
     },
     {
       icon: "chatbubble-ellipses-outline",
@@ -60,6 +69,13 @@ export default function PremiumScreen() {
   const loadPaywall = useCallback(async () => {
     setLoading(true);
 
+    if (Platform.OS === "android") {
+      setStoreConfigured(hasAndroidPrimeCheckoutConfigured());
+      setAvailablePackage(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       const offeringsState = await getPremiumOfferings();
       setStoreConfigured(offeringsState.configured);
@@ -80,7 +96,45 @@ export default function PremiumScreen() {
     }, [loadPaywall])
   );
 
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return undefined;
+    }
+
+    const subscription = AppState.addEventListener("change", async (nextState) => {
+      if (nextState !== "active" || !pendingAndroidCheckout) {
+        return;
+      }
+
+      setPendingAndroidCheckout(false);
+      await refreshTheme();
+      await loadPaywall();
+    });
+
+    return () => subscription.remove();
+  }, [loadPaywall, pendingAndroidCheckout, refreshTheme]);
+
   const handlePurchase = async () => {
+    if (Platform.OS === "android") {
+      setPurchasing(true);
+
+      try {
+        await openAndroidPrimeCheckout();
+        setPendingAndroidCheckout(true);
+        Alert.alert(
+          "გადახდა გაიხსნა",
+          "გააგრძელე გადახდა ვებსაიტზე. აპში დაბრუნების შემდეგ Prime სტატუსი Supabase-დან განახლდება."
+        );
+      } catch (error) {
+        console.log("Android Prime checkout error:", error);
+        Alert.alert("შეცდომა", "Android გადახდის გვერდი ვერ გაიხსნა. სცადე თავიდან.");
+      } finally {
+        setPurchasing(false);
+      }
+
+      return;
+    }
+
     if (!availablePackage) {
       Alert.alert(
         "პროდუქტი ჯერ არაა მზად",
@@ -100,7 +154,7 @@ export default function PremiumScreen() {
           { text: "კარგი", onPress: () => router.replace("/(tabs)") },
         ]);
       } else {
-        Alert.alert("ინფორმაცია", "შეძენა დასრულდა, მაგრამ Prime ჯერ არ გააქტიურებულა.");
+        Alert.alert("ინფორმაცია", "შეძენა დასრულდა, მაგრამ Prime ჯერ არ გააქტიურდა.");
       }
     } catch (error) {
       console.log("Prime purchase error:", error);
@@ -136,7 +190,9 @@ export default function PremiumScreen() {
   };
 
   const storePriceLabel =
-    availablePackage?.product?.priceString || FALLBACK_PRICE_LABEL;
+    Platform.OS === "android"
+      ? "უსაფრთხო ვებ-გადახდა"
+      : availablePackage?.product?.priceString || FALLBACK_PRICE_LABEL;
 
   return (
     <View style={{ flex: 1, backgroundColor: "#000" }}>
@@ -168,7 +224,8 @@ export default function PremiumScreen() {
           </Text>
 
           <Text style={styles.subtitle}>
-            Prime გიხსნის სრულ AI რჩევებს, ულიმიტო ასისტენტს და ყველა free შეზღუდვას.
+            Prime გიხსნის სრულ AI რჩევებს, ულიმიტო ასისტენტს და ყველა free
+            შეზღუდვას.
           </Text>
 
           <View style={{ width: "100%", marginBottom: 28 }}>
@@ -189,10 +246,8 @@ export default function PremiumScreen() {
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={styles.cardTitle}>Prime Monthly</Text>
               <Text style={styles.cardPrice}>{storePriceLabel}</Text>
-              
-              {/* შეცვლილი ტექსტი ავტომატური განახლების წესებით Apple-ის მოთხოვნის მიხედვით */}
               <Text style={styles.autoRenewText}>
-                გამოწერა ავტომატურად განახლდება ყოველთვიურად. თანხა ჩამოიჭრება თქვენი Apple ID ანგარიშიდან. გამოწერის გაუქმება შესაძლებელია მიმდინარე პერიოდის დასრულებამდე მინიმუმ 24 საათით ადრე App Store-ის პარამეტრებიდან.
+                {Platform.OS === "ios" ? IOS_AUTO_RENEW_COPY : ANDROID_CHECKOUT_COPY}
               </Text>
             </View>
 
@@ -203,9 +258,15 @@ export default function PremiumScreen() {
 
           {!storeConfigured && (
             <View style={styles.warningBox}>
-              <Text style={styles.warningTitle}>RevenueCat ჯერ არაა მიბმული</Text>
+              <Text style={styles.warningTitle}>
+                {Platform.OS === "ios"
+                  ? "RevenueCat ჯერ არაა მიბმული"
+                  : "Android გადახდის ბმული აკლია"}
+              </Text>
               <Text style={styles.warningText}>
-                ამ გვერდის UI უკვე მზადაა, მაგრამ რეალური ყიდვისთვის საჭიროა RevenueCat API key და App Store subscription product.
+                {Platform.OS === "ios"
+                  ? "ამ გვერდის UI უკვე მზადაა, მაგრამ რეალური ყიდვისთვის საჭიროა RevenueCat API key და App Store subscription product."
+                  : "დაამატე EXPO_PUBLIC_ANDROID_PRIME_PAYMENT_URL, რომ Android-ზე გარე გადახდის გვერდი გაიხსნას."}
               </Text>
             </View>
           )}
@@ -220,54 +281,59 @@ export default function PremiumScreen() {
           ) : null}
 
           <TouchableOpacity
-            style={[styles.button, (loading || purchasing || isPremium) && styles.buttonDisabled]}
+            style={[
+              styles.button,
+              (loading || purchasing || isPremium || !storeConfigured) && styles.buttonDisabled,
+            ]}
             onPress={handlePurchase}
-            disabled={loading || purchasing || isPremium}
+            disabled={loading || purchasing || isPremium || !storeConfigured}
           >
             {loading || purchasing ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.buttonText}>
-                {isPremium ? "Prime აქტიურია" : "Prime-ის შეძენა"}
+                {isPremium
+                  ? "Prime აქტიურია"
+                  : Platform.OS === "android"
+                    ? "Prime გადახდის გახსნა"
+                    : "Prime-ის შეძენა"}
               </Text>
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.restoreButton}
-            onPress={handleRestore}
-            disabled={restoring}
-          >
-            {restoring ? (
-              <ActivityIndicator color="#E94560" />
-            ) : (
-              <Text style={styles.restoreButtonText}>Restore Purchases</Text>
-            )}
-          </TouchableOpacity>
+          {Platform.OS === "ios" && (
+            <TouchableOpacity
+              style={styles.restoreButton}
+              onPress={handleRestore}
+              disabled={restoring}
+            >
+              {restoring ? (
+                <ActivityIndicator color="#E94560" />
+              ) : (
+                <Text style={styles.restoreButtonText}>Restore Purchases</Text>
+              )}
+            </TouchableOpacity>
+          )}
 
           <View style={styles.linksRow}>
             <TouchableOpacity
               onPress={() =>
-                Linking.openURL(
-                  "https://sites.google.com/view/cycle-care-privacy/მთავარი"
-                )
+                Linking.openURL("https://sites.google.com/view/cycle-care-privacy/მთავარი")
               }
             >
               <Text style={styles.linkText}>Privacy Policy</Text>
             </TouchableOpacity>
 
-            {/* შეცვლილი EULA ლინკი Apple-ის სტანდარტით */}
-            <TouchableOpacity
-              onPress={() =>
-                Linking.openURL("https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
-              }
-            >
-              <Text style={styles.linkText}>Terms of Use (EULA)</Text>
-            </TouchableOpacity>
+            {Platform.OS === "ios" && (
+              <TouchableOpacity
+                onPress={() =>
+                  Linking.openURL("https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
+                }
+              >
+                <Text style={styles.linkText}>Terms of Use (EULA)</Text>
+              </TouchableOpacity>
+            )}
           </View>
-          
-          {/* Testflight-ის ტექსტი წაშლილია */}
-          
         </ScrollView>
       </SafeAreaView>
     </View>

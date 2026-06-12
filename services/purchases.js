@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 import Purchases, { LOG_LEVEL } from "react-native-purchases";
 
 import { logMetaPregnancyPurchase, logMetaPrimePurchase } from "./metaAppEvents";
@@ -8,6 +8,7 @@ const DEFAULT_ENTITLEMENT_ID = "prime";
 const DEFAULT_OFFERING_ID = "default";
 const PREGNANCY_ENTITLEMENT_ID = "pregnancy";
 const PREGNANCY_OFFERING_ID = "pregnancy";
+const ANDROID_PRIME_PAYMENT_URL = process.env.EXPO_PUBLIC_ANDROID_PRIME_PAYMENT_URL || "";
 
 let configuredAppUserId = null;
 let isConfigured = false;
@@ -32,12 +33,94 @@ function getOfferingId() {
   return process.env.EXPO_PUBLIC_REVENUECAT_OFFERING_ID || DEFAULT_OFFERING_ID;
 }
 
+function isFutureDate(value) {
+  if (!value) {
+    return false;
+  }
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return false;
+  }
+
+  return timestamp > Date.now();
+}
+
+export function resolvePremiumAccessFromProfile(profile) {
+  if (Boolean(profile?.premium_override)) {
+    return true;
+  }
+
+  if (!Boolean(profile?.is_premium)) {
+    return false;
+  }
+
+  if (!profile?.premium_until) {
+    // Backwards-compatible fallback for legacy rows that predate expiry support.
+    return true;
+  }
+
+  return isFutureDate(profile.premium_until);
+}
+
+function getPrimeEntitlementInfo(customerInfo) {
+  const entitlementId = getEntitlementId();
+
+  return (
+    customerInfo?.entitlements?.active?.[entitlementId]
+    || customerInfo?.entitlements?.all?.[entitlementId]
+    || null
+  );
+}
+
+function getPrimeExpirationDate(customerInfo) {
+  const entitlementInfo = getPrimeEntitlementInfo(customerInfo);
+  return entitlementInfo?.expirationDate || customerInfo?.latestExpirationDate || null;
+}
+
 export async function getCurrentSupabaseUser() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   return user || null;
+}
+
+export function hasAndroidPrimeCheckoutConfigured() {
+  return Boolean(ANDROID_PRIME_PAYMENT_URL);
+}
+
+function buildAndroidPrimePaymentUrl(userId) {
+  if (!ANDROID_PRIME_PAYMENT_URL) {
+    return "";
+  }
+
+  const separator = ANDROID_PRIME_PAYMENT_URL.includes("?") ? "&" : "?";
+  return `${ANDROID_PRIME_PAYMENT_URL}${separator}user_id=${encodeURIComponent(userId)}`;
+}
+
+async function readPremiumStatusFromProfile(userId) {
+  // Android web checkout uses the same premium source of truth as the app UI.
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("is_premium, premium_override, premium_until")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const isPremium = resolvePremiumAccessFromProfile(data);
+
+  if (!isPremium && Boolean(data?.is_premium) && !Boolean(data?.premium_override) && data?.premium_until) {
+    await supabase
+      .from("profiles")
+      .update({ is_premium: false })
+      .eq("id", userId);
+  }
+
+  return isPremium;
 }
 
 export async function ensurePurchasesConfigured(appUserId = null) {
@@ -92,7 +175,7 @@ function hasActiveEntitlement(customerInfo) {
   return Boolean(customerInfo?.entitlements?.active?.[getEntitlementId()]);
 }
 
-async function writePremiumStatusToProfile(user, isPremium) {
+async function writePremiumStatusToProfile(user, isPremium, premiumUntil = null) {
   const { error } = await supabase
     .from("profiles")
     .upsert(
@@ -100,6 +183,7 @@ async function writePremiumStatusToProfile(user, isPremium) {
         id: user.id,
         email: user.email,
         is_premium: isPremium,
+        premium_until: premiumUntil,
       },
       { onConflict: "id" }
     );
@@ -115,6 +199,15 @@ export async function syncPremiumStatusFromPurchases() {
     return { isPremium: false, source: "no-user" };
   }
 
+  if (Platform.OS === "android") {
+    const isPremium = await readPremiumStatusFromProfile(user.id);
+
+    return {
+      isPremium,
+      source: "supabase",
+    };
+  }
+
   const setup = await ensurePurchasesConfigured(user.id);
   if (!setup.configured) {
     return { isPremium: false, source: setup.reason };
@@ -122,13 +215,40 @@ export async function syncPremiumStatusFromPurchases() {
 
   const customerInfo = await Purchases.getCustomerInfo();
   const isPremium = hasActiveEntitlement(customerInfo);
+  const premiumUntil = getPrimeExpirationDate(customerInfo);
 
-  await writePremiumStatusToProfile(user, isPremium);
+  await writePremiumStatusToProfile(user, isPremium, premiumUntil);
 
   return {
     isPremium,
+    premiumUntil,
     customerInfo,
     source: "revenuecat",
+  };
+}
+
+export async function openAndroidPrimeCheckout() {
+  const user = await getCurrentSupabaseUser();
+  if (!user) {
+    throw new Error("user-not-found");
+  }
+
+  const paymentUrl = buildAndroidPrimePaymentUrl(user.id);
+  if (!paymentUrl) {
+    throw new Error("android-payment-url-not-configured");
+  }
+
+  const supported = await Linking.canOpenURL(paymentUrl);
+  if (!supported) {
+    throw new Error("android-payment-url-invalid");
+  }
+
+  await Linking.openURL(paymentUrl);
+
+  return {
+    opened: true,
+    paymentUrl,
+    userId: user.id,
   };
 }
 
@@ -169,8 +289,9 @@ export async function purchasePrimePackage(packageToPurchase) {
 
   const purchaseResult = await Purchases.purchasePackage(packageToPurchase);
   const isPremium = hasActiveEntitlement(purchaseResult.customerInfo);
+  const premiumUntil = getPrimeExpirationDate(purchaseResult.customerInfo);
 
-  await writePremiumStatusToProfile(user, isPremium);
+  await writePremiumStatusToProfile(user, isPremium, premiumUntil);
 
   if (isPremium) {
     logMetaPrimePurchase(packageToPurchase, purchaseResult.customerInfo);
@@ -178,6 +299,7 @@ export async function purchasePrimePackage(packageToPurchase) {
 
   return {
     isPremium,
+    premiumUntil,
     customerInfo: purchaseResult.customerInfo,
   };
 }
@@ -274,11 +396,13 @@ export async function restorePrimePurchases() {
 
   const customerInfo = await Purchases.restorePurchases();
   const isPremium = hasActiveEntitlement(customerInfo);
+  const premiumUntil = getPrimeExpirationDate(customerInfo);
 
-  await writePremiumStatusToProfile(user, isPremium);
+  await writePremiumStatusToProfile(user, isPremium, premiumUntil);
 
   return {
     isPremium,
+    premiumUntil,
     customerInfo,
   };
 }
