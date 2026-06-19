@@ -10,25 +10,26 @@ function TabIcon({ name, color, focused, isAssistant = false, primary, isDark })
     return (
       <View
         style={{
-          width: focused ? 58 : 48,
-          height: focused ? 58 : 48,
-          borderRadius: focused ? 29 : 24,
+          width: focused ? 64 : 54,
+          height: focused ? 64 : 54,
+          borderRadius: focused ? 32 : 27,
           alignItems: "center",
           justifyContent: "center",
-          marginTop: focused ? -24 : -8,
-          backgroundColor: focused ? primary : isDark ? "#1D1D1D" : "#FFF5F8",
+          marginTop: focused ? -32 : -16,
+          backgroundColor: focused ? primary : isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.78)",
           shadowColor: focused ? primary : "#000",
-          shadowOpacity: focused ? 0.28 : 0.08,
-          shadowRadius: focused ? 14 : 8,
-          shadowOffset: { width: 0, height: focused ? 10 : 4 },
-          elevation: focused ? 10 : 2,
+          shadowOpacity: focused ? 0.34 : 0.12,
+          shadowRadius: focused ? 20 : 14,
+          shadowOffset: { width: 0, height: focused ? 12 : 6 },
+          elevation: focused ? 14 : 4,
           borderWidth: 1,
-          borderColor: focused ? primary : isDark ? "#2B2B2B" : "#F7D8E4",
+          borderColor: focused ? "rgba(255,255,255,0.72)" : isDark ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.82)",
+          transform: [{ translateY: focused ? -3 : -1 }],
         }}
       >
         <Ionicons
           name={name}
-          size={focused ? 28 : 24}
+          size={focused ? 30 : 26}
           color={focused ? "#FFFFFF" : color}
         />
       </View>
@@ -49,20 +50,28 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: isDark ? "#555555" : "#999999",
+        tabBarInactiveTintColor: isDark ? "#D0B9C2" : "#9A6A79",
         tabBarStyle: {
           backgroundColor: colors.tabBar,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 62 + bottomInset,
+          height: 68 + bottomInset,
           paddingBottom: bottomInset,
-          paddingTop: 5,
-          elevation: 0,
+          paddingTop: 8,
+          marginHorizontal: 14,
+          marginBottom: 8,
+          borderRadius: 28,
+          position: "absolute",
+          shadowColor: "#D76586",
+          shadowOpacity: isDark ? 0.18 : 0.14,
+          shadowRadius: 22,
+          shadowOffset: { width: 0, height: 10 },
+          elevation: 12,
           overflow: "visible",
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: "600",
+          fontWeight: "800",
         },
       }}
     >

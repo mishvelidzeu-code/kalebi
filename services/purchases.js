@@ -9,6 +9,7 @@ const DEFAULT_OFFERING_ID = "default";
 const PREGNANCY_ENTITLEMENT_ID = "pregnancy";
 const PREGNANCY_OFFERING_ID = "pregnancy";
 const ANDROID_PRIME_PAYMENT_URL = process.env.EXPO_PUBLIC_ANDROID_PRIME_PAYMENT_URL || "";
+const ANDROID_PREGNANCY_PAYMENT_URL = process.env.EXPO_PUBLIC_ANDROID_PREGNANCY_PAYMENT_URL || "";
 
 let configuredAppUserId = null;
 let isConfigured = false;
@@ -63,6 +64,19 @@ export function resolvePremiumAccessFromProfile(profile) {
   return isFutureDate(profile.premium_until);
 }
 
+export function resolvePregnancyAccessFromProfile(profile) {
+  if (!Boolean(profile?.has_pregnancy_subscription)) {
+    return false;
+  }
+
+  if (!profile?.pregnancy_until) {
+    // Backwards-compatible fallback for legacy rows that predate expiry support.
+    return true;
+  }
+
+  return isFutureDate(profile.pregnancy_until);
+}
+
 function getPrimeEntitlementInfo(customerInfo) {
   const entitlementId = getEntitlementId();
 
@@ -90,6 +104,10 @@ export function hasAndroidPrimeCheckoutConfigured() {
   return Boolean(ANDROID_PRIME_PAYMENT_URL);
 }
 
+export function hasAndroidPregnancyCheckoutConfigured() {
+  return Boolean(ANDROID_PREGNANCY_PAYMENT_URL);
+}
+
 function buildAndroidPrimePaymentUrl(userId) {
   if (!ANDROID_PRIME_PAYMENT_URL) {
     return "";
@@ -97,6 +115,15 @@ function buildAndroidPrimePaymentUrl(userId) {
 
   const separator = ANDROID_PRIME_PAYMENT_URL.includes("?") ? "&" : "?";
   return `${ANDROID_PRIME_PAYMENT_URL}${separator}user_id=${encodeURIComponent(userId)}`;
+}
+
+function buildAndroidPregnancyPaymentUrl(userId) {
+  if (!ANDROID_PREGNANCY_PAYMENT_URL) {
+    return "";
+  }
+
+  const separator = ANDROID_PREGNANCY_PAYMENT_URL.includes("?") ? "&" : "?";
+  return `${ANDROID_PREGNANCY_PAYMENT_URL}${separator}user_id=${encodeURIComponent(userId)}`;
 }
 
 async function readPremiumStatusFromProfile(userId) {
@@ -121,6 +148,29 @@ async function readPremiumStatusFromProfile(userId) {
   }
 
   return isPremium;
+}
+
+async function readPregnancyStatusFromProfile(userId) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("has_pregnancy_subscription, pregnancy_until")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const hasSubscription = resolvePregnancyAccessFromProfile(data);
+
+  if (!hasSubscription && Boolean(data?.has_pregnancy_subscription) && data?.pregnancy_until) {
+    await supabase
+      .from("profiles")
+      .update({ has_pregnancy_subscription: false })
+      .eq("id", userId);
+  }
+
+  return hasSubscription;
 }
 
 export async function ensurePurchasesConfigured(appUserId = null) {
@@ -252,6 +302,31 @@ export async function openAndroidPrimeCheckout() {
   };
 }
 
+export async function openAndroidPregnancyCheckout() {
+  const user = await getCurrentSupabaseUser();
+  if (!user) {
+    throw new Error("user-not-found");
+  }
+
+  const paymentUrl = buildAndroidPregnancyPaymentUrl(user.id);
+  if (!paymentUrl) {
+    throw new Error("android-pregnancy-payment-url-not-configured");
+  }
+
+  const supported = await Linking.canOpenURL(paymentUrl);
+  if (!supported) {
+    throw new Error("android-pregnancy-payment-url-invalid");
+  }
+
+  await Linking.openURL(paymentUrl);
+
+  return {
+    opened: true,
+    paymentUrl,
+    userId: user.id,
+  };
+}
+
 export async function getPremiumOfferings() {
   const user = await getCurrentSupabaseUser();
   const setup = await ensurePurchasesConfigured(user?.id || null);
@@ -356,6 +431,15 @@ export async function purchasePregnancyPackage(packageToPurchase) {
 export async function checkPregnancySubscriptionStatus() {
   const user = await getCurrentSupabaseUser();
   if (!user) return { hasSubscription: false, source: "no-user" };
+
+  if (Platform.OS === "android") {
+    const hasSubscription = await readPregnancyStatusFromProfile(user.id);
+
+    return {
+      hasSubscription,
+      source: "supabase",
+    };
+  }
 
   const setup = await ensurePurchasesConfigured(user.id);
   if (!setup.configured) return { hasSubscription: false, source: setup.reason };

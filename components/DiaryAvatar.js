@@ -42,7 +42,13 @@ const base64ToArrayBuffer = (base64) => {
   return bytes.buffer;
 };
 
-export default function DiaryAvatar({ accent = "#E94560", isDark = false }) {
+export default function DiaryAvatar({
+  accent = "#E94560",
+  isDark = false,
+  size = 50,
+  showHint = true,
+  style,
+}) {
   const [userId, setUserId] = useState("");
   const [avatarUri, setAvatarUri] = useState("");
   const [loading, setLoading] = useState(true);
@@ -142,11 +148,14 @@ export default function DiaryAvatar({ accent = "#E94560", isDark = false }) {
   };
 
   return (
-    <TouchableOpacity activeOpacity={0.82} onPress={handleAvatarPress} style={styles.touchTarget}>
+    <TouchableOpacity activeOpacity={0.82} onPress={handleAvatarPress} style={[styles.touchTarget, { width: size + 8 }, style]}>
       <View
         style={[
           styles.avatar,
           {
+            width: size,
+            height: size,
+            borderRadius: Math.round(size * 0.34),
             backgroundColor: isDark ? "rgba(233,69,96,0.12)" : "#FFF1F5",
             borderColor: `${accent}55`,
           },
@@ -155,7 +164,7 @@ export default function DiaryAvatar({ accent = "#E94560", isDark = false }) {
         {avatarUri ? (
           <Image source={avatarUri} style={styles.avatarImage} contentFit="cover" />
         ) : (
-          <Ionicons name="person-outline" size={21} color={accent} />
+          <Ionicons name="person-outline" size={Math.max(18, Math.round(size * 0.42))} color={accent} />
         )}
 
         {(loading || saving) && (
@@ -165,20 +174,20 @@ export default function DiaryAvatar({ accent = "#E94560", isDark = false }) {
         )}
       </View>
 
-      <View style={[styles.uploadBadge, { backgroundColor: accent }]}>
+      <View style={[styles.uploadBadge, { backgroundColor: accent, top: Math.max(0, size - 16) }]}>
         <Ionicons name={avatarUri ? "pencil" : "camera"} size={10} color="#FFFFFF" />
       </View>
 
-      {!avatarUri && !loading && <Text style={[styles.uploadHint, { color: accent }]}>ფოტო</Text>}
+      {!avatarUri && !loading && showHint && <Text style={[styles.uploadHint, { color: accent }]}>ფოტო</Text>}
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  touchTarget: { width: 58, alignItems: "center", position: "relative" },
+  touchTarget: { alignItems: "center", position: "relative" },
   avatar: { width: 50, height: 50, borderRadius: 17, borderWidth: 1, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   avatarImage: { width: "100%", height: "100%" },
   loader: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.35)" },
-  uploadBadge: { position: "absolute", right: 1, top: 34, width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#FFFFFF" },
+  uploadBadge: { position: "absolute", right: 1, width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#FFFFFF" },
   uploadHint: { fontSize: 9, fontWeight: "800", marginTop: 5 },
 });

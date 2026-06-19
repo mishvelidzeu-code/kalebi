@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useTheme } from "../context/ThemeContext";
 
@@ -31,40 +31,79 @@ export default function PrimePreview({
         {children}
       </View>
 
-      <BlurView
-        intensity={isDark ? 60 : 50}
-        tint={isDark ? "dark" : "light"}
-        style={[styles.overlay, concealCompletely && styles.overlayFull]}
-      >
-        <LinearGradient
-          colors={
-            isDark
-              ? ["rgba(32, 15, 25, 0.82)", "rgba(12, 12, 16, 0.96)"]
-              : ["rgba(255, 245, 248, 0.90)", "rgba(255, 255, 255, 0.98)"]
-          }
-          style={styles.overlayShade}
-        />
+      {Platform.OS === "android" ? (
+        <View
+          style={[
+            styles.overlay,
+            concealCompletely && styles.overlayFull,
+            { backgroundColor: isDark ? "rgba(12, 12, 16, 0.94)" : "rgba(255, 255, 255, 0.96)" },
+          ]}
+        >
+          <LinearGradient
+            colors={
+              isDark
+                ? ["rgba(32, 15, 25, 0.86)", "rgba(12, 12, 16, 0.96)"]
+                : ["rgba(255, 245, 248, 0.92)", "rgba(255, 255, 255, 0.98)"]
+            }
+            style={styles.overlayShade}
+          />
 
-        <View style={styles.overlayContent}>
-          <View style={styles.primePill}>
-            <Ionicons name="sparkles-outline" size={13} color="#E94560" />
-            <Text style={styles.primePillText}>PRIME ACCESS</Text>
+          <View style={styles.overlayContent}>
+            <View style={styles.primePill}>
+              <Ionicons name="sparkles-outline" size={13} color="#E94560" />
+              <Text style={styles.primePillText}>PRIME ACCESS</Text>
+            </View>
+
+            <Text style={[styles.message, { color: isDark ? "#FFFFFF" : "#34212A" }]}>
+              {message}
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.button}
+              onPress={() => router.push("/premium")}
+            >
+              <Text style={styles.buttonText}>{buttonLabel}</Text>
+              <Ionicons name="arrow-forward" size={15} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
-
-          <Text style={[styles.message, { color: isDark ? "#FFFFFF" : "#34212A" }]}>
-            {message}
-          </Text>
-
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.button}
-            onPress={() => router.push("/premium")}
-          >
-            <Text style={styles.buttonText}>{buttonLabel}</Text>
-            <Ionicons name="arrow-forward" size={15} color="#FFFFFF" />
-          </TouchableOpacity>
         </View>
-      </BlurView>
+      ) : (
+        <BlurView
+          intensity={isDark ? 60 : 50}
+          tint={isDark ? "dark" : "light"}
+          style={[styles.overlay, concealCompletely && styles.overlayFull]}
+        >
+          <LinearGradient
+            colors={
+              isDark
+                ? ["rgba(32, 15, 25, 0.82)", "rgba(12, 12, 16, 0.96)"]
+                : ["rgba(255, 245, 248, 0.90)", "rgba(255, 255, 255, 0.98)"]
+            }
+            style={styles.overlayShade}
+          />
+
+          <View style={styles.overlayContent}>
+            <View style={styles.primePill}>
+              <Ionicons name="sparkles-outline" size={13} color="#E94560" />
+              <Text style={styles.primePillText}>PRIME ACCESS</Text>
+            </View>
+
+            <Text style={[styles.message, { color: isDark ? "#FFFFFF" : "#34212A" }]}>
+              {message}
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.button}
+              onPress={() => router.push("/premium")}
+            >
+              <Text style={styles.buttonText}>{buttonLabel}</Text>
+              <Ionicons name="arrow-forward" size={15} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </BlurView>
+      )}
     </View>
   );
 }

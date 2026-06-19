@@ -14,13 +14,13 @@ const PremiumTheme = {
   dark: true,
   colors: {
     ...DefaultTheme.colors,
-    primary: "#E94560",
-    background: "#0F0F0F",
-    card: "#121212",
-    text: "#FFFFFF",
-    border: "#2A2A2A",
-    notification: "#E94560",
-    tabBar: "#121212",
+    primary: "#FF4D88",
+    background: "#211621",
+    card: "rgba(55,40,58,0.82)",
+    text: "#FFF7FB",
+    border: "rgba(255,209,224,0.16)",
+    notification: "#FF4D88",
+    tabBar: "rgba(45,32,50,0.82)",
   },
 };
 
@@ -29,21 +29,22 @@ const StandardTheme = {
   colors: {
     ...DefaultTheme.colors,
     primary: "#ff4d88",
-    background: "#FDFCFD",
-    card: "#FFFFFF",
-    text: "#1A1A1A",
-    border: "#F0F0F0",
-    tabBar: "#FFFFFF",
+    background: "#fff8fa",
+    card: "rgba(255,255,255,0.72)",
+    text: "#2F2026",
+    border: "rgba(255,255,255,0.74)",
+    tabBar: "rgba(255,255,255,0.74)",
   },
 };
 
 const ThemeContext = createContext();
 const THEME_PREFERENCE_KEY = "cycle_app_use_premium_theme";
+const DEFAULT_THEME_IS_DARK = false;
 
 export const ThemeProvider = ({ children }) => {
   const [isPremium, setIsPremium] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [usePremiumTheme, setUsePremiumThemeState] = useState(false);
+  const [usePremiumTheme, setUsePremiumThemeState] = useState(DEFAULT_THEME_IS_DARK);
 
   const checkPremiumStatus = useCallback(async () => {
     try {
@@ -103,7 +104,11 @@ export const ThemeProvider = ({ children }) => {
         const savedPreference = await AsyncStorage.getItem(THEME_PREFERENCE_KEY);
         if (savedPreference != null) {
           setUsePremiumThemeState(savedPreference === "true");
+          return;
         }
+
+        setUsePremiumThemeState(DEFAULT_THEME_IS_DARK);
+        await AsyncStorage.setItem(THEME_PREFERENCE_KEY, String(DEFAULT_THEME_IS_DARK));
       } catch (error) {
         console.log("Theme preference load error:", error);
       }
@@ -124,7 +129,7 @@ export const ThemeProvider = ({ children }) => {
       }
     });
 
-    return () => subscription.remove();
+    return () => subscription?.unsubscribe?.();
   }, [checkPremiumStatus]);
 
   useEffect(() => {

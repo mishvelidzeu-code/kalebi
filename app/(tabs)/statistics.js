@@ -8,6 +8,7 @@ import { ActivityIndicator, Animated, RefreshControl, SafeAreaView, ScrollView, 
 
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
+import DiaryAvatar from "../../components/DiaryAvatar";
 import { supabase } from "../../services/supabase";
 import { calculateCycleState } from "../../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../../utils/cyclePrediction";
@@ -52,15 +53,22 @@ function PregnancyStatisticsScreen() {
   const slideAnim = useRef(new Animated.Value(30)).current;
 
   const theme = {
-    bg: isDark ? "#0F0F0F" : "#F7F8FA",
-    card: isDark ? "#1A1A1A" : "#FFFFFF",
-    text: isDark ? "#FFFFFF" : "#1A1A1A",
-    subText: isDark ? "#AAAAAA" : "#777777",
-    iconBg: isDark ? "#2A2A2A" : "#F0F4FF",
-    divider: isDark ? "#333" : "#F0F0F0",
+    bg: isDark ? "#181015" : "#FFF8FA",
+    card: isDark ? "rgba(36,24,31,0.84)" : "rgba(255,255,255,0.74)",
+    text: isDark ? "#FFF5F8" : "#2F2026",
+    subText: isDark ? "#D7B9C4" : "#8E6273",
+    iconBg: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.6)",
+    divider: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.65)",
+    border: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.82)",
+    accent: "#ff4d88",
+    activeSoft: isDark ? "rgba(255,77,136,0.18)" : "rgba(255,77,136,0.12)",
+    activeBorder: isDark ? "rgba(255,144,177,0.35)" : "rgba(255,77,136,0.35)",
+    cardGradient: isDark ? ["rgba(58,38,48,0.94)", "rgba(28,18,24,0.84)"] : ["rgba(255,255,255,0.9)", "rgba(255,234,241,0.82)"],
+    heroGradient: isDark ? ["#FF6F9F", "#B83360", "#2B1721"] : ["#FFB8CE", "#FF6F9F", "#E64E82"],
+    track: isDark ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.58)",
   };
 
-  const trimesterColor = currentTrimester === 1 ? "#06d6a0" : currentTrimester === 2 ? "#ffd166" : "#ff4d88";
+  const trimesterColor = theme.accent;
   const progress = ((currentWeek || 1) / 40) * 100;
   const nextMilestone = PREGNANCY_MILESTONES.find((m) => m.week >= (currentWeek || 1));
 
@@ -86,42 +94,53 @@ function PregnancyStatisticsScreen() {
     load();
   }, [fadeAnim, slideAnim]));
 
-  if (loading) return <View style={[styles.center, { backgroundColor: theme.bg }]}><ActivityIndicator size="large" color={trimesterColor} /></View>;
+  if (loading) {
+    return (
+      <LinearGradient colors={isDark ? ["#25151B", "#140E12", "#120C10"] : ["#FFFDFC", "#FFEFF4", "#F8B5C9"]} style={{ flex: 1 }}>
+        <View style={[styles.center, { backgroundColor: "transparent" }]}>
+          <ActivityIndicator size="large" color={trimesterColor} />
+        </View>
+      </LinearGradient>
+    );
+  }
 
   const dueDate = pregnancyStartDate ? dayjs(pregnancyStartDate).add(280, "day").format("D MMMM YYYY") : "-";
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <LinearGradient
+      colors={isDark ? ["#25151B", "#140E12", "#120C10"] : ["#FFFDFC", "#FFEFF4", "#F8B5C9"]}
+      start={{ x: 0.15, y: 0 }}
+      end={{ x: 0.85, y: 1 }}
+      style={{ flex: 1 }}
+    >
+      <SafeAreaView style={{ flex: 1, backgroundColor: "transparent" }}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" />
+        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.pageHeader}>
           <View>
-            <Text style={styles.pageEyebrow}>MATERNITY INSIGHTS</Text>
+            <Text style={[styles.pageEyebrow, { color: theme.accent }]}>MATERNITY INSIGHTS</Text>
             <Text style={[styles.headerTitle, { color: theme.text }]}>ორსულობის ანალიტიკა</Text>
             <Text style={[styles.pageSubtitle, { color: theme.subText }]}>შენი პროგრესი და მნიშვნელოვანი ეტაპები</Text>
-          </View>
-          <View style={styles.pageHeaderIcon}>
-            <Ionicons name="heart-outline" size={21} color="#06D6A0" />
           </View>
         </View>
 
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
 
           {/* Hero */}
-          <View style={[styles.heroCard, { backgroundColor: trimesterColor }]}>
+          <LinearGradient colors={theme.heroGradient} start={{ x: 0.08, y: 0 }} end={{ x: 0.95, y: 1 }} style={[styles.heroCard, { borderColor: theme.border, borderWidth: 1 }]}>
             <View style={styles.heroGlow} />
             <Text style={styles.heroLabel}>მშობიარობამდე დარჩა</Text>
             <Text style={styles.heroNumber}>{daysRemaining} <Text style={styles.heroSubText}>დღე</Text></Text>
             <View style={styles.heroDateBadge}>
               <Text style={styles.heroDate}>{dueDate}</Text>
             </View>
-          </View>
+          </LinearGradient>
 
           {/* Progress */}
-          <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
+          <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
             <View style={styles.cardHeaderRow}>
               <Text style={[styles.cardTitle, { color: theme.text }]}>ორსულობის პროგრესი</Text>
-              <View style={styles.cardHeaderIcon}>
+              <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                 <Ionicons name="trending-up-outline" size={17} color={trimesterColor} />
               </View>
             </View>
@@ -129,22 +148,22 @@ function PregnancyStatisticsScreen() {
               <Text style={[{ color: theme.subText, fontSize: 13, fontWeight: "600" }]}>კვირა {currentWeek} / 40</Text>
               <Text style={[{ color: trimesterColor, fontSize: 13, fontWeight: "700" }]}>{Math.round(progress)}%</Text>
             </View>
-            <View style={[styles.symptomTrack, { backgroundColor: isDark ? "#2A2A2A" : "#F5F5F5", height: 12, borderRadius: 6 }]}>
+            <View style={[styles.symptomTrack, { backgroundColor: theme.track, height: 12, borderRadius: 6 }]}>
               <View style={[styles.symptomFill, { width: `${progress}%`, backgroundColor: trimesterColor, borderRadius: 6 }]} />
             </View>
-          </View>
+          </LinearGradient>
 
           {/* Trimester Cards */}
           <View style={styles.metricsRow}>
-            <View style={[styles.metricCard, { backgroundColor: theme.card }]}>
-              <View style={[styles.iconBox, { backgroundColor: isDark ? "#2A2A2A" : "#fff0f5" }]}>
+            <LinearGradient colors={theme.cardGradient} style={[styles.metricCard, { borderColor: theme.border, borderWidth: 1 }]}>
+              <View style={[styles.iconBox, { backgroundColor: theme.iconBg }]}>
                 <Text style={{ fontSize: 20 }}>🗓️</Text>
               </View>
               <Text style={[styles.metricValue, { color: theme.text }]}>{currentWeek}<Text style={styles.metricUnit}> კვ.</Text></Text>
               <Text style={[styles.metricLabel, { color: theme.subText }]}>მიმდინარე კვირა</Text>
-            </View>
-            <View style={[styles.metricCard, { backgroundColor: theme.card }]}>
-              <View style={[styles.iconBox, { backgroundColor: isDark ? "#2A2A2A" : "#fff0f5" }]}>
+            </LinearGradient>
+            <LinearGradient colors={theme.cardGradient} style={[styles.metricCard, { borderColor: theme.border, borderWidth: 1 }]}>
+              <View style={[styles.iconBox, { backgroundColor: theme.iconBg }]}>
                 <Text style={{ fontSize: 20 }}>
                   {currentTrimester === 1 ? "🌱" : currentTrimester === 2 ? "🌸" : "🌟"}
                 </Text>
@@ -153,12 +172,12 @@ function PregnancyStatisticsScreen() {
                 {currentTrimester === 1 ? "I" : currentTrimester === 2 ? "II" : "III"}
               </Text>
               <Text style={[styles.metricLabel, { color: theme.subText }]}>ტრიმესტრი</Text>
-            </View>
+            </LinearGradient>
           </View>
 
           {/* Next Milestone */}
           {nextMilestone && nextMilestone.week > (currentWeek || 1) && (
-            <View style={[styles.datesCard, { backgroundColor: theme.card }]}>
+            <LinearGradient colors={theme.cardGradient} style={[styles.datesCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.dateItem}>
                 <Text style={styles.dateIcon}>{nextMilestone.icon}</Text>
                 <View>
@@ -166,15 +185,15 @@ function PregnancyStatisticsScreen() {
                   <Text style={[styles.dateValue, { color: theme.text }]}>{nextMilestone.label}</Text>
                 </View>
               </View>
-            </View>
+            </LinearGradient>
           )}
 
           {/* Symptoms */}
           {topSymptoms.length > 0 && (
-            <View style={[styles.symptomsCard, { backgroundColor: theme.card }]}>
+            <LinearGradient colors={theme.cardGradient} style={[styles.symptomsCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>ხშირი სიმპტომები</Text>
-                <View style={styles.cardHeaderIcon}>
+                <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                   <Ionicons name="pulse-outline" size={17} color={trimesterColor} />
                 </View>
               </View>
@@ -187,23 +206,27 @@ function PregnancyStatisticsScreen() {
                       <Text style={[styles.symptomName, { color: theme.text }]}>{s.label}</Text>
                       <Text style={[styles.symptomCount, { color: trimesterColor }]}>{s.count}-ჯერ</Text>
                     </View>
-                    <View style={[styles.symptomTrack, { backgroundColor: isDark ? "#2A2A2A" : "#F5F5F5" }]}>
+                    <View style={[styles.symptomTrack, { backgroundColor: theme.track }]}>
                       <View style={[styles.symptomFill, { width: `${percent}%`, backgroundColor: trimesterColor }]} />
                     </View>
                   </View>
                 );
               })}
-            </View>
+            </LinearGradient>
           )}
 
           <View style={{ height: 100 }} />
         </Animated.View>
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+      <View style={styles.floatingDiaryAvatar}>
+        <DiaryAvatar accent={theme.accent} isDark={isDark} size={46} showHint={false} />
+      </View>
+    </LinearGradient>
   );
 }
 
-const AnimatedBar = ({ value, maxValue, label, index, isDark }) => {
+const AnimatedBar = ({ value, maxValue, label, index, isDark, accent = "#FF4D88", trackColor }) => {
   const heightAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -218,13 +241,13 @@ const AnimatedBar = ({ value, maxValue, label, index, isDark }) => {
 
   return (
     <View style={styles.barWrapper}>
-      <Text style={[styles.barValue, { color: "#E94560" }]}>{value}</Text>
-      <View style={[styles.barTrack, { backgroundColor: isDark ? "#2A2A2A" : "#FFF0F5" }]}>
+      <Text style={[styles.barValue, { color: accent }]}>{value}</Text>
+      <View style={[styles.barTrack, { backgroundColor: trackColor || (isDark ? "#2A2A2A" : "#FFF0F5") }]}>
         <Animated.View
           style={[
             styles.barFill,
             {
-              backgroundColor: "#E94560",
+              backgroundColor: accent,
               height: heightAnim.interpolate({
                 inputRange: [0, 100],
                 outputRange: ["0%", "100%"],
@@ -233,7 +256,7 @@ const AnimatedBar = ({ value, maxValue, label, index, isDark }) => {
           ]}
         />
       </View>
-      <Text style={[styles.barLabel, { color: isDark ? "#888" : "#999" }]}>{label}</Text>
+      <Text style={[styles.barLabel, { color: isDark ? "#D5BFC8" : "#9E7281" }]}>{label}</Text>
     </View>
   );
 };
@@ -259,12 +282,23 @@ function RegularStatisticsScreen() {
   });
 
   const theme = {
-    bg: isDark ? "#0F0F0F" : "#F7F8FA",
-    card: isDark ? "#1A1A1A" : "#FFFFFF",
-    text: isDark ? "#FFFFFF" : "#1A1A1A",
-    subText: isDark ? "#AAAAAA" : "#777777",
-    iconBg: isDark ? "#2A2A2A" : "#F0F4FF",
-    divider: isDark ? "#333" : "#F0F0F0",
+    bg: isDark ? "#211621" : "#FFFDFC",
+    card: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.78)",
+    text: isDark ? "#FFF7FB" : "#2F2026",
+    subText: isDark ? "#E9C7D4" : "#8F6574",
+    iconBg: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.58)",
+    divider: isDark ? "rgba(255,209,224,0.12)" : "rgba(255,255,255,0.64)",
+    border: isDark ? "rgba(255,209,224,0.16)" : "rgba(255,255,255,0.78)",
+    accent: "#FF4D88",
+    peach: "#FF9E7D",
+    track: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.58)",
+    activeSoft: isDark ? "rgba(255,77,136,0.18)" : "rgba(255,77,136,0.12)",
+    activeBorder: isDark ? "rgba(255,144,177,0.35)" : "rgba(255,77,136,0.35)",
+    pageGradient: isDark ? ["#2A1B2A", "#211621", "#17151D"] : ["#FFFDFC", "#FFF1EB", "#F6F0FF"],
+    cardGradient: isDark
+      ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"]
+      : ["rgba(255,255,255,0.94)", "rgba(255,240,232,0.84)", "rgba(246,240,255,0.82)"],
+    heroGradient: isDark ? ["#56364F", "#3A2A44", "#241A2B"] : ["#FF9E7D", "#FF7EA8", "#B8A4FF"],
   };
 
   const onRefresh = async () => {
@@ -376,35 +410,35 @@ function RegularStatisticsScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={[styles.center, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator size="large" color="#E94560" />
-      </View>
+      <LinearGradient colors={theme.pageGradient} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={{ flex: 1 }}>
+        <View style={[styles.center, { backgroundColor: "transparent" }]}>
+          <ActivityIndicator size="large" color={theme.accent} />
+        </View>
+      </LinearGradient>
     );
   }
 
   const maxChartValue = Math.max(...stats.history.map((h) => h.length), 40);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? "#E94560" : "#ff4d88"} />}>
+    <LinearGradient colors={theme.pageGradient} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "transparent" }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" />
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}>
         <View style={styles.pageHeader}>
           <View>
-            <Text style={styles.pageEyebrow}>CYCLE INSIGHTS</Text>
+            <Text style={[styles.pageEyebrow, { color: theme.peach }]}>CYCLE INSIGHTS</Text>
             <Text style={[styles.headerTitle, { color: theme.text }]}>შენი ანალიტიკა</Text>
             <Text style={[styles.pageSubtitle, { color: theme.subText }]}>ციკლის დინამიკა და პერსონალური მაჩვენებლები</Text>
-          </View>
-          <View style={styles.pageHeaderIcon}>
-            <Ionicons name="analytics-outline" size={21} color="#E94560" />
           </View>
         </View>
 
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           <LinearGradient
-            colors={["#F05A76", "#D93656"]}
-            start={{ x: 0, y: 0 }}
+            colors={theme.heroGradient}
+            start={{ x: 0.05, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.heroCard}
+            style={[styles.heroCard, { borderColor: theme.border, borderWidth: 1 }]}
           >
             <View style={styles.heroGlow} />
             <Text style={styles.heroLabel}>მომდევნო პერიოდამდე დარჩა</Text>
@@ -417,24 +451,24 @@ function RegularStatisticsScreen() {
           </LinearGradient>
 
           {stats.history.length > 0 && (
-            <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
+            <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>ციკლის დინამიკა</Text>
-                <View style={styles.cardHeaderIcon}>
-                  <Ionicons name="stats-chart-outline" size={17} color="#E94560" />
+                <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
+                  <Ionicons name="stats-chart-outline" size={17} color={theme.accent} />
                 </View>
               </View>
               <Text style={[styles.cardSubtitle, { color: theme.subText }]}>ბოლო ჩანაწერები დღეების მიხედვით</Text>
               <View style={styles.chartContainer}>
                 {stats.history.map((item, index) => (
-                  <AnimatedBar key={index} index={index} value={item.length} maxValue={maxChartValue} label={item.month} isDark={isDark} />
+                  <AnimatedBar key={index} index={index} value={item.length} maxValue={maxChartValue} label={item.month} isDark={isDark} accent={theme.accent} trackColor={theme.track} />
                 ))}
               </View>
-            </View>
+            </LinearGradient>
           )}
 
           <View style={styles.metricsRow}>
-            <View style={[styles.metricCard, { backgroundColor: theme.card }]}>
+            <LinearGradient colors={theme.cardGradient} style={[styles.metricCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={[styles.iconBox, { backgroundColor: theme.iconBg }]}>
                 <Text style={{ fontSize: 20 }}>🔄</Text>
               </View>
@@ -442,19 +476,19 @@ function RegularStatisticsScreen() {
                 {stats.avgCycle} <Text style={styles.metricUnit}>დღე</Text>
               </Text>
               <Text style={[styles.metricLabel, { color: theme.subText }]}>საშ. ციკლი</Text>
-            </View>
-            <View style={[styles.metricCard, { backgroundColor: theme.card }]}>
-              <View style={[styles.iconBox, { backgroundColor: isDark ? theme.iconBg : "#ffe4e1" }]}>
+            </LinearGradient>
+            <LinearGradient colors={theme.cardGradient} style={[styles.metricCard, { borderColor: theme.border, borderWidth: 1 }]}>
+              <View style={[styles.iconBox, { backgroundColor: theme.activeSoft }]}>
                 <Text style={{ fontSize: 20 }}>🩸</Text>
               </View>
               <Text style={[styles.metricValue, { color: theme.text }]}>
                 {stats.avgPeriod} <Text style={styles.metricUnit}>დღე</Text>
               </Text>
               <Text style={[styles.metricLabel, { color: theme.subText }]}>საშ. პერიოდი</Text>
-            </View>
+            </LinearGradient>
           </View>
 
-          <View style={[styles.datesCard, { backgroundColor: theme.card }]}>
+          <LinearGradient colors={theme.cardGradient} style={[styles.datesCard, { borderColor: theme.border, borderWidth: 1 }]}>
             <View style={styles.dateItem}>
               <Text style={styles.dateIcon}>🌸</Text>
               <View>
@@ -470,14 +504,14 @@ function RegularStatisticsScreen() {
                 <Text style={[styles.dateValue, { color: theme.text }]}>{stats.fertileWindow}</Text>
               </View>
             </View>
-          </View>
+          </LinearGradient>
 
           {stats.topSymptoms.length > 0 && (
-            <View style={[styles.symptomsCard, { backgroundColor: theme.card }]}>
+            <LinearGradient colors={theme.cardGradient} style={[styles.symptomsCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>ხშირი სიმპტომები</Text>
-                <View style={styles.cardHeaderIcon}>
-                  <Ionicons name="pulse-outline" size={17} color="#E94560" />
+                <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
+                  <Ionicons name="pulse-outline" size={17} color={theme.accent} />
                 </View>
               </View>
               {stats.topSymptoms.map((s, i) => {
@@ -488,21 +522,25 @@ function RegularStatisticsScreen() {
                   <View key={i} style={styles.symptomRow}>
                     <View style={styles.symptomHeader}>
                       <Text style={[styles.symptomName, { color: theme.text }]}>{s.label}</Text>
-                      <Text style={[styles.symptomCount, { color: "#E94560" }]}>{s.count}-ჯერ</Text>
+                      <Text style={[styles.symptomCount, { color: theme.accent }]}>{s.count}-ჯერ</Text>
                     </View>
-                    <View style={[styles.symptomTrack, { backgroundColor: isDark ? "#2A2A2A" : "#F5F5F5" }]}>
-                      <View style={[styles.symptomFill, { width: `${percent}%`, backgroundColor: "#E94560" }]} />
+                    <View style={[styles.symptomTrack, { backgroundColor: theme.track }]}>
+                      <View style={[styles.symptomFill, { width: `${percent}%`, backgroundColor: theme.accent }]} />
                     </View>
                   </View>
                 );
               })}
-            </View>
+            </LinearGradient>
           )}
 
           <View style={{ height: 100 }} />
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
+    <View style={styles.floatingDiaryAvatar}>
+      <DiaryAvatar accent={theme.accent} isDark={isDark} size={46} showHint={false} />
+    </View>
+    </LinearGradient>
   );
 }
 
@@ -514,19 +552,52 @@ export default function StatisticsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 12 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 22 },
-  pageEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 1.1, marginBottom: 6 },
+  pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 22, paddingRight: 70 },
+  pageEyebrow: { color: "#FF8A6B", fontSize: 9, fontWeight: "900", letterSpacing: 1.1, marginBottom: 6 },
   pageSubtitle: { fontSize: 13, fontWeight: "600", marginTop: 5 },
-  pageHeaderIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: "rgba(233,69,96,0.12)", alignItems: "center", justifyContent: "center" },
+  pageHeaderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#D98976",
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  floatingDiaryAvatar: { position: "absolute", top: 54, right: 18, zIndex: 30, elevation: 30 },
   headerTitle: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5 },
-  heroCard: { borderRadius: 26, padding: 30, alignItems: "center", marginBottom: 20, overflow: "hidden", elevation: 8, shadowColor: "#E94560", shadowOpacity: 0.28, shadowRadius: 18 },
+  heroCard: {
+    borderRadius: 30,
+    padding: 30,
+    alignItems: "center",
+    marginBottom: 20,
+    overflow: "hidden",
+    elevation: 8,
+    shadowColor: "#D98976",
+    shadowOpacity: 0.22,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+  },
   heroGlow: { position: "absolute", top: -50, right: -50, width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(255,255,255,0.15)" },
   heroLabel: { color: "rgba(255,255,255,0.9)", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.4, marginBottom: 9 },
   heroNumber: { color: "#fff", fontSize: 60, fontWeight: "900", lineHeight: 66 },
   heroSubText: { fontSize: 22, fontWeight: "700", color: "rgba(255,255,255,0.82)" },
   heroDateBadge: { marginTop: 14, backgroundColor: "rgba(0,0,0,0.14)", paddingVertical: 8, paddingHorizontal: 18, borderRadius: 999 },
   heroDate: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  chartCard: { borderRadius: 22, padding: 19, marginBottom: 18, elevation: 3 },
+  chartCard: {
+    borderRadius: 26,
+    padding: 19,
+    marginBottom: 18,
+    elevation: 3,
+    shadowColor: "#D98976",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+  },
   cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 15 },
   cardHeaderIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: "rgba(233,69,96,0.11)", alignItems: "center", justifyContent: "center" },
   cardTitle: { fontSize: 17, fontWeight: "900" },
@@ -538,18 +609,45 @@ const styles = StyleSheet.create({
   barFill: { width: "100%", borderRadius: 10 },
   barLabel: { fontSize: 11, marginTop: 10, fontWeight: "700" },
   metricsRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 18 },
-  metricCard: { width: "48%", padding: 17, borderRadius: 20, elevation: 3 },
+  metricCard: {
+    width: "48%",
+    padding: 17,
+    borderRadius: 24,
+    elevation: 3,
+    shadowColor: "#D98976",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+  },
   iconBox: { width: 40, height: 40, borderRadius: 13, justifyContent: "center", alignItems: "center", marginBottom: 13 },
   metricValue: { fontSize: 27, fontWeight: "900" },
   metricUnit: { fontSize: 13, fontWeight: "700", color: "#999" },
   metricLabel: { fontSize: 12, marginTop: 5, fontWeight: "700" },
-  datesCard: { borderRadius: 22, padding: 19, marginBottom: 18, elevation: 3 },
+  datesCard: {
+    borderRadius: 26,
+    padding: 19,
+    marginBottom: 18,
+    elevation: 3,
+    shadowColor: "#D98976",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+  },
   dateItem: { flexDirection: "row", alignItems: "center" },
   dateIcon: { fontSize: 28, marginRight: 14 },
   dateLabel: { fontSize: 12, fontWeight: "700", marginBottom: 4 },
   dateValue: { fontSize: 16, fontWeight: "900" },
   dateDivider: { height: 1, marginVertical: 17 },
-  symptomsCard: { borderRadius: 22, padding: 19, marginBottom: 18, elevation: 3 },
+  symptomsCard: {
+    borderRadius: 26,
+    padding: 19,
+    marginBottom: 18,
+    elevation: 3,
+    shadowColor: "#D98976",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+  },
   symptomRow: { marginBottom: 16 },
   symptomHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   symptomName: { fontSize: 14, fontWeight: "700" },

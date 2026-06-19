@@ -11,11 +11,13 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Image,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
@@ -25,6 +27,7 @@ import {
 } from "../../services/assistantOrchestrator";
 import { saveAssistantChatHistory } from "../../services/assistantHistory";
 import { supabase } from "../../services/supabase";
+const ASSISTANT_GUIDE_IMAGE = require("../../assets/images/assistant-guide.png");
 
 const QUICK_PROMPTS = [
   "დღეს როგორ მოვუარო თავს?",
@@ -111,6 +114,7 @@ const formatSymptomsText = (symptoms) =>
 
 export default function AssistantScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { isDark, isPremium, isAdmin } = useTheme();
   const { pregnancyMode, currentWeek, currentTrimester, daysRemaining } = usePregnancy();
   const scrollRef = useRef(null);
@@ -124,18 +128,25 @@ export default function AssistantScreen() {
   const [sending, setSending] = useState(false);
   const [questionsUsedToday, setQuestionsUsedToday] = useState(0);
   const [assistantUserId, setAssistantUserId] = useState(null);
+  const [userAvatarUri, setUserAvatarUri] = useState("");
 
   const theme = {
-    bg: isDark ? "#0F0F0F" : "#F7F8FA",
-    card: isDark ? "#1A1A1A" : "#FFFFFF",
-    text: isDark ? "#FFFFFF" : "#1A1A1A",
-    subText: isDark ? "#A8A8A8" : "#7A7A7A",
-    primary: isDark ? "#E94560" : "#FF4D88",
-    input: isDark ? "#202020" : "#F4F5F8",
-    border: isDark ? "#2B2B2B" : "#ECECEC",
-    quickChip: isDark ? "#262626" : "#FFF1F6",
-    userBubble: isDark ? "#E94560" : "#FF4D88",
-    assistantBubble: isDark ? "#1E1E1E" : "#FFFFFF",
+    bg: isDark ? "#211621" : "#FFFDFC",
+    card: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.78)",
+    text: isDark ? "#FFF7FB" : "#2F2026",
+    subText: isDark ? "#E9C7D4" : "#8F6574",
+    primary: "#FF4D88",
+    peach: "#FF9E7D",
+    lavender: "#B8A4FF",
+    input: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.72)",
+    border: isDark ? "rgba(255,209,224,0.16)" : "rgba(255,255,255,0.78)",
+    quickChip: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.62)",
+    userBubble: "#FF8A6B",
+    assistantBubble: isDark ? "rgba(67,49,72,0.82)" : "rgba(255,255,255,0.78)",
+    noticeGradient: pregnancyMode
+      ? isDark ? ["rgba(56,37,46,0.94)", "rgba(24,15,20,0.86)"] : ["rgba(255,255,255,0.92)", "rgba(255,234,241,0.86)"]
+      : isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.96)", "rgba(255,242,232,0.9)", "rgba(246,240,255,0.86)"],
+    composerBg: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.74)",
   };
 
   const dailyQuestionLimit = isAdmin
@@ -148,6 +159,7 @@ export default function AssistantScreen() {
     dailyQuestionLimit - questionsUsedToday
   );
   const hasQuestionLeft = remainingQuestions > 0;
+  const tabBarClearance = Math.max(insets.bottom, 10) + 84;
 
   const loadScreenData = useCallback(async () => {
     if (messages.length === 0) {
@@ -163,6 +175,7 @@ export default function AssistantScreen() {
       if (!user) {
         setAssistantUserId(null);
         setUserName("");
+        setUserAvatarUri("");
         setSummary(EMPTY_SUMMARY);
         setQuestionsUsedToday(0);
         setMessages((prev) => (prev.length ? prev : [buildWelcomeMessage("")]));
@@ -174,7 +187,7 @@ export default function AssistantScreen() {
       const [{ data: profile }, usageCount] = await Promise.all([
         supabase
           .from("profiles")
-          .select("name")
+          .select("name, avatar_path")
           .eq("id", user.id)
           .maybeSingle(),
         getAssistantDailyUsage(user.id),
@@ -182,9 +195,19 @@ export default function AssistantScreen() {
 
       const fallbackName =
         profile?.name || user.email?.split("@")[0] || "";
+      let avatarUrl = "";
+      if (profile?.avatar_path) {
+        const { data: signedUrl, error: signedUrlError } = await supabase.storage
+          .from("avatars")
+          .createSignedUrl(profile.avatar_path, 60 * 60);
+        if (!signedUrlError && signedUrl?.signedUrl) {
+          avatarUrl = signedUrl.signedUrl;
+        }
+      }
 
       setAssistantUserId(user.id);
       setUserName(fallbackName);
+      setUserAvatarUri(avatarUrl);
       setQuestionsUsedToday(usageCount);
       setMessages((prev) => (prev.length ? prev : [buildWelcomeMessage(fallbackName)]));
       setLoadingProfile(false);
@@ -197,6 +220,7 @@ export default function AssistantScreen() {
     } catch (error) {
       console.log("Assistant profile load error:", error);
       setAssistantUserId(null);
+      setUserAvatarUri("");
       setSummary(EMPTY_SUMMARY);
       setMessages((prev) => (prev.length ? prev : [buildWelcomeMessage("")]));
     } finally {
@@ -298,12 +322,19 @@ export default function AssistantScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+    <LinearGradient
+      colors={pregnancyMode
+        ? isDark ? ["#25151B", "#140E12", "#120C10"] : ["#FFFDFC", "#FFEFF4", "#F8B5C9"]
+        : isDark ? ["#2A1B2A", "#211621", "#17151D"] : ["#FFFDFC", "#FFF1EB", "#F6F0FF"]}
+      start={{ x: 0.15, y: 0 }}
+      end={{ x: 0.85, y: 1 }}
+      style={{ flex: 1 }}
+    >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
-        <View style={[styles.header, { backgroundColor: theme.bg }]}>
+        <View style={styles.header}>
           <View style={styles.headerRow}>
             <View style={styles.headerCopy}>
               <Text style={styles.headerEyebrow}>PERSONAL HEALTH ASSISTANT</Text>
@@ -314,8 +345,8 @@ export default function AssistantScreen() {
                   : "მკითხე რაც გაინტერესებს"}
               </Text>
             </View>
-            <View style={styles.headerIcon}>
-              <Ionicons name="sparkles-outline" size={22} color={theme.primary} />
+            <View style={[styles.headerAssistantPortrait, { borderColor: theme.border }]}>
+              <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.headerAssistantImage} resizeMode="cover" />
             </View>
           </View>
         </View>
@@ -323,7 +354,7 @@ export default function AssistantScreen() {
         <ScrollView
           ref={scrollRef}
           style={styles.chatScroll}
-          contentContainerStyle={styles.chatContent}
+          contentContainerStyle={[styles.chatContent, { paddingBottom: tabBarClearance + 18 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() =>
@@ -331,11 +362,13 @@ export default function AssistantScreen() {
           }
         >
           <LinearGradient
-            colors={isDark ? ["#1D191E", "#151417"] : ["#FFFFFF", "#FFF8FA"]}
+            colors={theme.noticeGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={[styles.noticeCard, { borderColor: theme.border }]}
           >
+            <View style={styles.noticeGlowPeach} />
+            <View style={styles.noticeGlowLavender} />
             <View style={styles.noticeHeader}>
               <View>
                 <Text style={styles.noticeEyebrow}>{pregnancyMode ? "MATERNITY OVERVIEW" : "DAILY OVERVIEW"}</Text>
@@ -433,7 +466,7 @@ export default function AssistantScreen() {
               >
                 {!isUser && (
                   <View style={[styles.assistantAvatar, { backgroundColor: `${theme.primary}1A` }]}>
-                    <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
+                    <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.assistantAvatarImage} resizeMode="cover" />
                   </View>
                 )}
                 <View style={{ maxWidth: "80%" }}>
@@ -445,6 +478,10 @@ export default function AssistantScreen() {
                         ? theme.userBubble
                         : theme.assistantBubble,
                       borderColor: isUser ? theme.userBubble : theme.border,
+                      shadowColor: pregnancyMode && !isUser ? "#E48AA8" : undefined,
+                      shadowOpacity: pregnancyMode && !isUser ? 0.08 : undefined,
+                      shadowRadius: pregnancyMode && !isUser ? 10 : undefined,
+                      shadowOffset: pregnancyMode && !isUser ? { width: 0, height: 6 } : undefined,
                     },
                   ]}
                 >
@@ -463,6 +500,17 @@ export default function AssistantScreen() {
                   </Text>
                 )}
               </View>
+                {isUser && (
+                  <View style={[styles.userMessageAvatar, { backgroundColor: `${theme.primary}18`, borderColor: `${theme.primary}40` }]}>
+                    {userAvatarUri ? (
+                      <Image source={{ uri: userAvatarUri }} style={styles.userMessageAvatarImage} resizeMode="cover" />
+                    ) : userName ? (
+                      <Text style={[styles.userMessageAvatarInitial, { color: theme.primary }]}>{userName.trim().charAt(0).toUpperCase()}</Text>
+                    ) : (
+                      <Ionicons name="person-outline" size={16} color={theme.primary} />
+                    )}
+                  </View>
+                )}
               </View>
             );
           })}
@@ -470,7 +518,7 @@ export default function AssistantScreen() {
           {sending && (
             <View style={styles.typingRow}>
               <View style={[styles.assistantAvatar, { backgroundColor: `${theme.primary}1A` }]}>
-                <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
+                <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.assistantAvatarImage} resizeMode="cover" />
               </View>
               <View
                 style={[
@@ -489,7 +537,13 @@ export default function AssistantScreen() {
         <View
           style={[
             styles.composer,
-            { backgroundColor: theme.bg, borderTopColor: theme.border },
+            {
+              backgroundColor: pregnancyMode
+                ? theme.composerBg
+                : theme.composerBg,
+              borderColor: theme.border,
+              paddingBottom: tabBarClearance,
+            },
           ]}
         >
         <View style={styles.composerMeta}>
@@ -527,7 +581,12 @@ export default function AssistantScreen() {
           <View
             style={[
               styles.inputWrap,
-              { backgroundColor: theme.input, borderColor: theme.border },
+              {
+                backgroundColor: pregnancyMode
+                  ? theme.input
+                  : theme.input,
+                borderColor: theme.border,
+              },
             ]}
           >
             <TextInput
@@ -564,38 +623,65 @@ export default function AssistantScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { paddingTop: 62, paddingHorizontal: 20, paddingBottom: 18 },
+  header: { paddingTop: 62, paddingHorizontal: 20, paddingBottom: 18, backgroundColor: "transparent" },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerCopy: { flex: 1, paddingRight: 14 },
-  headerEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 1.05, marginBottom: 6 },
+  headerEyebrow: { color: "#FF8A6B", fontSize: 10, fontWeight: "900", letterSpacing: 0.8, marginBottom: 6 },
   headerTitle: { fontSize: 29, fontWeight: "900", letterSpacing: -0.5 },
   headerSubtitle: { marginTop: 6, fontSize: 14, fontWeight: "600", lineHeight: 20 },
   headerIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: "rgba(233,69,96,0.12)", alignItems: "center", justifyContent: "center" },
+  headerAvatar: {
+    shadowColor: "#D98976",
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  headerAssistantPortrait: {
+    width: 58,
+    height: 58,
+    borderRadius: 22,
+    overflow: "hidden",
+    borderWidth: 1,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    shadowColor: "#D98976",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  headerAssistantImage: { width: "100%", height: "100%" },
   chatScroll: { flex: 1 },
   chatContent: { paddingHorizontal: 20, paddingBottom: 20 },
   noticeCard: {
-    borderRadius: 22,
+    borderRadius: 26,
     padding: 18,
     borderWidth: 1,
     marginBottom: 20,
     overflow: "hidden",
-    elevation: 3,
+    elevation: 5,
+    shadowColor: "#D98976",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
   },
+  noticeGlowPeach: { position: "absolute", width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(255,158,125,0.16)", top: -70, right: -48 },
+  noticeGlowLavender: { position: "absolute", width: 170, height: 170, borderRadius: 85, backgroundColor: "rgba(184,164,255,0.14)", bottom: -78, left: -58 },
   noticeHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 11 },
-  noticeEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 0.95, marginBottom: 5 },
-  noticeIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: "rgba(233,69,96,0.11)", alignItems: "center", justifyContent: "center" },
+  noticeEyebrow: { color: "#FF8A6B", fontSize: 9, fontWeight: "900", letterSpacing: 0.95, marginBottom: 5 },
+  noticeIcon: { width: 40, height: 40, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.72)", alignItems: "center", justifyContent: "center" },
   noticeTitle: { fontSize: 17, fontWeight: "900" },
   noticeText: { fontSize: 14, lineHeight: 21 },
   summaryLoadingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   summaryGrid: { marginTop: 14, gap: 9 },
-  summaryItem: { flex: 1, borderRadius: 13, padding: 11, backgroundColor: "rgba(150,150,150,0.07)" },
-  summaryItemFull: { width: "100%", borderRadius: 13, padding: 11, backgroundColor: "rgba(150,150,150,0.07)" },
+  summaryItem: { flex: 1, borderRadius: 16, padding: 12, backgroundColor: "rgba(255,255,255,0.34)", borderWidth: 1, borderColor: "rgba(255,255,255,0.44)" },
+  summaryItemFull: { width: "100%", borderRadius: 16, padding: 12, backgroundColor: "rgba(255,255,255,0.34)", borderWidth: 1, borderColor: "rgba(255,255,255,0.44)" },
   summaryLabel: {
     fontSize: 10,
     fontWeight: "800",
@@ -613,19 +699,40 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 999,
     borderWidth: 1,
+    shadowColor: "#D98976",
+    shadowOpacity: 0.07,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 5 },
   },
   quickChipDisabled: { opacity: 0.45 },
   quickChipText: { fontSize: 12, fontWeight: "800" },
   messageRow: { marginBottom: 13, flexDirection: "row", alignItems: "flex-end", gap: 7 },
   messageRowLeft: { justifyContent: "flex-start" },
   messageRowRight: { justifyContent: "flex-end" },
-  assistantAvatar: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  assistantAvatar: { width: 34, height: 34, borderRadius: 14, alignItems: "center", justifyContent: "center", flexShrink: 0, borderWidth: 1, borderColor: "rgba(255,255,255,0.45)", overflow: "hidden" },
+  assistantAvatarImage: { width: "100%", height: "100%" },
+  userMessageAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  userMessageAvatarImage: { width: "100%", height: "100%" },
+  userMessageAvatarInitial: { fontSize: 14, fontWeight: "900" },
   messageBubble: {
     maxWidth: "84%",
-    borderRadius: 18,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
     borderWidth: 1,
+    shadowColor: "#D98976",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
   },
   messageText: { fontSize: 14, lineHeight: 21 },
   typingRow: { marginTop: 4, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 7 },
@@ -641,10 +748,18 @@ const styles = StyleSheet.create({
   },
   typingText: { fontSize: 13, fontWeight: "600" },
   composer: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
+    marginHorizontal: 12,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingTop: 12,
     paddingBottom: 18,
-    borderTopWidth: 1,
+    borderWidth: 1,
+    borderRadius: 28,
+    shadowColor: "#D98976",
+    shadowOpacity: 0.16,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 14,
   },
   composerMeta: {
     flexDirection: "row",
@@ -657,7 +772,15 @@ const styles = StyleSheet.create({
   limitText: { flex: 1, fontSize: 12, fontWeight: "600", lineHeight: 18 },
   limitTextAction: { textDecorationLine: "underline" },
   limitLink: { fontSize: 13, fontWeight: "800" },
-  inputWrap: { borderRadius: 20, borderWidth: 1, padding: 7 },
+  inputWrap: {
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 7,
+    shadowColor: "#D98976",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
   input: {
     minHeight: 46,
     maxHeight: 120,

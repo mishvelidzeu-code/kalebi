@@ -1,5 +1,6 @@
 import { Audio } from "expo-av"; // 👈 დამატებულია ხმა
 import * as Haptics from "expo-haptics"; // 👈 დამატებულია ვიბრაცია
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
@@ -9,6 +10,7 @@ import { syncCycleRemindersForUser } from "../services/notifications";
 import { supabase } from "../services/supabase";
 
 const { width, height } = Dimensions.get("window");
+const SPLASH_IMAGE = require("../assets/images/splash-hero.png");
 
 export default function Splash() {
   const router = useRouter();
@@ -16,6 +18,7 @@ export default function Splash() {
   // --- ანიმაციების სტეიტები ---
   const mainOpacity = useRef(new Animated.Value(1)).current;
   const logoScale = useRef(new Animated.Value(0)).current;
+  const imageZoom = useRef(new Animated.Value(0)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
   const textTranslateY = useRef(new Animated.Value(20)).current;
 
@@ -110,6 +113,12 @@ export default function Splash() {
       ]),
     ]).start();
 
+    Animated.timing(imageZoom, {
+      toValue: 1,
+      duration: 4500,
+      useNativeDriver: true,
+    }).start();
+
     // --- 2. ლოგოს გაძლიერებული ფეთქვა (1.6-მდე იზრდება) ---
     Animated.loop(
       Animated.sequence([
@@ -154,15 +163,16 @@ export default function Splash() {
         Animated.timing(floatAnim2, { toValue: 0, duration: 5000, useNativeDriver: true }),
       ])
     ).start();
-  }, []);
+  }, [floatAnim1, floatAnim2, glowAnim, imageZoom, logoScale, magicAnim, mainOpacity, router, starPulse, textOpacity, textTranslateY]);
 
   // --- მაგიური ანიმაციის გამოთვლები ---
   const starLeft = magicAnim.interpolate({ inputRange: [0, 1, 2], outputRange: [0, 240, 240] });
   const tailLeft = magicAnim.interpolate({ inputRange: [0, 1, 2], outputRange: [0, 0, 240] });
   const tailWidth = magicAnim.interpolate({ inputRange: [0, 1, 2], outputRange: [0, 240, 0] });
-  const glowOpacity = glowAnim.interpolate({ inputRange: [1, 1.6], outputRange: [0.5, 0] });
   const translateY1 = floatAnim1.interpolate({ inputRange: [0, 1], outputRange: [0, -30] });
   const translateY2 = floatAnim2.interpolate({ inputRange: [0, 1], outputRange: [0, 40] });
+  const splashImageScale = imageZoom.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.02] });
+  const splashImageTranslateY = imageZoom.interpolate({ inputRange: [0, 1], outputRange: [6, -6] });
 
   return (
     <Animated.View style={{ flex: 1, opacity: mainOpacity }}>
@@ -187,11 +197,26 @@ export default function Splash() {
           </View>
 
           <View style={styles.logoWrapper}>
-            <Animated.View style={[styles.glowRing, { transform: [{ scale: glowAnim }], opacity: glowOpacity }]} />
-            <Animated.View style={[styles.glowRing2, { transform: [{ scale: glowAnim }], opacity: glowOpacity }]} />
-
-            <Animated.View style={[styles.logoContainer, { transform: [{ scale: logoScale }] }]}>
-              <Text style={styles.logo}>✨</Text>
+            <Animated.View style={[styles.splashImageFrame, { transform: [{ scale: logoScale }] }]}>
+              <Animated.View
+                style={[
+                  styles.splashImageMotion,
+                  {
+                    transform: [
+                      { scale: splashImageScale },
+                      { translateY: splashImageTranslateY },
+                    ],
+                  },
+                ]}
+              >
+                <Image
+                  source={SPLASH_IMAGE}
+                  style={styles.splashImage}
+                  contentFit="contain"
+                  transition={180}
+                  onError={(error) => console.log("Splash image error:", error)}
+                />
+              </Animated.View>
             </Animated.View>
           </View>
 
@@ -212,9 +237,12 @@ const styles = StyleSheet.create({
   magicTrail: { position: "absolute", height: 3, backgroundColor: "#ff4d88", borderRadius: 2, shadowColor: "#ff4d88", shadowOpacity: 1, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
   magicStarWrapper: { position: "absolute", transform: [{ translateX: -12 }, { translateY: -17 }] },
   pinkStar: { color: "#ff4d88", fontSize: 28, textShadowColor: "rgba(255, 77, 136, 0.8)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10 },
-  logoWrapper: { justifyContent: "center", alignItems: "center", marginBottom: 40, width: 160, height: 160 },
-  glowRing: { position: "absolute", width: 120, height: 120, borderRadius: 60, backgroundColor: "#ff4d88" },
-  glowRing2: { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(255, 77, 136, 0.5)" },
+  logoWrapper: { justifyContent: "center", alignItems: "center", marginBottom: 18, width: width, height: height * 0.48, transform: [{ translateY: -50 }] },
+  glowRing: { position: "absolute", width: 170, height: 170, borderRadius: 85, backgroundColor: "#ff4d88" },
+  glowRing2: { position: "absolute", width: 210, height: 210, borderRadius: 105, backgroundColor: "rgba(255, 77, 136, 0.5)" },
+  splashImageFrame: { width: width * 0.92, height: height * 0.44, overflow: "visible" },
+  splashImageMotion: { width: "100%", height: "100%" },
+  splashImage: { width: "100%", height: "100%" },
   logoContainer: { width: 110, height: 110, borderRadius: 55, backgroundColor: "#ff4d88", justifyContent: "center", alignItems: "center", elevation: 15, shadowColor: "#ff4d88", shadowOpacity: 0.6, shadowRadius: 25, shadowOffset: { width: 0, height: 12 }, borderWidth: 3, borderColor: "rgba(255, 255, 255, 0.6)" },
   logo: { fontSize: 50 },
   title: { fontSize: 42, fontWeight: "900", color: "#ff4d88", letterSpacing: 1, textShadowColor: "rgba(255, 77, 136, 0.2)", textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 10 },

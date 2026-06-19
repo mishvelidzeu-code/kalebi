@@ -1,8 +1,10 @@
 import dayjs from "dayjs";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { AppState } from "react-native";
 
 import { supabase } from "../services/supabase";
 import { schedulePregnancyNotifications, syncCycleRemindersForUser } from "../services/notifications";
+import { resolvePregnancyAccessFromProfile } from "../services/purchases";
 
 const PregnancyContext = createContext(null);
 
@@ -19,14 +21,33 @@ export function PregnancyProvider({ children }) {
 
       const { data } = await supabase
         .from("profiles")
-        .select("pregnancy_mode, pregnancy_start_date, has_pregnancy_subscription")
+        .select("pregnancy_mode, pregnancy_start_date, has_pregnancy_subscription, pregnancy_until")
         .eq("id", user.id)
         .single();
 
       if (data) {
-        setPregnancyMode(data.pregnancy_mode ?? false);
-        setPregnancyStartDate(data.pregnancy_start_date ?? null);
-        setHasSubscription(data.has_pregnancy_subscription ?? false);
+        const hasPaidAccess = resolvePregnancyAccessFromProfile(data);
+        const nextPregnancyMode = data.pregnancy_mode ?? false;
+        const nextStartDate = data.pregnancy_start_date ?? null;
+        const nextHasSubscription = Boolean(hasPaidAccess || nextPregnancyMode);
+
+        if (nextHasSubscription && !data.has_pregnancy_subscription) {
+          await supabase
+            .from("profiles")
+            .update({ has_pregnancy_subscription: true })
+            .eq("id", user.id);
+        }
+
+        if (!hasPaidAccess && data.has_pregnancy_subscription) {
+          await supabase
+            .from("profiles")
+            .update({ has_pregnancy_subscription: false })
+            .eq("id", user.id);
+        }
+
+        setPregnancyMode(nextPregnancyMode);
+        setPregnancyStartDate(nextStartDate);
+        setHasSubscription(nextHasSubscription);
       }
     } catch (error) {
       console.error("PregnancyContext load error:", error);
@@ -37,6 +58,16 @@ export function PregnancyProvider({ children }) {
 
   useEffect(() => {
     loadPregnancyData();
+  }, [loadPregnancyData]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        loadPregnancyData();
+      }
+    });
+
+    return () => subscription.remove();
   }, [loadPregnancyData]);
 
   const enablePregnancyMode = useCallback(async (startDate) => {
@@ -63,9 +94,15 @@ export function PregnancyProvider({ children }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    await supabase.from("profiles").update({
+    const updatePayload = {
       pregnancy_mode: false,
-    }).eq("id", user.id);
+    };
+
+    if (hasSubscription) {
+      updatePayload.has_pregnancy_subscription = true;
+    }
+
+    await supabase.from("profiles").update(updatePayload).eq("id", user.id);
 
     setPregnancyMode(false);
 
@@ -73,7 +110,7 @@ export function PregnancyProvider({ children }) {
     setTimeout(() => {
       syncCycleRemindersForUser().catch(() => {});
     }, 500);
-  }, []);
+  }, [hasSubscription]);
 
   const currentWeek = pregnancyStartDate
     ? Math.min(Math.floor(dayjs().diff(dayjs(pregnancyStartDate), "day") / 7) + 1, 40)

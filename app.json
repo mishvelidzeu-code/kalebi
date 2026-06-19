@@ -11,7 +11,7 @@
     "owner": "qalebi",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "18",
+      "buildNumber": "19",
       "bundleIdentifier": "com.mishvela.kalebi",
       "infoPlist": {
         "NSFaceIDUsageDescription": "აპლიკაციაში სწრაფად და უსაფრთხოდ შესასვლელად გამოიყენება Face ID.",

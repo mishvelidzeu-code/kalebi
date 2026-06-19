@@ -1,17 +1,17 @@
 import dayjs from "dayjs";
 import "dayjs/locale/ka";
-dayjs.locale("ka");
 import DateTimePicker from "@react-native-community/datetimepicker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Modal, Platform, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
@@ -19,11 +19,15 @@ import { invalidateAssistantContextCache } from "../../services/assistantOrchest
 import { disableCycleReminders, getNotificationsEnabled, setNotificationsEnabled, syncCycleRemindersForUser } from "../../services/notifications";
 import {
   resetPurchasesIdentity,
+  hasAndroidPregnancyCheckoutConfigured,
   getPregnancyOfferings,
+  openAndroidPregnancyCheckout,
   purchasePregnancyPackage,
   checkPregnancySubscriptionStatus,
 } from "../../services/purchases";
 import { supabase } from "../../services/supabase";
+
+dayjs.locale("ka");
 
 const getAvatarStorageKey = (userId) => `@cycle-care/avatar/${userId}`;
 const AVATAR_BUCKET = "avatars";
@@ -71,7 +75,7 @@ const getFileExtension = (asset) => {
 export default function ProfileScreen() {
   const router = useRouter();
   const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin } = useTheme();
-  const { pregnancyMode, currentWeek, enablePregnancyMode, disablePregnancyMode } = usePregnancy();
+  const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
 
   const [userId, setUserId] = useState("");
   const [email, setEmail] = useState("");
@@ -90,8 +94,11 @@ export default function ProfileScreen() {
   const [showProfileEdit, setShowProfileEdit] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showPregnancyModal, setShowPregnancyModal] = useState(false);
+  const [showFertilityModal, setShowFertilityModal] = useState(false);
   const [selectedPregnancyDate, setSelectedPregnancyDate] = useState(new Date());
   const [pregnancySaving, setPregnancySaving] = useState(false);
+  const [fertilitySaving, setFertilitySaving] = useState(false);
+  const [pendingAndroidCheckout, setPendingAndroidCheckout] = useState(null);
   const [tempName, setTempName] = useState("");
   const [tempPhoneNumber, setTempPhoneNumber] = useState("");
 
@@ -102,10 +109,60 @@ export default function ProfileScreen() {
     loadNotificationState();
   }, []);
 
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return undefined;
+    }
+
+    const subscription = AppState.addEventListener("change", async (nextState) => {
+      if (nextState !== "active" || !pendingAndroidCheckout) {
+        return;
+      }
+
+      const pendingCheckout = pendingAndroidCheckout;
+      setPendingAndroidCheckout(null);
+
+      try {
+        const status = await checkPregnancySubscriptionStatus();
+        await Promise.all([reloadPregnancy(), loadProfile()]);
+
+        if (!status.hasSubscription) {
+          return;
+        }
+
+        if (pendingCheckout.type === "pregnancy") {
+          await enablePregnancyMode(pendingCheckout.dateStr);
+          setShowPregnancyModal(false);
+          setSelectedPregnancyDate(null);
+          Alert.alert("ორსულობის რეჟიმი ჩაირთო", "გადახდა დადასტურდა და ორსულობის რეჟიმი ჩაირთო.");
+          return;
+        }
+
+        await updateGoalMode("დაორსულება");
+        setShowFertilityModal(false);
+        Alert.alert("დაორსულების რეჟიმი ჩაირთო", "გადახდა დადასტურდა და დაგეგმვის რეჟიმი ჩაირთო.");
+      } catch (error) {
+        console.log("Android pregnancy checkout refresh error:", error);
+        Alert.alert("შეცდომა", "გადახდის სტატუსის განახლება ვერ მოხერხდა. სცადე ხელახლა.");
+      }
+    });
+
+    return () => subscription.remove();
+  }, [enablePregnancyMode, pendingAndroidCheckout, reloadPregnancy]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([loadProfile(), loadNotificationState()]);
+    await Promise.all([loadProfile(), loadNotificationState(), reloadPregnancy()]);
     setRefreshing(false);
+  }, [reloadPregnancy]);
+
+  const startAndroidPregnancyCheckout = useCallback(async (payload) => {
+    if (!hasAndroidPregnancyCheckoutConfigured()) {
+      throw new Error("android-pregnancy-payment-url-not-configured");
+    }
+
+    await openAndroidPregnancyCheckout();
+    setPendingAndroidCheckout(payload);
   }, []);
 
   const loadNotificationState = async () => {
@@ -349,16 +406,35 @@ export default function ProfileScreen() {
   };
 
   const theme = {
-    bg: isDark ? "#0F0F0F" : "#F7F8FA",
-    headerBg: isDark ? "#1A1A1A" : "#FFFFFF",
-    card: isDark ? "#1A1A1A" : "#FFFFFF",
-    text: isDark ? "#FFFFFF" : "#1A1A1A",
-    subText: isDark ? "#AAAAAA" : "#888888",
-    primary: isDark ? "#E94560" : "#ff4d88",
-    divider: isDark ? "#2A2A2A" : "#F0F0F0",
-    input: isDark ? "#252525" : "#F5F5F5",
-    logoutBg: isDark ? "rgba(255, 59, 48, 0.1)" : "#FFEBEB",
+    bg: pregnancyMode ? (isDark ? "#181015" : "#FFF8FA") : isDark ? "#211621" : "#FFFDFC",
+    headerBg: pregnancyMode ? (isDark ? "rgba(36,24,31,0.84)" : "rgba(255,255,255,0.72)") : isDark ? "rgba(67,49,72,0.82)" : "rgba(255,255,255,0.78)",
+    card: pregnancyMode ? (isDark ? "rgba(36,24,31,0.84)" : "rgba(255,255,255,0.72)") : isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.78)",
+    text: pregnancyMode ? (isDark ? "#FFF5F8" : "#2F2026") : isDark ? "#FFF7FB" : "#2F2026",
+    subText: pregnancyMode ? (isDark ? "#D7B9C4" : "#8E6273") : isDark ? "#E9C7D4" : "#8F6574",
+    primary: "#FF4D88",
+    divider: pregnancyMode ? (isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.58)") : isDark ? "rgba(255,209,224,0.12)" : "rgba(255,255,255,0.64)",
+    input: pregnancyMode ? (isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.62)") : isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.68)",
+    logoutBg: pregnancyMode ? (isDark ? "rgba(255,77,136,0.10)" : "rgba(255,255,255,0.56)") : isDark ? "rgba(255,77,136,0.10)" : "#FFEBEB",
+    switchTrackOff: isDark ? "#34343A" : "#D7DCE4",
+    switchThumbOff: isDark ? "#F5F5F7" : "#FFFFFF",
+    switchThumbOn: "#FFFFFF",
+    pickerBg: pregnancyMode ? (isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.62)") : isDark ? "rgba(255,209,224,0.10)" : "#F8F1F4",
+    pickerBorder: pregnancyMode ? (isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.82)") : isDark ? "rgba(255,209,224,0.16)" : "#F3D7E1",
+    border: pregnancyMode ? (isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.82)") : isDark ? "rgba(255,209,224,0.16)" : "rgba(255,255,255,0.78)",
+    glass: pregnancyMode ? (isDark ? "rgba(44,29,37,0.72)" : "rgba(255,255,255,0.58)") : isDark ? "rgba(67,49,72,0.72)" : "rgba(255,255,255,0.66)",
+    activeSoft: pregnancyMode ? (isDark ? "rgba(255,77,136,0.18)" : "rgba(255,77,136,0.12)") : isDark ? "rgba(255,77,136,0.18)" : "rgba(255,77,136,0.12)",
+    activeBorder: pregnancyMode ? (isDark ? "rgba(255,144,177,0.35)" : "rgba(255,77,136,0.35)") : isDark ? "rgba(255,144,177,0.35)" : "rgba(255,77,136,0.35)",
+    cardGradient: pregnancyMode
+      ? isDark ? ["rgba(58,38,48,0.94)", "rgba(28,18,24,0.84)"] : ["rgba(255,255,255,0.9)", "rgba(255,234,241,0.82)"]
+      : isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.94)", "rgba(255,240,232,0.84)", "rgba(246,240,255,0.82)"],
+    heroGradient: pregnancyMode
+      ? isDark ? ["rgba(58,38,48,0.96)", "rgba(35,22,29,0.9)"] : ["rgba(255,255,255,0.94)", "rgba(255,231,239,0.94)"]
+      : isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.94)", "rgba(255,242,232,0.9)", "rgba(246,240,255,0.86)"],
   };
+  const rootGradient = pregnancyMode
+    ? isDark ? ["#25151B", "#140E12", "#120C10"] : ["#FFFDFC", "#FFEFF4", "#F8B5C9"]
+    : isDark ? ["#2A1B2A", "#211621", "#17151D"] : ["#FFFDFC", "#FFF1EB", "#F6F0FF"];
+  const glassBlockStyle = { backgroundColor: theme.glass, borderColor: theme.border, borderWidth: 1 };
 
   const saveSettings = async (hideModalCallback = null, specificFields = {}) => {
     const finalName = tempName.trim() !== "" ? tempName : userName;
@@ -414,16 +490,66 @@ export default function ProfileScreen() {
     }
   };
 
-  const handlePregnancyEnable = async () => {
+  const updateGoalMode = async (nextGoal) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("user-not-found");
+
+    const finalName = tempName.trim() !== "" ? tempName : userName;
+    const finalPhoneNumber = tempPhoneNumber.trim() || phoneNumber;
+
+    const payload = {
+      id: user.id,
+      email: user.email,
+      name: finalName,
+      phone_number: finalPhoneNumber,
+      cycle_length: Number(cycleLength),
+      period_length: Number(periodLength),
+      goal: nextGoal,
+    };
+
+    const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+    if (error) throw error;
+
+    setGoal(nextGoal);
+    invalidateAssistantContextCache();
+  };
+
+  const handlePregnancyEnable = async (overrideStartDate = null) => {
     setPregnancySaving(true);
     try {
-      const dateStr = dayjs(selectedPregnancyDate).format("YYYY-MM-DD");
+      const fallbackDate = selectedPregnancyDate instanceof Date ? selectedPregnancyDate : new Date();
+      const dateStr = overrideStartDate || dayjs(fallbackDate).format("YYYY-MM-DD");
 
       if (isAdmin) {
         await enablePregnancyMode(dateStr);
         setShowPregnancyModal(false);
         setSelectedPregnancyDate(null);
         Alert.alert("ადმინ წვდომა აქტიურია ✨", "ორსულობის რეჟიმი ჩაირთო შეზღუდვების გარეშე.");
+        return;
+      }
+
+      if (hasSubscription) {
+        await enablePregnancyMode(dateStr);
+        setShowPregnancyModal(false);
+        setSelectedPregnancyDate(null);
+        Alert.alert("ორსულობის რეჟიმი ჩაირთო ✨", "აპლიკაცია ახლა მორგებულია შენი ორსულობისთვის.");
+        return;
+      }
+
+      if (Platform.OS === "android") {
+        const status = await checkPregnancySubscriptionStatus();
+        if (status.hasSubscription) {
+          await enablePregnancyMode(dateStr);
+          setShowPregnancyModal(false);
+          setSelectedPregnancyDate(null);
+          Alert.alert("ორსულობის რეჟიმი ჩაირთო", "ანგარიშზე უკვე გაქვს აქტიური წვდომა და რეჟიმი ჩაირთო.");
+          return;
+        }
+
+        await startAndroidPregnancyCheckout({ type: "pregnancy", dateStr });
+        Alert.alert("გადახდა გაიხსნა", "გააგრძელე გადახდა ვებსაიტზე. აპში დაბრუნების შემდეგ სტატუსი ავტომატურად განახლდება.");
         return;
       }
 
@@ -482,6 +608,125 @@ export default function ProfileScreen() {
     );
   };
 
+  const handlePregnancyEntryPress = async () => {
+    if (isAdmin || hasSubscription) {
+      const directStartDate =
+        pregnancyStartDate
+        || (selectedPregnancyDate instanceof Date ? dayjs(selectedPregnancyDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"));
+
+      handlePregnancyEnable(directStartDate);
+      return;
+    }
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("pregnancy_start_date, has_pregnancy_subscription")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (data?.has_pregnancy_subscription) {
+          const directStartDate =
+            data.pregnancy_start_date
+            || (selectedPregnancyDate instanceof Date ? dayjs(selectedPregnancyDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"));
+
+          handlePregnancyEnable(directStartDate);
+          return;
+        }
+      }
+    } catch (error) {
+      console.log("Pregnancy access check error:", error);
+    }
+
+    setShowPregnancyModal(true);
+  };
+
+  const handleFertilityEnable = async () => {
+    setFertilitySaving(true);
+    try {
+      if (isAdmin) {
+        await updateGoalMode("დაორსულება");
+        setShowFertilityModal(false);
+        Alert.alert("ადმინ წვდომა აქტიურია ✨", "დაორსულების რეჟიმი ჩაირთო შეზღუდვების გარეშე.");
+        return;
+      }
+
+      if (Platform.OS === "android") {
+        const status = await checkPregnancySubscriptionStatus();
+        if (status.hasSubscription) {
+          await updateGoalMode("დაორსულება");
+          setShowFertilityModal(false);
+          Alert.alert("დაორსულების რეჟიმი ჩაირთო", "ანგარიშზე უკვე გაქვს აქტიური წვდომა.");
+          return;
+        }
+
+        await startAndroidPregnancyCheckout({ type: "fertility" });
+        Alert.alert("გადახდა გაიხსნა", "გააგრძელე გადახდა ვებსაიტზე. აპში დაბრუნების შემდეგ სტატუსი ავტომატურად განახლდება.");
+        return;
+      }
+
+      const { configured, availablePackage } = await getPregnancyOfferings();
+
+      if (!configured) {
+        await updateGoalMode("დაორსულება");
+      } else {
+        const status = await checkPregnancySubscriptionStatus();
+        if (status.hasSubscription) {
+          await updateGoalMode("დაორსულება");
+        } else if (availablePackage) {
+          const result = await purchasePregnancyPackage(availablePackage);
+          if (result.hasSubscription) {
+            await updateGoalMode("დაორსულება");
+          } else {
+            Alert.alert("შეცდომა", "გადახდა ვერ მოხდა. სცადეთ თავიდან.");
+            return;
+          }
+        } else {
+          Alert.alert("შეცდომა", "გამოწერა ვერ მოიძებნა. სცადეთ მოგვიანებით.");
+          return;
+        }
+      }
+
+      setShowFertilityModal(false);
+      Alert.alert("დაორსულების რეჟიმი ჩაირთო ✨", "აპი ახლა მორგებულია ოვულაციის, ნაყოფიერი ფანჯრის და ჩასახვის დაგეგმვისთვის.");
+    } catch (error) {
+      if (error?.userCancelled || error?.code === "1") {
+        // silent cancel
+      } else {
+        Alert.alert("შეცდომა", "ვერ ჩაირთო დაორსულების რეჟიმი.");
+      }
+    } finally {
+      setFertilitySaving(false);
+    }
+  };
+
+  const handleFertilityDisable = () => {
+    Alert.alert(
+      "დაორსულების რეჟიმის გამორთვა",
+      "ნამდვილად გსურს დაორსულების რეჟიმის გამორთვა და ჩვეულებრივ რეჟიმზე დაბრუნება?",
+      [
+        { text: "გაუქმება", style: "cancel" },
+        {
+          text: "გამორთვა",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await updateGoalMode("ციკლის კონტროლი");
+              Alert.alert("დაბრუნდი ✨", "ჩვეულებრივი ციკლის რეჟიმი ჩაირთო.");
+            } catch {
+              Alert.alert("შეცდომა", "ვერ გამოირთო დაორსულების რეჟიმი.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleLogout = () => {
     Alert.alert("გასვლა", "ნამდვილად გსურთ ანგარიშიდან გასვლა?", [
       { text: "გაუქმება", style: "cancel" },
@@ -499,75 +744,110 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.center, { backgroundColor: theme.bg }]}>
+      <LinearGradient colors={rootGradient} style={styles.center}>
         <ActivityIndicator size="large" color={theme.primary} />
-      </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <LinearGradient colors={rootGradient} start={{ x: 0.15, y: 0 }} end={{ x: 0.85, y: 1 }} style={styles.container}>
       <StatusBar style={isDark ? "light" : "dark"} />
       <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}>
-        <View style={[styles.header, { backgroundColor: theme.headerBg, shadowColor: theme.primary }]}>
-          <Text style={styles.profileEyebrow}>PERSONAL PROFILE</Text>
-          <TouchableOpacity style={styles.avatarContainer} activeOpacity={0.88} onPress={handleAvatarPress}>
-            <View
-              style={[
-                styles.avatarHalo,
-                {
-                  backgroundColor: isDark ? "rgba(233,69,96,0.08)" : "#FFF5F8",
-                  borderColor: isDark ? "rgba(233,69,96,0.20)" : "#FFDCE7",
-                },
-              ]}
-            >
+        <LinearGradient colors={theme.heroGradient} style={[styles.header, { borderColor: theme.border, borderWidth: 1, shadowColor: theme.primary }]}>
+          <View style={styles.headerGlowTop} />
+          <View style={styles.headerGlowBottom} />
+          <Text style={[styles.profileEyebrow, { color: theme.primary }]}>{pregnancyMode ? "MATERNITY PROFILE" : "PERSONAL PROFILE"}</Text>
+          <TouchableOpacity style={styles.photoFrame} activeOpacity={0.88} onPress={handleAvatarPress}>
+            <View style={[styles.photoFrameInner, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder }]}>
               <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-              {avatarUri ? (
-                <Image source={avatarUri} style={styles.avatarImage} contentFit="cover" />
-              ) : (
-                <Text style={styles.avatarText}>{userName[0]?.toUpperCase()}</Text>
-              )}
-              {avatarSaving && (
-                <View style={styles.avatarLoader}>
-                  <ActivityIndicator color="#fff" />
+                {avatarUri ? (
+                  <Image source={avatarUri} style={styles.avatarImage} contentFit="cover" />
+                ) : (
+                  <Text style={styles.avatarText}>{userName[0]?.toUpperCase()}</Text>
+                )}
+                {avatarSaving && (
+                  <View style={styles.avatarLoader}>
+                    <ActivityIndicator color="#fff" />
+                  </View>
+                )}
+              </View>
+              <View style={styles.photoFrameCopy}>
+                <Text style={[styles.photoFrameTitle, { color: theme.text }]}>პროფილის ფოტო</Text>
+                <Text style={[styles.photoFrameSubtitle, { color: theme.subText }]}>შეეხე ფოტოს შესაცვლელად</Text>
+                <View style={[styles.photoFrameChip, { backgroundColor: theme.primary }]}>
+                  <Ionicons name="camera-outline" size={13} color="#FFFFFF" />
+                  <Text style={styles.photoFrameChipText}>ატვირთვა</Text>
                 </View>
-              )}
-            </View>
-              <View style={[styles.editBadge, { backgroundColor: theme.primary, borderColor: theme.headerBg }]}>
-                <Ionicons name="camera-outline" size={16} color="#FFFFFF" />
               </View>
             </View>
           </TouchableOpacity>
-          <Text style={[styles.avatarHint, { color: theme.primary }]}>{"\u10e4\u10dd\u10e2\u10dd\u10e1 \u10e8\u10d4\u10ea\u10d5\u10da\u10d8\u10e1\u10d7\u10d5\u10d8\u10e1 \u10e8\u10d4\u10d4\u10ee\u10d4"}</Text>
           <Text style={[styles.userName, { color: theme.text }]}>{userName}</Text>
           <Text style={[styles.emailText, { color: theme.subText }]}>{email}</Text>
           {!!phoneNumber && <Text style={[styles.emailText, { color: theme.subText }]}>{phoneNumber}</Text>}
-          <TouchableOpacity style={[styles.inlineEditButton, { backgroundColor: isDark ? "#252525" : "#FFF4F8" }]} onPress={openProfileEditModal} activeOpacity={0.85}>
+          <TouchableOpacity style={[styles.inlineEditButton, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]} onPress={openProfileEditModal} activeOpacity={0.85}>
             <Text style={[styles.inlineEditButtonText, { color: theme.primary }]}>პროფილის რედაქტირება</Text>
           </TouchableOpacity>
-        </View>
+        </LinearGradient>
 
-        <Text style={styles.sectionHeader}>იერსახე</Text>
-        <View style={[styles.settingsBlock, { backgroundColor: theme.card }]}>
+        <Text style={[styles.sectionHeader, { color: theme.subText }]}>იერსახე</Text>
+        <View style={[styles.settingsBlock, glassBlockStyle]}>
           <SettingRow
             icon="🎨"
             bgColor={isDark ? "#2c1a4d" : "#F0F4FF"}
             title="მუქი თემა"
             subtitle="ჩართე აპის მუქი ვიზუალი"
             isDarkTheme={isDark}
-            rightElement={<Switch value={usePremiumTheme} onValueChange={setUsePremiumTheme} trackColor={{ true: theme.primary, false: "#e0e0e0" }} />}
+            rightElement={
+              <Switch
+                value={usePremiumTheme}
+                onValueChange={setUsePremiumTheme}
+                trackColor={{ true: theme.primary, false: theme.switchTrackOff }}
+                thumbColor={usePremiumTheme ? theme.switchThumbOn : theme.switchThumbOff}
+                ios_backgroundColor={theme.switchTrackOff}
+              />
+            }
           />
         </View>
 
-        <Text style={styles.sectionHeader}>პირადი მონაცემები</Text>
-        <View style={[styles.settingsBlock, { backgroundColor: theme.card }]}>
+        <Text style={[styles.sectionHeader, { color: theme.subText }]}>პირადი მონაცემები</Text>
+        <View style={[styles.settingsBlock, glassBlockStyle]}>
           <SettingRow icon="📆" bgColor={isDark ? "#3d1e2a" : "#FFF0F5"} title="ციკლი და პერიოდი" value={`${cycleLength} / ${periodLength} დღე`} onPress={() => setShowCycleModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
           <SettingRow icon="🎯" bgColor={isDark ? "#1a2a3d" : "#F0F4FF"} title="ჩემი მიზანი" value={goal} onPress={() => setShowGoalModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
         </View>
 
-        <Text style={styles.sectionHeader}>ორსულობა</Text>
-        <View style={[styles.settingsBlock, { backgroundColor: theme.card }]}>
+        <Text style={[styles.sectionHeader, { color: theme.subText }]}>ორსულობა</Text>
+        <View style={[styles.settingsBlock, glassBlockStyle]}>
+          {goal === "დაორსულება" ? (
+            <>
+              <SettingRow
+                icon="🌿"
+                bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
+                title="დაორსულების რეჟიმი"
+                value="$2.99/თვე"
+                subtitle="დაჭერით გამოსართავად"
+                onPress={handleFertilityDisable}
+                isDarkTheme={isDark}
+                primaryColor={theme.primary}
+              />
+              <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+            </>
+          ) : (
+            <>
+              <SettingRow
+                icon="🌿"
+                bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
+                title="დაორსულების რეჟიმი"
+                subtitle="ოვულაციისა და ნაყოფიერი ფანჯრის ფოკუსირებული რეჟიმი"
+                onPress={() => setShowFertilityModal(true)}
+                showArrow
+                isDarkTheme={isDark}
+                primaryColor={theme.primary}
+              />
+              <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+            </>
+          )}
           {pregnancyMode ? (
             <SettingRow
               icon="🤰"
@@ -585,22 +865,30 @@ export default function ProfileScreen() {
               bgColor={isDark ? "#3d1e2a" : "#FFF0F5"}
               title="ორსულობის რეჟიმი"
               subtitle="მორგე აპი შენი ორსულობისთვის"
-              onPress={() => setShowPregnancyModal(true)}
+              onPress={handlePregnancyEntryPress}
               showArrow
               isDarkTheme={isDark}
             />
           )}
         </View>
 
-        <Text style={styles.sectionHeader}>აპლიკაცია</Text>
-        <View style={[styles.settingsBlock, { backgroundColor: theme.card }]}>
+        <Text style={[styles.sectionHeader, { color: theme.subText }]}>აპლიკაცია</Text>
+        <View style={[styles.settingsBlock, glassBlockStyle]}>
           <SettingRow
             icon="🔔"
             bgColor={isDark ? "#3d351a" : "#FFF9E6"}
             title="შეტყობინებები"
             subtitle="შეგახსენებთ პერიოდის დაწყებას"
             isDarkTheme={isDark}
-            rightElement={<Switch value={notifications} onValueChange={handleNotificationToggle} trackColor={{ true: theme.primary, false: "#e0e0e0" }} />}
+            rightElement={
+              <Switch
+                value={notifications}
+                onValueChange={handleNotificationToggle}
+                trackColor={{ true: theme.primary, false: theme.switchTrackOff }}
+                thumbColor={notifications ? theme.switchThumbOn : theme.switchThumbOff}
+                ios_backgroundColor={theme.switchTrackOff}
+              />
+            }
           />
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
           <SettingRow icon="🔒" bgColor={isDark ? "#1e3d2a" : "#E6FFF0"} title="კონფიდენციალურობა" onPress={() => router.push("/privacy")} showArrow isDarkTheme={isDark} />
@@ -612,8 +900,8 @@ export default function ProfileScreen() {
 
         {isAdmin && (
           <>
-            <Text style={styles.sectionHeader}>ადმინი</Text>
-            <View style={[styles.settingsBlock, { backgroundColor: theme.card }]}>
+            <Text style={[styles.sectionHeader, { color: theme.subText }]}>ადმინი</Text>
+            <View style={[styles.settingsBlock, glassBlockStyle]}>
               <SettingRow
                 icon="🛠️"
                 bgColor={isDark ? "#2a233d" : "#F5F0FF"}
@@ -631,7 +919,7 @@ export default function ProfileScreen() {
           <Text style={styles.logoutBtnText}>ანგარიშიდან გასვლა</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 100 }} />
+        <View style={{ height: 160 }} />
       </ScrollView>
 
       <Modal visible={showPregnancyModal} transparent animationType="slide" onRequestClose={() => setShowPregnancyModal(false)}>
@@ -643,21 +931,50 @@ export default function ProfileScreen() {
               კვირეული განვითარება, ორსულობის კალენდარი, AI ასისტენტი და სიმპტომების ტრეკინგი — ყველაფერი მორგებული შენზე.
             </Text>
             <Text style={[styles.inputLabel, { color: theme.subText }]}>ბოლო მენსტრუაციის თარიღი</Text>
-            {showPregnancyModal && (
-              <DateTimePicker
-                value={selectedPregnancyDate instanceof Date ? selectedPregnancyDate : new Date()}
-                mode="date"
-                display="spinner"
-                maximumDate={new Date()}
-                minimumDate={new Date(Date.now() - 280 * 24 * 60 * 60 * 1000)}
-                onChange={(_, date) => { if (date) setSelectedPregnancyDate(date); }}
-                style={{ width: "100%", marginBottom: 10 }}
-              />
-            )}
+            <View style={[styles.pickerCard, { backgroundColor: theme.pickerBg, borderColor: theme.pickerBorder }]}>
+              {showPregnancyModal && (
+                <DateTimePicker
+                  value={selectedPregnancyDate instanceof Date ? selectedPregnancyDate : new Date()}
+                  mode="date"
+                  display="spinner"
+                  maximumDate={new Date()}
+                  minimumDate={new Date(Date.now() - 280 * 24 * 60 * 60 * 1000)}
+                  onChange={(_, date) => { if (date) setSelectedPregnancyDate(date); }}
+                  themeVariant={isDark ? "dark" : "light"}
+                  accentColor={theme.primary}
+                  textColor={Platform.OS === "ios" ? theme.text : undefined}
+                  style={{ width: "100%", marginBottom: 0 }}
+                />
+              )}
+            </View>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handlePregnancyEnable}>
               {pregnancySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>ჩართვა — $2.99/თვე</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowPregnancyModal(false)}>
+              <Text style={styles.cancelBtnText}>გაუქმება</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={showFertilityModal} transparent animationType="slide" onRequestClose={() => setShowFertilityModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowFertilityModal(false)}>
+          <Pressable style={[styles.bottomSheet, { backgroundColor: theme.card }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>დაორსულების რეჟიმი 🌿</Text>
+            <Text style={{ color: theme.subText, textAlign: "center", marginBottom: 25, lineHeight: 22 }}>
+              ოვულაციის ფანჯარა, ნაყოფიერი დღეები, მიზანზე მორგებული AI რჩევები და უფრო ფოკუსირებული მხარდაჭერა დაორსულების დაგეგმვისთვის.
+            </Text>
+            <View style={[styles.modalCard, { backgroundColor: theme.input, borderColor: theme.border, borderWidth: 1 }]}>
+              <Text style={[styles.modalLabel, { color: theme.subText, marginBottom: 10 }]}>რას მიიღებ</Text>
+              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>• ნაყოფიერი ფანჯრის მკაფიო ფოკუსი</Text>
+              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>• დაორსულების მიზანზე მორგებული რჩევები</Text>
+              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>• იგივე ფასი, რაც ორსულობის რეჟიმს — $2.99/თვე</Text>
+            </View>
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handleFertilityEnable}>
+              {fertilitySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>ჩართვა — $2.99/თვე</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowFertilityModal(false)}>
               <Text style={styles.cancelBtnText}>გაუქმება</Text>
             </TouchableOpacity>
           </Pressable>
@@ -673,7 +990,7 @@ export default function ProfileScreen() {
             {goalOptions.map((option) => (
               <TouchableOpacity
                 key={option}
-                style={[styles.optionCard, { backgroundColor: isDark ? "#252525" : "#F5F5F5" }, goal === option && { borderColor: theme.primary, borderWidth: 1 }]}
+                style={[styles.optionCard, { backgroundColor: theme.input, borderColor: theme.border, borderWidth: 1 }, goal === option && { borderColor: theme.primary, borderWidth: 1 }]}
                 onPress={() => {
                   setGoal(option);
                   saveSettings(() => setShowGoalModal(false), { goal: option });
@@ -695,11 +1012,11 @@ export default function ProfileScreen() {
           <View style={[styles.bottomSheet, { backgroundColor: theme.card }]}>
             <View style={styles.sheetHandle} />
             <Text style={[styles.modalTitle, { color: theme.text }]}>ციკლის პარამეტრები</Text>
-            <View style={[styles.modalCard, { backgroundColor: isDark ? "#252525" : "#fff" }]}>
+            <View style={[styles.modalCard, { backgroundColor: theme.input, borderColor: theme.border, borderWidth: 1 }]}>
               <Text style={[styles.modalLabel, { color: theme.subText }]}>ციკლის ხანგრძლივობა</Text>
               <NumberSelector value={cycleLength} setValue={setCycleLength} min={21} max={45} primary={theme.primary} isDark={isDark} />
             </View>
-            <View style={[styles.modalCard, { backgroundColor: isDark ? "#252525" : "#fff" }]}>
+            <View style={[styles.modalCard, { backgroundColor: theme.input, borderColor: theme.border, borderWidth: 1 }]}>
               <Text style={[styles.modalLabel, { color: theme.subText }]}>პერიოდის ხანგრძლივობა</Text>
               <NumberSelector value={periodLength} setValue={setPeriodLength} min={2} max={10} primary={theme.primary} isDark={isDark} />
             </View>
@@ -731,7 +1048,7 @@ export default function ProfileScreen() {
               maxLength={20}
             />
             <View style={styles.modalRowBtns}>
-              <TouchableOpacity style={[styles.halfBtnGray, { backgroundColor: isDark ? "#333" : "#F5F5F5" }]} onPress={() => setShowProfileEdit(false)}>
+              <TouchableOpacity style={[styles.halfBtnGray, { backgroundColor: theme.input, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowProfileEdit(false)}>
                 <Text style={styles.cancelBtnText}>გაუქმება</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.halfBtnPink, { backgroundColor: theme.primary }]} onPress={() => saveSettings(() => setShowProfileEdit(false))}>
@@ -741,7 +1058,7 @@ export default function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -753,8 +1070,8 @@ function SettingRow({ icon, bgColor, title, subtitle, value, showArrow, onPress,
         <Text style={{ fontSize: 20 }}>{icon}</Text>
       </View>
       <View style={styles.settingTextContainer}>
-        <Text style={[styles.settingTitle, { color: isDarkTheme ? "#FFF" : "#333" }]}>{title}</Text>
-        {subtitle && <Text style={[styles.settingSubtitle, { color: isDarkTheme ? "#888" : "#999" }]}>{subtitle}</Text>}
+        <Text style={[styles.settingTitle, { color: isDarkTheme ? "#FFF7FA" : "#2F2026" }]}>{title}</Text>
+        {subtitle && <Text style={[styles.settingSubtitle, { color: isDarkTheme ? "#D5BFC8" : "#8F6574" }]}>{subtitle}</Text>}
       </View>
       {value && <Text style={[styles.settingValue, { color: primaryColor || "#ff4d88" }]}>{value}</Text>}
       {showArrow && <Ionicons name="chevron-forward" size={18} color="#B8B8BE" style={styles.arrowIcon} />}
@@ -768,14 +1085,14 @@ function NumberSelector({ value, setValue, min, max, primary, isDark }) {
   const increase = () => Number(value) < max && setValue(String(Number(value) + 1));
 
   return (
-    <View style={[styles.selectorContainer, { backgroundColor: isDark ? "#1A1A1A" : "#F8F8F8" }]}>
-      <TouchableOpacity style={[styles.selectorBtn, { backgroundColor: isDark ? "#333" : "#fff" }, Number(value) <= min && { opacity: 0.3 }]} onPress={decrease}>
+    <View style={[styles.selectorContainer, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#F8F8F8" }]}>
+      <TouchableOpacity style={[styles.selectorBtn, { backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "#fff" }, Number(value) <= min && { opacity: 0.3 }]} onPress={decrease}>
         <Text style={[styles.selectorBtnText, { color: primary }]}>-</Text>
       </TouchableOpacity>
-      <Text style={[styles.valueText, { color: isDark ? "#fff" : "#1A1A1A" }]}>
+      <Text style={[styles.valueText, { color: isDark ? "#FFF7FA" : "#1A1A1A" }]}>
           {value} <Text style={styles.valueLabel}>დღე</Text>
       </Text>
-      <TouchableOpacity style={[styles.selectorBtn, { backgroundColor: isDark ? "#333" : "#fff" }, Number(value) >= max && { opacity: 0.3 }]} onPress={increase}>
+      <TouchableOpacity style={[styles.selectorBtn, { backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "#fff" }, Number(value) >= max && { opacity: 0.3 }]} onPress={increase}>
         <Text style={[styles.selectorBtnText, { color: primary }]}>+</Text>
       </TouchableOpacity>
     </View>
@@ -785,9 +1102,18 @@ function NumberSelector({ value, setValue, min, max, primary, isDark }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { alignItems: "center", paddingTop: 68, paddingBottom: 28, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, elevation: 8, shadowOpacity: 0.12, shadowRadius: 18 },
+  header: { alignItems: "center", paddingTop: 68, paddingBottom: 28, marginHorizontal: 14, marginTop: 8, borderRadius: 34, overflow: "hidden", elevation: 8, shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 12 } },
+  headerGlowTop: { position: "absolute", top: -58, right: -34, width: 170, height: 170, borderRadius: 85, backgroundColor: "rgba(255,255,255,0.18)" },
+  headerGlowBottom: { position: "absolute", left: -42, bottom: -70, width: 190, height: 190, borderRadius: 95, backgroundColor: "rgba(255,77,136,0.12)" },
   profileEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 1.2, marginBottom: 15 },
   avatarContainer: { position: "relative" },
+  photoFrame: { width: "88%", maxWidth: 360, marginBottom: 18 },
+  photoFrameInner: { minHeight: 150, borderRadius: 30, borderWidth: 1, padding: 14, flexDirection: "row", alignItems: "center", overflow: "hidden", shadowColor: "#D76586", shadowOpacity: 0.18, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 7 },
+  photoFrameCopy: { flex: 1, marginLeft: 16, alignItems: "flex-start" },
+  photoFrameTitle: { fontSize: 17, fontWeight: "900", marginBottom: 5 },
+  photoFrameSubtitle: { fontSize: 12, fontWeight: "700", lineHeight: 17, marginBottom: 12 },
+  photoFrameChip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
+  photoFrameChipText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   avatarHalo: {
     width: 160,
     height: 160,
@@ -801,7 +1127,7 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 6,
   },
-  avatar: { width: 144, height: 144, borderRadius: 72, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  avatar: { width: 112, height: 112, borderRadius: 34, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   avatarImage: { width: "100%", height: "100%" },
   avatarLoader: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.28)", alignItems: "center", justifyContent: "center" },
   avatarText: { color: "#fff", fontSize: 46, fontWeight: "900" },
@@ -826,7 +1152,7 @@ const styles = StyleSheet.create({
   inlineEditButton: { marginTop: 15, paddingHorizontal: 17, paddingVertical: 10, borderRadius: 999 },
   inlineEditButtonText: { fontSize: 13, fontWeight: "800" },
   sectionHeader: { fontSize: 11, fontWeight: "900", color: "#888", textTransform: "uppercase", letterSpacing: 1.35, marginTop: 30, marginBottom: 11, paddingHorizontal: 22 },
-  settingsBlock: { borderRadius: 20, marginHorizontal: 20, overflow: "hidden", elevation: 2 },
+  settingsBlock: { borderRadius: 24, marginHorizontal: 20, overflow: "hidden", elevation: 5, shadowColor: "#D76586", shadowOpacity: 0.10, shadowRadius: 16, shadowOffset: { width: 0, height: 9 } },
   divider: { height: 1, marginLeft: 70 },
   settingRow: { flexDirection: "row", alignItems: "center", padding: 16, paddingRight: 18 },
   iconBox: { width: 42, height: 42, borderRadius: 13, justifyContent: "center", alignItems: "center", marginRight: 14 },
@@ -844,7 +1170,9 @@ const styles = StyleSheet.create({
   centerModal: { borderRadius: 32, padding: 30 },
   modalTitle: { fontSize: 24, fontWeight: "900", marginBottom: 25, textAlign: "center" },
   modalCard: { padding: 20, borderRadius: 22, marginBottom: 15 },
+  pickerCard: { borderWidth: 1, borderRadius: 22, marginBottom: 12, overflow: "hidden", paddingHorizontal: 6 },
   modalLabel: { fontSize: 14, fontWeight: "700", marginBottom: 18, textAlign: "center" },
+  fertilityBenefit: { fontSize: 14, lineHeight: 22, marginBottom: 4, fontWeight: "600" },
   selectorContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderRadius: 20, padding: 6 },
   selectorBtn: { width: 55, height: 55, borderRadius: 16, justifyContent: "center", alignItems: "center" },
   selectorBtnText: { fontSize: 28, fontWeight: "600" },

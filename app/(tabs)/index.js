@@ -5,8 +5,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 
+import DiaryAvatar from "../../components/DiaryAvatar";
 import PrimePreview from "../../components/PrimePreview";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
@@ -23,11 +24,38 @@ const DEFAULT_GOAL = "ციკლის კონტროლი";
 const HOME_ADVICE_CACHE_KEY_PREFIX = "@cycle-care/home-advice";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
-const BABY_IMAGES_WITH_PHOTO = new Set([5,6,7,8,9,10,11,12,13]);
+const PREGNANCY_BANNER_IMAGE = require("../../assets/images/pregnancy-banner-hero.png");
+const ASSISTANT_GUIDE_IMAGE = require("../../assets/images/assistant-guide.png");
 
 function getBabyImageUrl(week) {
-  if (!BABY_IMAGES_WITH_PHOTO.has(week)) return null;
-  return `${SUPABASE_URL}/storage/v1/object/public/baby-images/week-${week}.png`;
+  if (!SUPABASE_URL || week < 1 || week > 40) return null;
+  const imageKey = week <= 8 ? "1" : week <= 19 ? "2" : week <= 30 ? "3" : "4";
+  return `${SUPABASE_URL}/storage/v1/object/public/baby-images/${imageKey}.png`;
+}
+
+function getBabyWeekDetails(week, baby) {
+  const trimesterNote =
+    week <= 12
+      ? "ამ ეტაპზე სხეული სწრაფად ეწყობა ორსულობას. დაღლილობა, გულისრევა, მკერდის მგრძნობელობა და ემოციური ცვლილებები ხშირია."
+      : week <= 27
+        ? "ამ პერიოდში ბევრს ენერგია უბრუნდება. შეიძლება ნელ-ნელა იგრძნო მოძრაობა, მუცლის დაჭიმულობა ან ზურგის მსუბუქი დაღლა."
+        : "ბავშვი აქტიურად იმატებს წონაში. შეიძლება იგრძნო სიმძიმე, შეშუპება, ძილის სირთულე ან უფრო ხშირი მოძრაობები.";
+
+  const developmentNote =
+    week <= 8
+      ? "ნაყოფის მთავარი ორგანოები ახლა ყალიბდება და განვითარება ძალიან სწრაფად მიდის."
+      : week <= 19
+        ? "სახის ნაკვთები, კიდურები და შეგრძნებების საფუძველი უფრო მკაფიო ხდება."
+        : week <= 30
+          ? "ბავშვი იზრდება, მოძრაობები ძლიერდება და სმენა/რეაქციები უფრო შესამჩნევი ხდება."
+          : "ბავშვი უკვე ემზადება დაბადებისთვის: იმატებს ცხიმს, ძალას და უფრო სტაბილურ რიტმს.";
+
+  return [
+    `${week}-ე კვირაში ნაყოფის ზომა დაახლოებით "${baby.size}"-ს შეედრება.`,
+    developmentNote,
+    trimesterNote,
+    baby.advice,
+  ].join("\n\n");
 }
 
 function getHomeAdviceCacheKey(userId) {
@@ -73,14 +101,14 @@ async function writeCachedHomeAdvice(userId, adviceKey, text) {
 const BABY_DATA = {
   1:  { size: "ნაყოფის უჯრედი", emoji: "🔬", advice: "ორსულობა ახლა იწყება. ფოლიუმის მჟავა ძალიან მნიშვნელოვანია." },
   2:  { size: "ნაყოფის უჯრედი", emoji: "🔬", advice: "ორგანიზმი მზადდება ნაყოფის ჩასახვისთვის." },
-  3:  { size: "ყაყაჩოს თესლი", emoji: "🌱", advice: "ნაყოფი ახლა ძალიან პატარაა — 1-2 მმ. მიიღე ვიტამინები." },
+  3:  { size: "ყაყაჩოს თესლი", emoji: "🌱", advice: "ნაყოფი ახლა ძალიან პატარაა - 1-2 მმ. მიიღე ვიტამინები." },
   4:  { size: "ხაშხაშის თესლი", emoji: "🌸", advice: "გული ახლა ჩამოყალიბდება. მოერიდე ალკოჰოლს და კოფეინს." },
   5:  { size: "სეზამი", emoji: "🫘", advice: "ნაყოფი დაახლოებით 5 მმ-ია. პირველი ექიმის ვიზიტი დაგეგმე." },
   6:  { size: "მოცვი", emoji: "🫐", advice: "გული ცემს! ახლა შეიძლება გულისრევა გაჩნდეს." },
   7:  { size: "ჟოლო", emoji: "🍓", advice: "ტვინი სწრაფად ვითარდება. ბევრი სითხე დალიე." },
   8:  { size: "კივი", emoji: "🥝", advice: "ნაყოფი 1.6 სმ-ია. ყველა ძირითადი ორგანო ვითარდება." },
   9:  { size: "ყურძნის მარცვალი", emoji: "🍇", advice: "ნაყოფს ახლა ყველა თითი აქვს. ეჭვები ნორმალურია." },
-  10: { size: "ატამი", emoji: "🍑", advice: "კრიტიკული ფაზა დასრულდა — ნაყოფი ახლა ნაყოფია!" },
+  10: { size: "ატამი", emoji: "🍑", advice: "კრიტიკული ფაზა დასრულდა - ნაყოფი ახლა ნაყოფია!" },
   11: { size: "ლეღვი", emoji: "🍈", advice: "ნაყოფი 4.5 სმ-ია. პირველი ტრიმესტრი თითქმის დასრულდა." },
   12: { size: "ლიმონი", emoji: "🍋", advice: "ალბათ გულისრევა შეიმსუბუქება. USG დროა!" },
   13: { size: "ნეკერჩხალი", emoji: "🍎", advice: "მეორე ტრიმესტრი იწყება! ენერგია დაბრუნდება." },
@@ -100,7 +128,7 @@ const BABY_DATA = {
   27: { size: "ყვავილოვანი კომბოსტო", emoji: "🥦", advice: "მესამე ტრიმესტრის ბოლო კვირა. ბავშვი ბრუნდება." },
   28: { size: "ბადია", emoji: "🫚", advice: "მესამე ტრიმესტრი! ნაყოფი 1 კგ-ია. ბრეგტონ-ჰიქსი ნორმალურია." },
   29: { size: "კარტოფილი", emoji: "🥔", advice: "ნაყოფი ბრუნდება. თავი ქვემოთ კარგი ნიშანია." },
-  30: { size: "კომბოსტო", emoji: "🥬", advice: "ახლა ნაყოფი 1.3 კგ-ია. სვინგები ხშირია — ეს ნორმალურია." },
+  30: { size: "კომბოსტო", emoji: "🥬", advice: "ახლა ნაყოფი 1.3 კგ-ია. სვინგები ხშირია - ეს ნორმალურია." },
   31: { size: "ქოქოსი", emoji: "🥥", advice: "ნაყოფი 1.5 კგ-ია. ოფლიანობა შეიძლება მოიმატოს." },
   32: { size: "ჯუნჯული", emoji: "🫚", advice: "ნაყოფი 1.7 კგ-ია. ნებისმიერ დროს მზადაა გარე სამყაროსთვის." },
   33: { size: "ანანასი", emoji: "🍍", advice: "ნაყოფი 1.9 კგ-ია. ბებიაქალი/ექიმი ვიზიტი სულ უახლოვდება." },
@@ -113,11 +141,11 @@ const BABY_DATA = {
   40: { size: "საზამთრო", emoji: "🍉", advice: "სრული ვადა! ბავშვი ნებისმიერ დროს მოდის. 🎉" },
 };
 
-const TRIMESTER_COLORS = { 1: "#06d6a0", 2: "#ffd166", 3: "#ff4d88" };
 const TRIMESTER_LABELS = { 1: "I ტრიმესტრი", 2: "II ტრიმესტრი", 3: "III ტრიმესტრი" };
 
 function PregnancyHomeScreen({ isDark }) {
   const { currentWeek, currentTrimester, daysRemaining } = usePregnancy();
+  const { width: screenWidth } = useWindowDimensions();
   const [weeklyAdvice, setWeeklyAdvice] = useState("");
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceError, setAdviceError] = useState(null);
@@ -125,6 +153,35 @@ function PregnancyHomeScreen({ isDark }) {
   const [showBabyModal, setShowBabyModal] = useState(false);
   const loadedForWeekRef = useRef(null);
   const isMountedRef = useRef(true);
+  const calendarScrollRef = useRef(null);
+
+  const week = Math.min(Math.max(currentWeek || 1, 1), 40);
+  const baby = BABY_DATA[week];
+  const progress = (week / 40) * 100;
+  const today = dayjs();
+  const calendarVisibleWidth = screenWidth - 40;
+  const calendarGap = 10;
+  const calendarItemWidth = (calendarVisibleWidth - calendarGap * 4) / 5;
+  const todayCalendarIndex = 30;
+  const calendarSnapInterval = calendarItemWidth + calendarGap;
+  const todayCalendarOffset = Math.max(0, (todayCalendarIndex - 2) * calendarSnapInterval);
+  const calendarDays = Array.from({ length: 61 }, (_, index) => today.add(index - todayCalendarIndex, "day"));
+  const babyImageUrl = getBabyImageUrl(week);
+  const trimesterLabel = TRIMESTER_LABELS[currentTrimester] || TRIMESTER_LABELS[1];
+  const theme = {
+    bg: isDark ? "#1A1115" : "#fff8fa",
+    card: isDark ? "rgba(35,24,30,0.82)" : "rgba(255,255,255,0.72)",
+    text: isDark ? "#FFFFFF" : "#2F2026",
+    subText: isDark ? "#D0B9C2" : "#8F6574",
+    primary: "#ff4d88",
+    glass: isDark ? "rgba(44,29,37,0.72)" : "rgba(255,255,255,0.58)",
+    glassStrong: isDark ? "rgba(58,38,48,0.82)" : "rgba(255,255,255,0.72)",
+    glassBorder: isDark ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.74)",
+    cardText: isDark ? "#FFF3F7" : "#3B232C",
+    mutedText: isDark ? "#D7B8C4" : "#8F6574",
+    activeCalendar: isDark ? ["rgba(255,77,136,0.95)", "rgba(153,62,93,0.9)"] : ["rgba(255,77,136,0.95)", "rgba(255,144,177,0.78)"],
+    babyCard: isDark ? ["rgba(76,42,51,0.96)", "rgba(128,57,82,0.9)"] : ["rgba(255,233,219,0.95)", "rgba(255,148,182,0.9)"],
+  };
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -134,22 +191,17 @@ function PregnancyHomeScreen({ isDark }) {
   }, []);
 
   useEffect(() => {
-    const url = getBabyImageUrl(week);
-    if (url) Image.prefetch(url).catch(() => {});
-  }, [week]);
+    if (babyImageUrl) Image.prefetch(babyImageUrl).catch(() => {});
+  }, [babyImageUrl]);
 
-  const week = Math.min(Math.max(currentWeek || 1, 1), 40);
-  const baby = BABY_DATA[week];
-  const trimesterColor = TRIMESTER_COLORS[currentTrimester] || "#ff4d88";
-  const progress = (week / 40) * 100;
+  const scrollTodayToCenter = useCallback((animated = true) => {
+    calendarScrollRef.current?.scrollTo({ x: todayCalendarOffset, animated });
+  }, [todayCalendarOffset]);
 
-  const theme = {
-    bg: isDark ? "#0F0F0F" : "#faf7f7",
-    card: isDark ? "#1A1A1A" : "#fff",
-    text: isDark ? "#FFFFFF" : "#333",
-    subText: isDark ? "#AAAAAA" : "#888",
-    primary: "#ff4d88",
-  };
+  useEffect(() => {
+    const timer = setTimeout(() => scrollTodayToCenter(false), 80);
+    return () => clearTimeout(timer);
+  }, [screenWidth, scrollTodayToCenter]);
 
   const loadWeeklyAdvice = useCallback(async (force = false) => {
     if (!force && loadedForWeekRef.current === week) return;
@@ -157,8 +209,7 @@ function PregnancyHomeScreen({ isDark }) {
     setAdviceError(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!isMountedRef.current) return;
-      if (!user) return;
+      if (!isMountedRef.current || !user) return;
       const cacheKey = `@cycle-care/pregnancy-weekly-advice/${user.id}`;
       if (!force) {
         try {
@@ -207,86 +258,176 @@ function PregnancyHomeScreen({ isDark }) {
     if (isMountedRef.current) setRefreshing(false);
   }, [loadWeeklyAdvice]);
 
-  const displayAdvice = weeklyAdvice || baby.advice;
-
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={trimesterColor} />}>
-      <Text style={[styles.topDate, { color: theme.subText }]}>{dayjs().format("D MMMM, dddd")}</Text>
+    <LinearGradient
+      colors={isDark ? ["#25151B", "#140E12", "#120C10"] : ["#FFFDFC", "#FFEFF4", "#F8B5C9"]}
+      start={{ x: 0.15, y: 0 }}
+      end={{ x: 0.85, y: 1 }}
+      style={styles.pregnancyRoot}
+    >
+      <ScrollView
+        style={styles.pregnancyScroll}
+        contentContainerStyle={styles.pregnancyContent}
+        showsVerticalScrollIndicator={false}
+        onLayout={() => scrollTodayToCenter(false)}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+      >
+        <View style={styles.pregnancyHeader}>
+          <Text style={[styles.pregnancyTitle, { color: theme.text }]}>ბავშვის ზრდის ფაზა</Text>
+        </View>
 
-      <View style={[styles.mainCard, { backgroundColor: theme.card }]}>
-        <View style={styles.infoRow}>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>ტრიმესტრი</Text>
-            <Text style={[styles.infoValue, { color: trimesterColor }]}>{TRIMESTER_LABELS[currentTrimester]}</Text>
+        <ScrollView
+          ref={calendarScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentOffset={{ x: todayCalendarOffset, y: 0 }}
+          contentContainerStyle={styles.weekCalendarContent}
+          snapToInterval={calendarSnapInterval}
+          decelerationRate="fast"
+        >
+          {calendarDays.map((date, index) => {
+            const isToday = index === todayCalendarIndex;
+            return (
+              <TouchableOpacity
+                key={date.format("YYYY-MM-DD")}
+                activeOpacity={0.8}
+                style={[
+                  styles.weekDayItem,
+                  {
+                    width: calendarItemWidth,
+                    backgroundColor: theme.glass,
+                    borderColor: theme.glassBorder,
+                  },
+                ]}
+              >
+                {isToday ? (
+                  <LinearGradient colors={theme.activeCalendar} style={[styles.weekDayGlass, { width: calendarItemWidth }]}>
+                    <Text style={styles.weekDayNameActive}>{date.format("ddd")}</Text>
+                    <Text style={styles.weekDayNumberActive}>{date.format("D")}</Text>
+                  </LinearGradient>
+                ) : (
+                  <>
+                    <Text style={[styles.weekDayName, { color: theme.mutedText }]}>{date.format("ddd")}</Text>
+                    <Text style={[styles.weekDayNumber, { color: theme.cardText }]}>{date.format("D")}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        <View style={styles.babyGrowthCard}>
+          <LinearGradient
+            colors={theme.babyCard}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.babyGrowthGradient}
+          >
+            <View style={[styles.babyWeekBadge, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
+              <Text style={[styles.babyWeekBadgeText, { color: theme.cardText }]}>{week} კვირა</Text>
+            </View>
+            <View style={styles.babyImageStage}>
+              <BabyPreview uri={babyImageUrl} emoji={baby.emoji} />
+            </View>
+            <View style={styles.babyOrbitLine} />
+            <TouchableOpacity
+              style={[styles.assistantGlassButton, { backgroundColor: theme.glassStrong, borderColor: theme.glassBorder }]}
+              activeOpacity={0.86}
+              onPress={() => setShowBabyModal(true)}
+            >
+              <View style={[styles.assistantAvatar, { backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,236,242,0.9)" }]}>
+                <Text style={styles.assistantAvatarEmoji}>{baby.emoji}</Text>
+              </View>
+              <View style={styles.assistantCopy}>
+                <Text style={[styles.assistantLabel, { color: theme.cardText }]}>ნაყოფის აღწერა</Text>
+                <Text style={[styles.assistantSub, { color: theme.mutedText }]}>{baby.size}</Text>
+              </View>
+              <View style={[styles.assistantArrow, { backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.75)" }]}>
+                <Ionicons name="arrow-forward" size={18} color={isDark ? "#FFE8F0" : "#7C4054"} />
+              </View>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+
+        <View style={styles.pregnancyInsightGrid}>
+          <View style={[styles.pregnancyMetricCard, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
+            <Text style={[styles.pregnancyMetricLabel, { color: theme.mutedText }]}>ტრიმესტრი</Text>
+            <Text style={[styles.pregnancyMetricValue, { color: theme.cardText }]}>{trimesterLabel}</Text>
           </View>
-          <View style={[styles.infoItem, { borderLeftWidth: 1, borderLeftColor: isDark ? "#333" : "#eee" }]}>
-            <Text style={styles.infoLabel}>დარჩენილია</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>{daysRemaining} დღე</Text>
+          <View style={[styles.pregnancyMetricCard, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
+            <Text style={[styles.pregnancyMetricLabel, { color: theme.mutedText }]}>დარჩენილია</Text>
+            <Text style={[styles.pregnancyMetricValue, { color: theme.cardText }]}>{daysRemaining} დღე</Text>
           </View>
         </View>
 
-        <View style={[styles.circleContainer, { backgroundColor: isDark ? "#252525" : "#fff0f5", borderColor: trimesterColor }]}>
-          <View style={styles.outerCircle}>
-            <Text style={{ fontSize: 36 }}>{baby.emoji}</Text>
-            <Text style={[styles.cycleDayNumber, { color: trimesterColor, fontSize: 38 }]}>{week}</Text>
-            <Text style={[styles.cycleDayText, { color: trimesterColor }]}>კვირა</Text>
+        <View style={[styles.weekProgressCard, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
+          <View style={styles.weekProgressHeader}>
+            <Text style={[styles.weekProgressTitle, { color: theme.cardText }]}>ორსულობის პროგრესი</Text>
+            <Text style={styles.weekProgressPercent}>{Math.round(progress)}%</Text>
           </View>
+          <View style={styles.weekProgressTrack}>
+            <View style={[styles.weekProgressFill, { width: `${Math.min(progress, 100)}%` }]} />
+          </View>
+          <Text style={[styles.weekProgressHint, { color: theme.mutedText }]}>სავარაუდო მშობიარობა: {dayjs().add(daysRemaining, "day").format("D MMMM YYYY")}</Text>
         </View>
 
-        <View style={[styles.progressBarContainer, { backgroundColor: isDark ? "#222" : "#f0f0f0" }]}>
-          <View style={[styles.progressFill, { width: `${Math.min(progress, 100)}%`, backgroundColor: trimesterColor }]} />
+        <Text style={[styles.pregnancySectionTitle, { color: theme.text }]}>კვირის რჩევა</Text>
+        <View style={[styles.weekAdviceGlass, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
+          <View style={styles.pregnancyAdviceDoctorRow}>
+            <View style={[styles.pregnancyAdviceDoctorAvatar, { borderColor: theme.glassBorder }]}>
+              <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.pregnancyAdviceDoctorImage} resizeMode="cover" />
+            </View>
+          </View>
+          {adviceLoading ? (
+            <View style={styles.pregnancyAdviceLoading}>
+              <ActivityIndicator color={theme.primary} size="small" />
+              <Text style={[styles.weekAdviceText, { color: theme.cardText }]}>ასისტენტი ამზადებს კვირის განახლებას...</Text>
+            </View>
+          ) : weeklyAdvice ? (
+            <WeeklyAdviceCard text={weeklyAdvice} trimesterColor={theme.primary} isDark={isDark} theme={theme} />
+          ) : adviceError ? (
+            <View style={{ padding: 20 }}>
+              <Text style={[styles.weekAdviceText, { color: theme.cardText }]}>{adviceError}</Text>
+              <TouchableOpacity onPress={() => loadWeeklyAdvice(true)} style={styles.retryAdviceButton}>
+                <Text style={styles.retryAdviceText}>ხელახლა სცადე</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text style={[styles.weekAdviceText, { color: theme.cardText }]}>{baby.advice}</Text>
+          )}
         </View>
 
-        <Text style={[styles.daysLeftLabel, { color: theme.subText }]}>ბავშვის ზომა ახლა</Text>
-        <Text style={[styles.daysLeftNumber, { color: theme.text, fontSize: 22 }]}>{baby.size}</Text>
-        <Text style={[styles.nextDateText, { color: theme.subText }]}>სავარაუდო მშობიარობა: {dayjs().add(daysRemaining, "day").format("D MMMM YYYY")}</Text>
-        <TouchableOpacity onPress={() => setShowBabyModal(true)} style={{ marginTop: 14, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: trimesterColor + "22", borderRadius: 20, borderWidth: 1, borderColor: trimesterColor + "55" }}>
-          <Text style={{ color: trimesterColor, fontWeight: "700", fontSize: 14 }}>{baby.emoji} კვირა {week} — ნაყოფი ნახე</Text>
-        </TouchableOpacity>
+        <View style={{ height: 160 }} />
+      </ScrollView>
+      <View style={styles.floatingDiaryAvatar}>
+        <DiaryAvatar accent={theme.primary} isDark={isDark} size={46} showHint={false} />
       </View>
 
       <Modal visible={showBabyModal} transparent animationType="fade" onRequestClose={() => setShowBabyModal(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", alignItems: "center" }} onPress={() => setShowBabyModal(false)}>
-          <Pressable style={{ width: "100%", alignItems: "center" }} onPress={() => {}}>
-            <TouchableOpacity onPress={() => setShowBabyModal(false)} style={{ position: "absolute", top: -50, right: 24, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center", zIndex: 10 }}>
-              <Text style={{ fontSize: 20, color: "#fff", fontWeight: "700" }}>✕</Text>
+        <Pressable style={styles.babyModalOverlay} onPress={() => setShowBabyModal(false)}>
+          <Pressable
+            style={[
+              styles.babyModalCard,
+              {
+                backgroundColor: isDark ? "rgba(37,24,31,0.96)" : "rgba(255,248,250,0.96)",
+                borderColor: theme.glassBorder,
+              },
+            ]}
+            onPress={() => {}}
+          >
+            <TouchableOpacity onPress={() => setShowBabyModal(false)} style={styles.babyModalClose}>
+              <Ionicons name="close" size={20} color="#fff" />
             </TouchableOpacity>
-
-            {getBabyImageUrl(week) ? (
-              <BabyImage uri={getBabyImageUrl(week)} emoji={baby.emoji} />
-            ) : (
-              <Text style={{ fontSize: 100 }}>{baby.emoji}</Text>
-            )}
-
-            <View style={{ marginTop: 20, alignItems: "center" }}>
-              <Text style={{ fontSize: 15, color: trimesterColor, fontWeight: "700", letterSpacing: 1 }}>{TRIMESTER_LABELS[currentTrimester]}</Text>
-              <Text style={{ fontSize: 36, fontWeight: "800", color: "#fff", marginTop: 4 }}>{week}-ე კვირა</Text>
+            <View style={styles.babyModalPreview}>
+              <BabyPreview uri={babyImageUrl} emoji={baby.emoji} />
             </View>
+            <Text style={styles.babyModalWeek}>{week}-ე კვირა</Text>
+            <Text style={[styles.babyModalTitle, { color: theme.cardText }]}>ნაყოფის აღწერა</Text>
+            <Text style={[styles.babyModalText, { color: theme.mutedText }]}>{getBabyWeekDetails(week, baby)}</Text>
           </Pressable>
         </Pressable>
       </Modal>
-
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>კვირა {week} — AI ასისტენტი ✨</Text>
-      <View style={[styles.insightCard, { backgroundColor: theme.card }]}>
-        {adviceLoading ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 24 }}>
-            <ActivityIndicator color={trimesterColor} size="small" />
-            <Text style={[styles.insightText, { color: theme.subText }]}>ასისტენტი ამზადებს კვირის განახლებას...</Text>
-          </View>
-        ) : weeklyAdvice ? (
-          <WeeklyAdviceCard text={weeklyAdvice} trimesterColor={trimesterColor} isDark={isDark} theme={theme} />
-        ) : adviceError ? (
-          <View style={{ padding: 24, gap: 10 }}>
-            <Text style={{ color: "#ff4d88", fontSize: 13 }}>⚠️ {adviceError}</Text>
-            <TouchableOpacity onPress={() => loadWeeklyAdvice(true)} style={{ alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 8, backgroundColor: trimesterColor, borderRadius: 12 }}>
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>ხელახლა სცადე</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={{ height: 100 }} />
-    </ScrollView>
+    </LinearGradient>
   );
 }
 
@@ -309,17 +450,27 @@ export default function HomeScreen() {
   const [periodLength, setPeriodLength] = useState(5);
   const [pregnancyChance, setPregnancyChance] = useState("დაბალი");
   const [phaseColor, setPhaseColor] = useState("#ff4d88");
-  const [userGoal, setUserGoal] = useState(DEFAULT_GOAL);
+  const [userName, setUserName] = useState("");
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [dailyAdvice, setDailyAdvice] = useState("დღეს საკუთარ სხეულს მოუსმინე და ჩაინიშნე როგორ გრძნობ თავს.");
 
   const theme = {
-    bg: isDark ? "#0F0F0F" : "#faf7f7",
-    card: isDark ? "#1A1A1A" : "#fff",
-    text: isDark ? "#FFFFFF" : "#333",
-    subText: isDark ? "#AAAAAA" : "#888",
-    primary: isDark ? "#E94560" : "#ff4d88",
-    circleBg: isDark ? "#252525" : "#fff0f5",
+    bg: isDark ? "#211621" : "#FFFDFC",
+    card: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.78)",
+    text: isDark ? "#FFF7FB" : "#2F2026",
+    subText: isDark ? "#E9C7D4" : "#8F6574",
+    primary: "#FF4D88",
+    circleBg: isDark ? "#241A2B" : "#fff0f5",
+    softCard: isDark ? "rgba(67,49,72,0.72)" : "rgba(255,255,255,0.72)",
+    border: isDark ? "rgba(255,209,224,0.16)" : "rgba(255,255,255,0.82)",
+    peach: "#FF9E7D",
+    lavender: "#B8A4FF",
+    fertile: "#9AB7FF",
+    glassIcon: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.58)",
+    pageGradient: isDark ? ["#2A1B2A", "#211621", "#17151D"] : ["#FFFDFC", "#FFF1EB", "#F6F0FF"],
+    heroGradient: isDark ? ["#3A2A44", "#2A2036", "#1B1721"] : ["#FFFFFF", "#FFF2E8", "#F4ECFF"],
+    cardGradient: isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.92)", "rgba(255,240,232,0.84)", "rgba(246,240,255,0.82)"],
+    bannerGradient: isDark ? ["#3A2330", "#241B2C", "#173028"] : ["#FFFFFF", "#FFF0EA", "#EFFBF5"],
   };
 
   const refreshHomeAdvice = useCallback(async (userId, adviceKey, forceRefresh = false) => {
@@ -429,7 +580,7 @@ export default function HomeScreen() {
       const todayEntry = todaySymptomsRes.data || null;
       const currentGoal = profile?.goal || DEFAULT_GOAL;
 
-      setUserGoal(currentGoal);
+      setUserName(profile?.name || user.email?.split("@")[0] || "ანი");
 
       if (!profile && cycles.length === 0) {
         setAdviceLoading(false);
@@ -579,146 +730,194 @@ export default function HomeScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={[styles.container, { justifyContent: "center", backgroundColor: theme.bg }]}>
+      <LinearGradient colors={theme.pageGradient} style={[styles.container, { justifyContent: "center" }]}>
         <ActivityIndicator size="large" color={theme.primary} />
-      </View>
+      </LinearGradient>
     );
   }
 
   const progress = cycleDay ? (cycleDay / cycleLength) * 100 : 0;
   const stats = getDailyStats(cycleDay, cycleLength, periodLength);
+  const ovulationDay = cycleLength - 13;
+  const calendarColors = {
+    period: "#E94560",
+    ovulation: "#FFD166",
+    fertile: "#35C99B",
+    today: "#6C63FF",
+    neutral: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.62)",
+  };
+  const today = dayjs();
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = today.add(index - 3, "day");
+    const offset = date.startOf("day").diff(today.startOf("day"), "day");
+    const predictedCycleDay = cycleDay ? ((cycleDay + offset - 1 + cycleLength) % cycleLength) + 1 : null;
+    const isPeriod = predictedCycleDay ? predictedCycleDay <= periodLength : false;
+    const isOvulation = predictedCycleDay ? predictedCycleDay === ovulationDay || predictedCycleDay === ovulationDay - 1 : false;
+    const isFertile = predictedCycleDay ? predictedCycleDay >= ovulationDay - 5 && predictedCycleDay <= ovulationDay + 1 : false;
+    return { date, isToday: offset === 0, isPeriod, isOvulation, isFertile };
+  });
+  const heroMainNumber = cycleDay && cycleDay <= periodLength ? cycleDay : (daysLeft ?? "-");
+  const heroMainLabel = cycleDay && cycleDay <= periodLength
+    ? "მენსტრუაციის მიმდინარე დღე"
+    : "მენსტრუაციამდე დარჩა";
+  const trackerNumberColor = cycleDay && cycleDay <= periodLength
+    ? theme.primary
+    : daysLeft != null && daysLeft <= 1
+      ? "#E94560"
+      : daysLeft != null && daysLeft <= 3
+        ? "#FF6B6B"
+        : phaseColor;
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}>
-      <Text style={[styles.topDate, { color: theme.subText }]}>{dayjs().format("D MMMM, dddd")}</Text>
-
-      <LinearGradient
-        colors={isDark ? ["#1C1820", "#121216"] : ["#FFFFFF", "#FFF8FA"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.cycleMainCard}
-      >
-        <View style={styles.cycleCardHeader}>
+    <LinearGradient
+      colors={theme.pageGradient}
+      style={styles.regularRoot}
+    >
+      <ScrollView style={styles.regularScroll} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}>
+        <View style={styles.regularHeader}>
           <View>
-            <Text style={styles.cycleEyebrow}>CYCLE OVERVIEW</Text>
-            <Text style={[styles.cycleCardTitle, { color: theme.text }]}>შენი ციკლის სტატუსი</Text>
-          </View>
-          <View style={styles.cycleHeaderIcon}>
-            <Ionicons name="calendar-outline" size={19} color="#E94560" />
+            <Text style={[styles.regularGreeting, { color: theme.text }]}>გამარჯობა, {userName || "ანი"}!</Text>
+            <Text style={[styles.regularDate, { color: theme.subText }]}>{dayjs().format("D MMMM, dddd")}</Text>
           </View>
         </View>
 
-        <View style={styles.cycleStatusRow}>
-          <View style={[styles.cycleStatusItem, { backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(233,69,96,0.05)" }]}>
-            <View style={styles.cycleStatusLabelRow}>
-              <Ionicons name="pulse-outline" size={14} color="#E94560" />
-              <Text style={styles.cycleStatusLabel}>ფაზა</Text>
+        <LinearGradient colors={theme.heroGradient} style={[styles.regularHeroCard, { borderColor: theme.border }]}>
+          <View style={styles.heroGlowPeach} />
+          <View style={styles.heroGlowLavender} />
+          <View style={styles.heroMiniCardsRow}>
+            <View style={[styles.heroMiniCard, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
+              <View style={[styles.heroMiniIcon, { backgroundColor: `${theme.fertile}22` }]}>
+                <Ionicons name="leaf" size={16} color={theme.fertile} />
+              </View>
+              <View style={styles.heroMiniCopy}>
+                <Text style={[styles.heroMiniLabel, { color: theme.subText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>ნაყოფიერი პერიოდი</Text>
+                <Text style={[styles.heroMiniValue, { color: phaseColor }]} numberOfLines={1}>{phase}</Text>
+              </View>
             </View>
-            <Text style={[styles.cycleStatusValue, { color: theme.text }]}>{phase}</Text>
-          </View>
-          <View style={[styles.cycleStatusItem, { backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(233,69,96,0.05)" }]}>
-            <View style={styles.cycleStatusLabelRow}>
-              <Ionicons name="heart-outline" size={14} color="#E94560" />
-              <Text style={styles.cycleStatusLabel}>{userGoal === "დაორსულება" ? "ნაყოფიერება" : "დაორსულების შანსი"}</Text>
-            </View>
-            <Text style={[styles.cycleStatusValue, { color: pregnancyChance.includes("მაღალი") || pregnancyChance.includes("უმაღლესი") ? "#06D6A0" : theme.primary }]}>{pregnancyChance}</Text>
-          </View>
-        </View>
-
-        <View style={styles.cycleDayArea}>
-          <View style={[styles.cycleCircleOuter, { borderColor: isDark ? "rgba(233,69,96,0.18)" : "rgba(233,69,96,0.14)" }]}>
-            <View style={[styles.cycleCircleInner, { backgroundColor: isDark ? "rgba(233,69,96,0.08)" : "rgba(233,69,96,0.06)", borderColor: theme.primary }]}>
-              <Text style={[styles.cycleDayNumber, { color: phaseColor }]}>{cycleDay}</Text>
-              <Text style={[styles.cycleDayText, { color: phaseColor }]}>დღე</Text>
+            <View style={[styles.heroMiniCard, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
+              <View style={[styles.heroMiniIcon, { backgroundColor: "rgba(255,138,107,0.18)" }]}>
+                <Ionicons name="heart" size={16} color="#FF8A6B" />
+              </View>
+              <View style={styles.heroMiniCopy}>
+                <Text style={[styles.heroMiniLabel, { color: theme.subText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>დაორსულების შანსი</Text>
+                <Text style={[styles.heroMiniValue, { color: pregnancyChance.includes("მაღალი") || pregnancyChance.includes("უმაღლესი") ? "#06D6A0" : theme.primary }]} numberOfLines={1}>{pregnancyChance}</Text>
+              </View>
             </View>
           </View>
-        </View>
+          <View style={styles.circularTracker}>
+            <LinearGradient colors={[theme.peach, "#FF7EA8", theme.lavender, theme.fertile]} style={styles.trackerRing}>
+              <View style={[styles.trackerInner, { backgroundColor: isDark ? "#1B171E" : "#FFFDFC" }]}>
+                <Text style={[styles.trackerLabel, { color: theme.subText }]}>{heroMainLabel}</Text>
+                <Text style={[styles.trackerNumber, { color: trackerNumberColor, textShadowColor: `${trackerNumberColor}55` }]}>{heroMainNumber}</Text>
+                <Text style={[styles.trackerDateHint, { color: theme.subText }]}>შემდეგი პროგნოზი: {nextPeriod}</Text>
+              </View>
+            </LinearGradient>
+            <View style={[styles.trackerProgressDot, { backgroundColor: phaseColor, transform: [{ rotate: `${Math.min(progress, 100) * 3.6}deg` }, { translateY: -104 }] }]} />
+          </View>
+          <TouchableOpacity style={styles.trackerCta} onPress={logPeriod} activeOpacity={0.86}>
+            <Text style={styles.trackerCtaText}>ციკლი დამეწყო დღეს</Text>
+          </TouchableOpacity>
+        </LinearGradient>
 
-        <View style={styles.cycleProgressHeader}>
-          <Text style={[styles.cycleProgressLabel, { color: theme.subText }]}>მიმდინარე ციკლის პროგრესი</Text>
-          <Text style={styles.cycleProgressPercent}>{Math.round(Math.min(progress, 100))}%</Text>
-        </View>
-        <View style={[styles.cycleProgressTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(233,69,96,0.10)" }]}>
-          <LinearGradient
-            colors={["#FF6B91", "#E94560"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.cycleProgressFill, { width: `${Math.min(progress, 100)}%` }]}
-          />
-        </View>
-
-        <View style={styles.cyclePeriodSummary}>
-          <Text style={[styles.daysLeftLabel, { color: theme.subText }]}>შემდეგ პერიოდამდე დარჩა</Text>
-          <Text style={[styles.daysLeftNumber, { color: theme.text }]}>{daysLeft} დღე</Text>
-          <View style={styles.cycleDatePill}>
-            <Ionicons name="calendar-clear-outline" size={14} color="#E94560" />
-            <Text style={styles.cycleDateText}>{nextPeriod}</Text>
+        <View style={[styles.weekMiniCard, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
+          <View style={styles.weekMiniRow}>
+            {weekDays.map((item) => {
+              const accent = item.isPeriod
+                ? calendarColors.period
+                : item.isOvulation
+                  ? calendarColors.ovulation
+                  : item.isFertile
+                    ? calendarColors.fertile
+                    : "transparent";
+              const dayBackground = item.isToday
+                ? calendarColors.today
+                : accent === "transparent"
+                  ? calendarColors.neutral
+                  : `${accent}30`;
+              return (
+                <View key={item.date.format("YYYY-MM-DD")} style={styles.weekMiniDayWrap}>
+                  <Text style={[styles.weekMiniName, { color: theme.subText }]}>{item.date.format("dd")}</Text>
+                  <View style={[styles.weekMiniDay, item.isToday && styles.weekMiniToday, { backgroundColor: dayBackground }]}>
+                    <Text style={[styles.weekMiniNumber, { color: item.isToday ? "#FFFFFF" : theme.text }]}>{item.date.format("D")}</Text>
+                  </View>
+                  <View style={[styles.weekMiniMark, { backgroundColor: accent }]} />
+                </View>
+              );
+            })}
+          </View>
+          <View style={styles.weekLegendRow}>
+            <View style={[styles.weekLegendItem, { backgroundColor: theme.glassIcon }]}>
+              <View style={[styles.weekLegendDot, { backgroundColor: calendarColors.period }]} />
+              <Text style={[styles.weekLegendText, { color: theme.subText }]}>პერიოდი</Text>
+            </View>
+            <View style={[styles.weekLegendItem, { backgroundColor: theme.glassIcon }]}>
+              <View style={[styles.weekLegendDot, { backgroundColor: calendarColors.ovulation }]} />
+              <Text style={[styles.weekLegendText, { color: theme.subText }]}>ოვულაცია</Text>
+            </View>
+            <View style={[styles.weekLegendItem, { backgroundColor: theme.glassIcon }]}>
+              <View style={[styles.weekLegendDot, { backgroundColor: calendarColors.fertile }]} />
+              <Text style={[styles.weekLegendText, { color: theme.subText }]}>ნაყოფიერი</Text>
+            </View>
           </View>
         </View>
 
-        <TouchableOpacity activeOpacity={0.86} style={styles.cycleLogButton} onPress={logPeriod}>
-          <Ionicons name="add-circle-outline" size={19} color="#FFFFFF" />
-          <Text style={styles.logButtonText}>პერიოდი დამეწყო დღეს</Text>
-        </TouchableOpacity>
-      </LinearGradient>
-
-      <View>
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი მაჩვენებლები</Text>
+        <Text style={[styles.regularSectionTitle, { color: theme.text }]}>დღევანდელი მაჩვენებლები</Text>
         <LinearGradient
-          colors={isDark ? ["#19191D", "#121217"] : ["#FFFFFF", "#FCFAFC"]}
+          colors={theme.cardGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.statsCard}
+          style={[styles.regularStatsCard, { borderColor: theme.border }]}
         >
-          <View style={styles.statsCardHeader}>
+          <View style={styles.regularStatsHeader}>
             <View>
-              <Text style={styles.statsEyebrow}>DAILY OVERVIEW</Text>
-              <Text style={[styles.statsCardTitle, { color: theme.text }]}>შენი დღიური სურათი</Text>
+              <Text style={styles.regularStatsEyebrow}>DAILY OVERVIEW</Text>
+              <Text style={[styles.regularStatsTitle, { color: theme.text }]}>შენი დღიური სურათი</Text>
             </View>
-            <View style={styles.statsHeaderIcon}>
-              <Ionicons name="analytics-outline" size={19} color="#E94560" />
+            <View style={[styles.regularStatsIcon, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
+              <Ionicons name="analytics-outline" size={19} color="#FF8A6B" />
             </View>
           </View>
-
-          <View style={styles.statsDivider} />
-
-          <StatMeter icon="flame-outline" label="გაღიზიანება" percent={stats.anger} color="#FF6B6B" textColor={theme.text} />
-          <StatMeter icon="flash-outline" label="ენერგიის დონე" percent={stats.energy} color="#48CAE4" textColor={theme.text} />
-          <StatMeter icon="restaurant-outline" label="მადა" percent={stats.appetite} color="#FFB347" textColor={theme.text} />
-          <StatMeter icon="leaf-outline" label="სტაბილურობა" percent={stats.stability} color="#06D6A0" textColor={theme.text} isLast />
+          <View style={[styles.regularStatsDivider, { backgroundColor: theme.border }]} />
+          <StatMeter icon="flame-outline" label="გაღიზიანება" percent={stats.anger} color="#FF7A7A" textColor={theme.text} />
+          <StatMeter icon="flash-outline" label="ენერგიის დონე" percent={stats.energy} color="#9AB7FF" textColor={theme.text} />
+          <StatMeter icon="restaurant-outline" label="მადა" percent={stats.appetite} color="#FFB56F" textColor={theme.text} />
+          <StatMeter icon="leaf-outline" label="სტაბილურობა" percent={stats.stability} color="#71D7B8" textColor={theme.text} isLast />
         </LinearGradient>
-      </View>
 
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი რჩევა</Text>
-      <View style={[styles.insightCard, { backgroundColor: theme.card }]}>
-        <View style={[styles.insightIconBox, { backgroundColor: theme.circleBg }]}>
-          <Text style={{ fontSize: 24 }}>{phaseKey === "fertile" ? "🌿" : phaseKey === "period" ? "🫶" : "💡"}</Text>
-        </View>
-        <View style={styles.insightContent}>
+        <LinearGradient
+          colors={isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.96)", "rgba(255,239,231,0.9)", "rgba(247,241,255,0.86)"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.adviceGlassCard, { borderColor: theme.border }]}
+        >
+          <View style={styles.adviceGlowPeach} />
+          <View style={styles.adviceGlowLavender} />
+          <View style={styles.adviceHeader}>
+            <View style={[styles.adviceIconBubble, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
+              <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.adviceGuideImage} resizeMode="cover" />
+              <Text style={styles.smallInsightEmoji}>{phaseKey === "fertile" ? "🌿" : phaseKey === "period" ? "🫶" : "🍵"}</Text>
+            </View>
+            <View style={styles.adviceTitleWrap}>
+              <Text style={styles.adviceEyebrow}>დღის გზამკვლევი</Text>
+              <Text style={[styles.adviceTitle, { color: theme.text }]}>დღევანდელი რჩევა</Text>
+            </View>
+          </View>
           <PrimePreview
             style={styles.insightPreview}
-            minHeight={118}
+            minHeight={142}
             concealCompletely
-            message="სრული რჩევის სანახავად გახსენი Prime"
+            message="სრული რჩევისთვის გახსენი Prime"
+            buttonLabel="გახსნა"
           >
-            <Text style={[styles.insightText, { color: theme.subText }]}>
-              {dailyAdvice}
-            </Text>
+            <Text style={[styles.insightText, { color: theme.subText }]}>{dailyAdvice}</Text>
           </PrimePreview>
-
           {isPremium && adviceLoading && (
             <View style={styles.insightLoadingRow}>
               <ActivityIndicator size="small" color={theme.primary} />
-              <Text style={[styles.insightHint, { color: theme.subText }]}>
-                ასისტენტი აახლებს რჩევას...
-              </Text>
+              <Text style={[styles.insightHint, { color: theme.subText }]}>ასისტენტი აახლებს რჩევას...</Text>
             </View>
           )}
-        </View>
-        {isPremium && (
-          <Text style={{ fontSize: 11, color: "#aaa", textAlign: "right", marginTop: 8, opacity: 0.7 }}>ასისტენტი შეიძლება შეცდეს</Text>
-        )}
-      </View>
+        </LinearGradient>
 
       {!isPremium && !pregnancyMode && (
         <TouchableOpacity
@@ -727,13 +926,15 @@ export default function HomeScreen() {
           onPress={() => router.push("/pregnancy-premium")}
         >
           <LinearGradient
-            colors={isDark ? ["#19171C", "#14211F"] : ["#FFFFFF", "#F2FBF8"]}
+            colors={theme.bannerGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.pregnancyBannerGradient}
           >
+            <View style={styles.pregnancyBannerGlowPink} />
+            <View style={styles.pregnancyBannerGlowMint} />
             <View style={styles.pregnancyBannerLeft}>
-              <View style={styles.pregnancyBannerIcon}>
+              <View style={[styles.pregnancyBannerIcon, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
                 <Ionicons name="heart" size={23} color="#06B98A" />
               </View>
               <View style={styles.pregnancyBannerCopy}>
@@ -746,35 +947,42 @@ export default function HomeScreen() {
                 <Text style={[styles.pregnancyBannerSub, { color: theme.subText }]}>კვირეული AI რჩევა, ნოტიფიკაციები და ნაყოფის ვიზუალიზაცია</Text>
               </View>
             </View>
-            <View style={styles.pregnancyBannerArrow}>
-              <Ionicons name="chevron-forward" size={16} color="#06B98A" />
+            <View style={[styles.pregnancyBannerImageWrap, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
+              <Image source={PREGNANCY_BANNER_IMAGE} style={styles.pregnancyBannerImage} resizeMode="cover" />
             </View>
           </LinearGradient>
         </TouchableOpacity>
       )}
 
-      <View style={{ height: 100 }} />
-    </ScrollView>
+      <View style={{ height: 160 }} />
+      </ScrollView>
+      <View style={styles.floatingDiaryAvatar}>
+        <DiaryAvatar accent={theme.primary} isDark={isDark} size={46} showHint={false} />
+      </View>
+    </LinearGradient>
   );
 }
 
-function BabyImage({ uri, emoji }) {
+function BabyPreview({ uri, emoji }) {
   const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(uri));
 
-  if (error) {
-    return <Text style={{ fontSize: 100 }}>{emoji}</Text>;
+  if (!uri || error) {
+    return <Text style={styles.babyPreviewEmoji}>{emoji}</Text>;
   }
 
   return (
-    <View style={{ width: "100%", aspectRatio: 1, backgroundColor: "#111", justifyContent: "center", alignItems: "center" }}>
-      {loading && <ActivityIndicator color="#ff4d88" size="large" style={{ position: "absolute" }} />}
+    <View style={styles.babyPreviewWrap}>
+      {loading && <ActivityIndicator color="#ff4d88" size="small" style={styles.babyPreviewLoader} />}
       <Image
         source={{ uri }}
-        style={{ width: "100%", height: "100%" }}
+        style={styles.babyPreviewImage}
         resizeMode="contain"
         onLoad={() => setLoading(false)}
-        onError={(e) => { console.log("Baby image error:", uri, e.nativeEvent?.error); setError(true); setLoading(false); }}
+        onError={() => {
+          setError(true);
+          setLoading(false);
+        }}
       />
     </View>
   );
@@ -824,12 +1032,12 @@ function StatMeter({ icon, label, percent, color, textColor, isLast = false }) {
     <View style={[styles.meterWrapper, isLast && styles.meterWrapperLast]}>
       <View style={styles.meterLabelRow}>
         <View style={styles.meterIdentity}>
-          <View style={[styles.meterIcon, { backgroundColor: `${color}1A` }]}>
+          <View style={[styles.meterIcon, { backgroundColor: `${color}24` }]}>
             <Ionicons name={icon} size={15} color={color} />
           </View>
           <Text style={[styles.meterLabel, { color: textColor }]}>{label}</Text>
         </View>
-        <View style={[styles.meterPercentPill, { backgroundColor: `${color}1A` }]}>
+        <View style={[styles.meterPercentPill, { backgroundColor: `${color}24` }]}>
           <Text style={[styles.meterPercent, { color }]}>{safePercent}%</Text>
         </View>
       </View>
@@ -842,6 +1050,158 @@ function StatMeter({ icon, label, percent, color, textColor, isLast = false }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 60 },
+  pregnancyRoot: { flex: 1 },
+  pregnancyScroll: { flex: 1 },
+  pregnancyContent: { paddingTop: 54, paddingBottom: 24 },
+  pregnancyHeader: { paddingHorizontal: 22, marginBottom: 12 },
+  pregnancyTitle: { fontSize: 24, fontWeight: "900", letterSpacing: 0 },
+  pregnancySubtitle: { marginTop: 5, fontSize: 13, fontWeight: "700" },
+  weekCalendarContent: { gap: 10, paddingVertical: 7, paddingHorizontal: 20 },
+  weekDayItem: {
+    height: 64,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.45)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.72)",
+  },
+  weekDayGlass: {
+    height: 64,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#FF4D88",
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  weekDayName: { color: "#8F6574", fontSize: 11, fontWeight: "800", textTransform: "capitalize" },
+  weekDayNumber: { color: "#402933", fontSize: 17, fontWeight: "900", marginTop: 4 },
+  weekDayNameActive: { color: "#fff", fontSize: 11, fontWeight: "900", textTransform: "capitalize" },
+  weekDayNumberActive: { color: "#fff", fontSize: 17, fontWeight: "900", marginTop: 4 },
+  babyGrowthCard: { marginHorizontal: 20, marginTop: 12, borderRadius: 30, overflow: "hidden", shadowColor: "#D76586", shadowOpacity: 0.24, shadowRadius: 26, shadowOffset: { width: 0, height: 14 }, elevation: 10 },
+  babyGrowthGradient: { minHeight: 392, padding: 18, justifyContent: "space-between" },
+  babyWeekBadge: { alignSelf: "flex-start", paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.52)", borderWidth: 1, borderColor: "rgba(255,255,255,0.74)" },
+  babyWeekBadgeText: { color: "#7C4054", fontSize: 12, fontWeight: "900" },
+  babyImageStage: { flex: 1, alignItems: "center", justifyContent: "center", marginTop: 4, marginBottom: -18 },
+  babyOrbitLine: { height: 1, marginHorizontal: 24, marginBottom: -12, backgroundColor: "rgba(255,255,255,0.72)" },
+  assistantGlassButton: {
+    minHeight: 70,
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.58)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.78)",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 13,
+    marginBottom: 28,
+    shadowColor: "#B94C6F",
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  assistantAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,236,242,0.9)", marginRight: 11 },
+  assistantAvatarEmoji: { fontSize: 25 },
+  assistantCopy: { flex: 1 },
+  assistantLabel: { color: "#3B232C", fontSize: 13, fontWeight: "900", marginBottom: 3 },
+  assistantSub: { color: "#8F6574", fontSize: 12, fontWeight: "700" },
+  assistantArrow: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.75)" },
+  pregnancyInsightGrid: { flexDirection: "row", gap: 12, paddingHorizontal: 20, marginTop: 16 },
+  pregnancyMetricCard: { flex: 1, minHeight: 80, borderRadius: 24, padding: 15, backgroundColor: "rgba(255,255,255,0.58)", borderWidth: 1, borderColor: "rgba(255,255,255,0.74)" },
+  pregnancyMetricLabel: { color: "#9A6A79", fontSize: 11, fontWeight: "800", marginBottom: 8 },
+  pregnancyMetricValue: { color: "#34232B", fontSize: 17, fontWeight: "900" },
+  weekProgressCard: { marginHorizontal: 20, marginTop: 14, borderRadius: 24, padding: 16, backgroundColor: "rgba(255,255,255,0.58)", borderWidth: 1, borderColor: "rgba(255,255,255,0.74)" },
+  weekProgressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  weekProgressTitle: { color: "#3B232C", fontSize: 14, fontWeight: "900" },
+  weekProgressPercent: { color: "#FF4D88", fontSize: 14, fontWeight: "900" },
+  weekProgressTrack: { height: 8, borderRadius: 999, backgroundColor: "rgba(255,77,136,0.14)", overflow: "hidden" },
+  weekProgressFill: { height: "100%", borderRadius: 999, backgroundColor: "#FF4D88" },
+  weekProgressHint: { color: "#8F6574", fontSize: 12, fontWeight: "700", marginTop: 10 },
+  pregnancySectionTitle: { fontSize: 18, fontWeight: "900", marginHorizontal: 20, marginTop: 22, marginBottom: 12 },
+  weekAdviceGlass: { marginHorizontal: 20, borderRadius: 24, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.58)", borderWidth: 1, borderColor: "rgba(255,255,255,0.74)" },
+  pregnancyAdviceDoctorRow: { paddingHorizontal: 20, paddingTop: 18, alignItems: "flex-start" },
+  pregnancyAdviceDoctorAvatar: { width: 48, height: 48, borderRadius: 20, overflow: "hidden", borderWidth: 1, backgroundColor: "rgba(255,255,255,0.64)" },
+  pregnancyAdviceDoctorImage: { width: "100%", height: "100%" },
+  pregnancyAdviceLoading: { flexDirection: "row", alignItems: "center", gap: 10, padding: 20 },
+  weekAdviceText: { color: "#4B303B", fontSize: 14, lineHeight: 22, padding: 20 },
+  retryAdviceButton: { marginTop: 12, alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14, backgroundColor: "#FF4D88" },
+  retryAdviceText: { color: "#fff", fontSize: 13, fontWeight: "900" },
+  babyPreviewWrap: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center" },
+  babyPreviewImage: { width: "118%", height: "118%" },
+  babyPreviewLoader: { position: "absolute", zIndex: 2 },
+  babyPreviewEmoji: { fontSize: 112 },
+  babyModalOverlay: { flex: 1, backgroundColor: "rgba(32,18,25,0.72)", justifyContent: "center", alignItems: "center", padding: 20 },
+  babyModalCard: { width: "100%", maxWidth: 390, borderRadius: 30, padding: 20, backgroundColor: "rgba(255,248,250,0.96)", borderWidth: 1, borderColor: "rgba(255,255,255,0.8)" },
+  babyModalClose: { position: "absolute", right: 14, top: 14, width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,77,136,0.9)", alignItems: "center", justifyContent: "center", zIndex: 4 },
+  babyModalPreview: { height: 250, alignItems: "center", justifyContent: "center" },
+  babyModalWeek: { color: "#FF4D88", fontSize: 13, fontWeight: "900", marginTop: 12 },
+  babyModalTitle: { color: "#2F2026", fontSize: 24, fontWeight: "900", marginTop: 4, marginBottom: 10 },
+  babyModalText: { color: "#5F3F4B", fontSize: 14, lineHeight: 22 },
+  regularRoot: { flex: 1 },
+  regularScroll: { flex: 1, paddingHorizontal: 20, paddingTop: 58 },
+  regularHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18, paddingRight: 70 },
+  regularGreeting: { fontSize: 25, fontWeight: "900", letterSpacing: -0.5 },
+  regularDate: { marginTop: 5, fontSize: 13, fontWeight: "700", textTransform: "capitalize" },
+  regularHeaderActions: { flexDirection: "row", gap: 10 },
+  regularHeaderAvatar: { width: 54, height: 54, alignItems: "center", justifyContent: "center" },
+  floatingDiaryAvatar: { position: "absolute", top: 54, right: 18, zIndex: 30, elevation: 30 },
+  headerRoundButton: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  notificationDot: { position: "absolute", top: 10, right: 11, width: 7, height: 7, borderRadius: 4, backgroundColor: "#FF4D88", borderWidth: 1, borderColor: "#FFFFFF" },
+  regularHeroCard: { minHeight: 436, borderRadius: 34, borderWidth: 1, alignItems: "center", justifyContent: "center", marginBottom: 14, overflow: "hidden", shadowColor: "#D98976", shadowOpacity: 0.16, shadowRadius: 24, shadowOffset: { width: 0, height: 14 }, elevation: 8, paddingVertical: 22 },
+  heroGlowPeach: { position: "absolute", width: 210, height: 210, borderRadius: 105, backgroundColor: "rgba(255,158,125,0.18)", top: -78, right: -44 },
+  heroGlowLavender: { position: "absolute", width: 220, height: 220, borderRadius: 110, backgroundColor: "rgba(184,164,255,0.16)", bottom: -84, left: -70 },
+  heroMiniCardsRow: { width: "88%", flexDirection: "row", gap: 10, marginBottom: 18 },
+  heroMiniCard: { flex: 1, minHeight: 76, borderRadius: 22, borderWidth: 1, padding: 11, flexDirection: "row", alignItems: "center", gap: 9, shadowColor: "#E6A08C", shadowOpacity: 0.10, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 4 },
+  heroMiniIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  heroMiniCopy: { flex: 1, minWidth: 0 },
+  heroMiniLabel: { fontSize: 10, lineHeight: 13, fontWeight: "900", marginBottom: 4 },
+  heroMiniValue: { fontSize: 13, lineHeight: 16, fontWeight: "900" },
+  circularTracker: { width: 250, height: 250, alignItems: "center", justifyContent: "center" },
+  trackerRing: { width: 242, height: 242, borderRadius: 121, alignItems: "center", justifyContent: "center", padding: 17 },
+  trackerInner: { width: "100%", height: "100%", borderRadius: 104, alignItems: "center", justifyContent: "center", paddingHorizontal: 22 },
+  trackerLabel: { fontSize: 13, lineHeight: 17, fontWeight: "900", textAlign: "center", marginBottom: 6 },
+  trackerNumber: { fontSize: 64, lineHeight: 68, fontWeight: "900", letterSpacing: -2.5, marginBottom: 8, textShadowOffset: { width: 0, height: 8 }, textShadowRadius: 18 },
+  trackerDateHint: { fontSize: 10, lineHeight: 14, fontWeight: "800", textAlign: "center" },
+  trackerCta: { width: "78%", minHeight: 54, borderRadius: 999, backgroundColor: "#FF8A6B", paddingHorizontal: 24, marginTop: 18, alignItems: "center", justifyContent: "center", shadowColor: "#FF8A6B", shadowOpacity: 0.28, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 5 },
+  trackerCtaText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900", textAlign: "center" },
+  trackerProgressDot: { position: "absolute", top: 121, left: 121, width: 14, height: 14, borderRadius: 7, borderWidth: 3, borderColor: "#FFFFFF" },
+  weekMiniCard: { borderRadius: 24, borderWidth: 1, padding: 12, marginBottom: 22, shadowColor: "#E6A08C", shadowOpacity: 0.10, shadowRadius: 16, shadowOffset: { width: 0, height: 9 }, elevation: 4 },
+  weekMiniRow: { flexDirection: "row", justifyContent: "space-between" },
+  weekMiniDayWrap: { alignItems: "center", width: "13.5%" },
+  weekMiniName: { fontSize: 10, fontWeight: "800", textTransform: "capitalize", marginBottom: 6 },
+  weekMiniDay: { width: 37, height: 37, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  weekMiniToday: { shadowColor: "#6C63FF", shadowOpacity: 0.32, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 7, borderWidth: 2, borderColor: "rgba(255,255,255,0.82)" },
+  weekMiniNumber: { fontSize: 14, fontWeight: "900" },
+  weekMiniMark: { width: 24, height: 5, borderRadius: 999, marginTop: 7 },
+  weekLegendRow: { flexDirection: "row", justifyContent: "space-between", gap: 8, marginTop: 12 },
+  weekLegendItem: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: 6, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.38)" },
+  weekLegendDot: { width: 8, height: 8, borderRadius: 4 },
+  weekLegendText: { fontSize: 10, fontWeight: "800" },
+  regularSectionTitle: { fontSize: 18, fontWeight: "900", marginBottom: 12 },
+  regularStatsCard: { borderRadius: 28, borderWidth: 1, padding: 18, marginBottom: 22, overflow: "hidden", shadowColor: "#D98976", shadowOpacity: 0.13, shadowRadius: 20, shadowOffset: { width: 0, height: 11 }, elevation: 6 },
+  regularStatsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  regularStatsEyebrow: { color: "#FF8A6B", fontSize: 9, fontWeight: "900", letterSpacing: 1, marginBottom: 5 },
+  regularStatsTitle: { fontSize: 17, fontWeight: "900" },
+  regularStatsIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: "rgba(255,138,107,0.16)", alignItems: "center", justifyContent: "center" },
+  regularStatsDivider: { height: 1, marginVertical: 17 },
+  quickLogCard: { borderRadius: 26, borderWidth: 1, padding: 16, marginBottom: 22 },
+  quickLogLabel: { fontSize: 12, fontWeight: "900", marginBottom: 9 },
+  quickTagRow: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
+  quickTag: { minHeight: 54, borderRadius: 18, borderWidth: 1, paddingHorizontal: 11, paddingVertical: 8, alignItems: "center", justifyContent: "center", minWidth: 72 },
+  quickTagIcon: { fontSize: 20, marginBottom: 3 },
+  quickTagText: { fontSize: 10, fontWeight: "800", textAlign: "center" },
+  smallInsightEmoji: { fontSize: 23 },
+  adviceGlassCard: { borderRadius: 30, borderWidth: 1, padding: 18, marginBottom: 18, overflow: "hidden", shadowColor: "#D98976", shadowOpacity: 0.12, shadowRadius: 20, shadowOffset: { width: 0, height: 12 }, elevation: 6 },
+  adviceGlowPeach: { position: "absolute", width: 140, height: 140, borderRadius: 70, backgroundColor: "rgba(255,138,107,0.18)", top: -58, right: -42 },
+  adviceGlowLavender: { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(184,164,255,0.16)", bottom: -64, left: -46 },
+  adviceHeader: { flexDirection: "row", alignItems: "center", gap: 11, marginBottom: 12 },
+  adviceIconBubble: { width: 42, height: 42, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.58)", borderWidth: 1, borderColor: "rgba(255,255,255,0.7)", overflow: "hidden" },
+  adviceGuideImage: { ...StyleSheet.absoluteFillObject, zIndex: 2, width: "100%", height: "100%" },
+  adviceTitleWrap: { flex: 1 },
+  adviceEyebrow: { color: "#FF8A6B", fontSize: 9, fontWeight: "900", letterSpacing: 1.1, marginBottom: 3 },
+  adviceTitle: { fontSize: 17, fontWeight: "900" },
   topDate: { textAlign: "center", fontSize: 16, marginBottom: 20, textTransform: "capitalize" },
   mainCard: { borderRadius: 30, padding: 25, alignItems: "center", elevation: 8, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 15, marginBottom: 30 },
   cycleMainCard: { borderRadius: 28, padding: 18, elevation: 8, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 15, marginBottom: 30, overflow: "hidden" },
@@ -901,31 +1261,39 @@ const styles = StyleSheet.create({
   insightCard: { borderRadius: 24, padding: 8, elevation: 3, overflow: "hidden" },
   insightIconBox: { display: "none" },
   insightContent: { gap: 10 },
-  insightPreview: { alignSelf: "stretch" },
+  insightPreview: { alignSelf: "stretch", borderRadius: 22 },
   insightLoadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   insightHint: { fontSize: 12, fontWeight: "600" },
-  insightText: { fontSize: 14, lineHeight: 21 },
+  insightText: { fontSize: 14, lineHeight: 22, fontWeight: "700" },
   pregnancyBanner: {
     marginTop: 14,
-    borderRadius: 22,
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: "rgba(6,185,138,0.26)",
+    borderColor: "rgba(255,255,255,0.76)",
     overflow: "hidden",
+    shadowColor: "#D98976",
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 7,
   },
   pregnancyBannerGradient: {
-    minHeight: 112,
+    minHeight: 132,
     padding: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    overflow: "hidden",
   },
+  pregnancyBannerGlowPink: { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(255,138,107,0.18)", top: -58, left: -40 },
+  pregnancyBannerGlowMint: { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(53,201,155,0.16)", bottom: -70, right: -36 },
   pregnancyBannerLeft: { flexDirection: "row", alignItems: "center", gap: 13, flex: 1 },
   pregnancyBannerIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor: "rgba(6,185,138,0.13)",
-    borderColor: "rgba(6,185,138,0.18)",
+    width: 50,
+    height: 50,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.58)",
+    borderColor: "rgba(255,255,255,0.74)",
     borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
@@ -933,16 +1301,9 @@ const styles = StyleSheet.create({
   pregnancyBannerCopy: { flex: 1 },
   pregnancyBannerEyebrow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
   pregnancyBannerEyebrowText: { color: "#06B98A", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
-  pregnancyBannerDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: "#06B98A" },
-  pregnancyBannerTitle: { fontSize: 16, fontWeight: "800", marginBottom: 3 },
-  pregnancyBannerSub: { fontSize: 12, lineHeight: 17, paddingRight: 4 },
-  pregnancyBannerArrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(6,185,138,0.12)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 8,
-  },
+  pregnancyBannerDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: "#FF8A6B" },
+  pregnancyBannerTitle: { fontSize: 18, fontWeight: "900", marginBottom: 4 },
+  pregnancyBannerSub: { fontSize: 12, lineHeight: 17, paddingRight: 6, fontWeight: "700" },
+  pregnancyBannerImageWrap: { width: 78, height: 98, borderRadius: 26, overflow: "hidden", marginLeft: 8, backgroundColor: "rgba(255,255,255,0.46)", borderWidth: 1, borderColor: "rgba(255,255,255,0.72)" },
+  pregnancyBannerImage: { width: "100%", height: "100%" },
 });

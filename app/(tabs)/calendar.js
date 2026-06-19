@@ -1,6 +1,5 @@
 import dayjs from "dayjs";
 import "dayjs/locale/ka";
-import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -14,6 +13,7 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Image,
   Text,
   TextInput,
   TouchableOpacity,
@@ -30,6 +30,8 @@ import { useCycles } from "../../hooks/useCycles";
 import { supabase } from "../../services/supabase";
 
 dayjs.locale("ka");
+
+const ASSISTANT_GUIDE_IMAGE = require("../../assets/images/assistant-guide.png");
 
 LocaleConfig.locales["ka"] = {
   monthNames: ["იანვარი","თებერვალი","მარტი","აპრილი","მაისი","ივნისი","ივლისი","აგვისტო","სექტემბერი","ოქტომბერი","ნოემბერი","დეკემბერი"],
@@ -164,14 +166,14 @@ function buildPregnancyMarks(pregnancyStartDate) {
   marks[dueDateStr] = { selected: true, selectedColor: "#ff4d88", marked: true, dotColor: "#ff4d88" };
 
   // დღეს
-  marks[todayStr] = { selected: true, selectedColor: "#48CAE4", marked: false };
+  marks[todayStr] = { selected: true, selectedColor: "#ff4d88", marked: false };
 
   return marks;
 }
 
 function PregnancyCalendarScreen() {
-  const { isDark, isPremium } = useTheme();
-  const { pregnancyStartDate, currentWeek, daysRemaining } = usePregnancy();
+  const { isDark } = useTheme();
+  const { pregnancyStartDate } = usePregnancy();
 
   const [currentDate, setCurrentDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [selectedDay, setSelectedDay] = useState(dayjs().format("YYYY-MM-DD"));
@@ -200,18 +202,25 @@ function PregnancyCalendarScreen() {
 
   const calendarMarks = { ...pregnancyMarks };
   if (selectedDay) {
-    calendarMarks[selectedDay] = { ...calendarMarks[selectedDay], selected: true, selectedColor: "#48CAE4" };
+    calendarMarks[selectedDay] = { ...calendarMarks[selectedDay], selected: true, selectedColor: "#ff4d88" };
   }
 
   const theme = {
-    bg: isDark ? "#0F0F0F" : "#FDFCFD",
-    card: isDark ? "#1A1A1A" : "#FFF",
-    text: isDark ? "#FFFFFF" : "#1A1A1A",
-    subText: isDark ? "#AAAAAA" : "#555",
-    chip: isDark ? "#2A2A2A" : "#F2F2F2",
-    inputBg: isDark ? "#252525" : "#F9F9F9",
+    bg: isDark ? "#181015" : "#FFF8FA",
+    card: isDark ? "rgba(36,24,31,0.84)" : "rgba(255,255,255,0.74)",
+    text: isDark ? "#FFF5F8" : "#2F2026",
+    subText: isDark ? "#D7B9C4" : "#8E6273",
+    chip: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.54)",
+    inputBg: isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.62)",
     accent: "#ff4d88",
-    divider: isDark ? "#333" : "#f0f0f0",
+    divider: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.65)",
+    border: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.82)",
+    glass: isDark ? "rgba(44,29,37,0.72)" : "rgba(255,255,255,0.58)",
+    glassStrong: isDark ? "rgba(58,38,48,0.86)" : "rgba(255,255,255,0.78)",
+    cardGradient: isDark ? ["rgba(58,38,48,0.94)", "rgba(28,18,24,0.84)"] : ["rgba(255,255,255,0.9)", "rgba(255,234,241,0.82)"],
+    calendarGradient: isDark ? ["rgba(76,42,51,0.96)", "rgba(35,22,29,0.9)"] : ["rgba(255,255,255,0.94)", "rgba(255,231,239,0.94)"],
+    activeSoft: isDark ? "rgba(255,77,136,0.18)" : "rgba(255,77,136,0.12)",
+    activeBorder: isDark ? "rgba(255,144,177,0.35)" : "rgba(255,77,136,0.35)",
   };
 
   const getWeekForDay = (dateStr) => {
@@ -322,9 +331,15 @@ function PregnancyCalendarScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+    <LinearGradient
+      colors={isDark ? ["#25151B", "#140E12", "#120C10"] : ["#FFFDFC", "#FFEFF4", "#F8B5C9"]}
+      start={{ x: 0.15, y: 0 }}
+      end={{ x: 0.85, y: 1 }}
+      style={{ flex: 1 }}
+    >
+    <View style={{ flex: 1, backgroundColor: "transparent" }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120, paddingTop: 60 }} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#06d6a0" />}>
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120, paddingTop: 60 }} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}>
 
           <View style={styles.pageHeader}>
             <View>
@@ -332,16 +347,13 @@ function PregnancyCalendarScreen() {
               <Text style={[styles.pageTitle, { color: theme.text }]}>ორსულობის კალენდარი</Text>
               <Text style={[styles.pageSubtitle, { color: theme.subText }]}>თვალი ადევნე კვირებს და მნიშვნელოვან ეტაპებს</Text>
             </View>
-            <View style={styles.pageHeaderIcon}>
-              <Ionicons name="heart-outline" size={21} color="#06D6A0" />
-            </View>
           </View>
 
           <LinearGradient
-            colors={isDark ? ["#1A1D1D", "#141717"] : ["#FFFFFF", "#F5FCFA"]}
+            colors={theme.calendarGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.calendarShell}
+            style={[styles.calendarShell, { borderWidth: 1, borderColor: theme.border }]}
           >
             <Calendar
               key={`pregnancy-${isDark ? "dark" : "light"}-${calendarKey}`}
@@ -356,21 +368,30 @@ function PregnancyCalendarScreen() {
                   <Text style={[styles.calHeaderText, { color: theme.text }]}>{dayjs(date).format("MMMM YYYY")} <Text style={styles.calHeaderChevron}>⌄</Text></Text>
                 </TouchableOpacity>
               )}
-              theme={{ calendarBackground: "transparent", dayTextColor: theme.text, monthTextColor: theme.text, todayTextColor: "#48CAE4", arrowColor: theme.accent, textDisabledColor: isDark ? "#444" : "#d9e1e8" }}
+              theme={{
+                calendarBackground: "transparent",
+                dayTextColor: theme.text,
+                monthTextColor: theme.text,
+                todayTextColor: theme.accent,
+                arrowColor: theme.accent,
+                selectedDayBackgroundColor: theme.accent,
+                selectedDayTextColor: "#fff",
+                textDisabledColor: isDark ? "rgba(255,255,255,0.22)" : "rgba(143,101,116,0.35)",
+              }}
             />
           </LinearGradient>
 
-          <View style={styles.legend}>
+          <View style={[styles.legend, { backgroundColor: theme.glass, borderWidth: 1, borderColor: theme.border }]}>
             <LegendItem color={TRIMESTER_COLORS[1]} label="I ტრიმ." textColor={theme.text} />
             <LegendItem color={TRIMESTER_COLORS[2]} label="II ტრიმ." textColor={theme.text} />
             <LegendItem color={TRIMESTER_COLORS[3]} label="III ტრიმ." textColor={theme.text} />
-            <LegendItem color="#48CAE4" label="დღეს" textColor={theme.text} />
+            <LegendItem color={theme.accent} label="დღეს" textColor={theme.text} />
             <LegendItem color="#ff4d88" label="მშობ. თარ." textColor={theme.text} />
           </View>
 
           <View style={styles.sectionContainer}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>{dayjs(selectedDay).format("D MMMM")}</Text>
-            <View style={[styles.card, { backgroundColor: theme.card, marginTop: 15 }]}>
+            <LinearGradient colors={theme.cardGradient} style={[styles.card, { borderColor: theme.border, borderWidth: 1, marginTop: 15 }]}>
               {selectedWeek ? (
                 <>
                   <View style={styles.statusRow}>
@@ -384,7 +405,7 @@ function PregnancyCalendarScreen() {
                     </Text>
                   </View>
                   {milestone && (
-                    <View style={[styles.noteBox, { backgroundColor: isDark ? "rgba(255,77,136,0.1)" : "#FFF0F5", borderLeftColor: trimesterColor, marginTop: 10 }]}>
+                    <View style={[styles.noteBox, { backgroundColor: theme.activeSoft, borderLeftColor: trimesterColor, marginTop: 10 }]}>
                       <Text style={[styles.noteText, { color: trimesterColor }]}>{milestone}</Text>
                     </View>
                   )}
@@ -392,15 +413,20 @@ function PregnancyCalendarScreen() {
               ) : (
                 <Text style={[styles.emptyText, { color: theme.subText, borderTopWidth: 0 }]}>ეს თარიღი ორსულობამდეა.</Text>
               )}
-            </View>
+            </LinearGradient>
 
             {/* Assistant advice — shown after diary is ever saved */}
             {diaryEverSaved && (
-              <View style={[styles.assistantBox, { backgroundColor: isDark ? "rgba(6,214,160,0.1)" : "#F0FDF8", borderColor: isDark ? "rgba(6,214,160,0.25)" : "#B7EDD9", marginTop: 16 }]}>
+              <View style={[styles.assistantBox, { backgroundColor: theme.glass, borderColor: theme.border, marginTop: 16 }]}>
                 <Text style={[styles.assistantTitle, { color: theme.text }]}>ასისტენტის რჩევა 🤰✨</Text>
+                <View style={styles.assistantHeader}>
+                  <View style={styles.assistantIconBubble}>
+                    <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.assistantGuideImage} resizeMode="cover" />
+                  </View>
+                </View>
                 {assistantSupport.loading && !assistantSupport.text ? (
                   <View style={styles.assistantLoadingRow}>
-                    <ActivityIndicator color="#06d6a0" size="small" />
+                    <ActivityIndicator color={theme.accent} size="small" />
                     <Text style={[styles.assistantText, { color: theme.subText }]}>ასისტენტი ამზადებს შენზე მორგებულ რჩევას...</Text>
                   </View>
                 ) : (
@@ -423,20 +449,28 @@ function PregnancyCalendarScreen() {
                 <DiaryAvatar accent={theme.accent} isDark={isDark} />
               </View>
 
-              <View style={[styles.card, { backgroundColor: theme.card, marginTop: 16 }]}>
+              <LinearGradient colors={theme.cardGradient} style={[styles.card, { borderColor: theme.border, borderWidth: 1, marginTop: 16 }]}>
                 <Text style={[styles.cardLabel, { color: theme.text }]}>როგორ გრძნობ თავს</Text>
                 <View style={styles.moodGrid}>
                   {moodOptions.map((m) => {
                     const active = mood === m.label;
                     return (
-                      <TouchableOpacity key={m.label} style={[styles.moodItem, active && styles.activeMood]} onPress={() => setMood(m.label)}>
+                      <TouchableOpacity
+                        key={m.label}
+                        style={[
+                          styles.moodItem,
+                          { backgroundColor: active ? theme.activeSoft : "transparent", borderColor: active ? theme.activeBorder : "transparent" },
+                          active && styles.activeMood,
+                        ]}
+                        onPress={() => setMood(m.label)}
+                      >
                         <Text style={styles.moodEmoji}>{m.emoji}</Text>
                         <Text style={[styles.moodLabel, { color: theme.subText }, active && { color: theme.accent, fontWeight: "700" }]}>{m.label}</Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
-              </View>
+              </LinearGradient>
 
               {pregnancySymptomCategories.map((cat, idx) => (
                 <View key={idx} style={{ marginTop: 24 }}>
@@ -445,7 +479,17 @@ function PregnancyCalendarScreen() {
                     {cat.items.map((item) => {
                       const active = selectedSymptoms.includes(item.id);
                       return (
-                        <TouchableOpacity key={item.id} style={[styles.chip, { backgroundColor: theme.chip }, active && styles.activeChip]} onPress={() => toggleSymptom(item.id)}>
+                        <TouchableOpacity
+                          key={item.id}
+                          style={[
+                            styles.chip,
+                            {
+                              backgroundColor: active ? theme.accent : theme.chip,
+                              borderColor: active ? "rgba(255,255,255,0.72)" : theme.border,
+                            },
+                          ]}
+                          onPress={() => toggleSymptom(item.id)}
+                        >
                           <Text style={styles.chipIcon}>{item.icon}</Text>
                           <Text style={[styles.chipText, { color: theme.text }, active && styles.activeChipText]}>{item.label}</Text>
                         </TouchableOpacity>
@@ -457,7 +501,14 @@ function PregnancyCalendarScreen() {
 
               <View style={{ marginTop: 24 }}>
                 <Text style={[styles.cardLabel, { color: theme.text }]}>დღევანდელი ჩანაწერი</Text>
-                <TextInput style={[styles.noteInput, { backgroundColor: theme.inputBg, color: theme.text }]} placeholder="როგორ ჩაიარა დღემ..." placeholderTextColor={isDark ? "#666" : "#999"} multiline value={note} onChangeText={setNote} />
+                <TextInput
+                  style={[styles.noteInput, { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text }]}
+                  placeholder="როგორ ჩაიარა დღემ..."
+                  placeholderTextColor={theme.subText}
+                  multiline
+                  value={note}
+                  onChangeText={setNote}
+                />
               </View>
 
               <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.accent }]} onPress={saveSymptoms} disabled={saving}>
@@ -470,7 +521,7 @@ function PregnancyCalendarScreen() {
 
       <Modal visible={showMonthPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.monthPickerCard, { backgroundColor: theme.card }]}>
+          <View style={[styles.monthPickerCard, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
             <View style={styles.yearSelector}>
               <TouchableOpacity onPress={() => changeYear(-1)} style={styles.yearBtn}><Text style={[styles.yearBtnText, { color: theme.text }]}>{"<"}</Text></TouchableOpacity>
               <Text style={[styles.yearText, { color: theme.text }]}>{dayjs(currentDate).year()}</Text>
@@ -480,7 +531,7 @@ function PregnancyCalendarScreen() {
               {shortMonths.map((m, i) => {
                 const isActive = dayjs(currentDate).month() === i;
                 return (
-                  <TouchableOpacity key={m} style={[styles.monthBtn, { backgroundColor: isActive ? theme.accent : isDark ? "#252525" : "#F5F5F5" }]} onPress={() => selectMonth(i)}>
+                  <TouchableOpacity key={m} style={[styles.monthBtn, { backgroundColor: isActive ? theme.accent : theme.glass }]} onPress={() => selectMonth(i)}>
                     <Text style={[styles.monthBtnText, { color: isActive ? "#FFF" : theme.text }]}>{m}</Text>
                   </TouchableOpacity>
                 );
@@ -492,7 +543,11 @@ function PregnancyCalendarScreen() {
           </View>
         </View>
       </Modal>
+      <View style={styles.floatingDiaryAvatar}>
+        <DiaryAvatar accent={theme.accent} isDark={isDark} size={46} showHint={false} />
+      </View>
     </View>
+    </LinearGradient>
   );
 }
 
@@ -529,16 +584,26 @@ function RegularCalendarScreen() {
 
   // -- Theme -------------------------------------------------------
   const theme = {
-    bg: isDark ? "#0F0F0F" : "#FDFCFD",
-    card: isDark ? "#1A1A1A" : "#FFF",
-    text: isDark ? "#FFFFFF" : "#1A1A1A",
-    subText: isDark ? "#AAAAAA" : "#555",
-    pill: isDark ? "#2A2A2A" : "#F8F8F8",
-    divider: isDark ? "#333" : "#f0f0f0",
-    calendarBg: isDark ? "#1A1A1A" : "#FFF",
-    chip: isDark ? "#2A2A2A" : "#F2F2F2",
-    inputBg: isDark ? "#252525" : "#F9F9F9",
-    accent: isDark ? "#E94560" : "#ff4d88",
+    bg: isDark ? "#211621" : "#FFFDFC",
+    card: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.78)",
+    text: isDark ? "#FFF7FB" : "#2F2026",
+    subText: isDark ? "#E9C7D4" : "#8F6574",
+    pill: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.58)",
+    divider: isDark ? "rgba(255,209,224,0.12)" : "rgba(255,255,255,0.74)",
+    calendarBg: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.78)",
+    chip: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.62)",
+    inputBg: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.68)",
+    accent: "#FF4D88",
+    peach: "#FF9E7D",
+    lavender: "#B8A4FF",
+    fertile: "#35C99B",
+    ovulation: "#FFD166",
+    selected: "#6C63FF",
+    border: isDark ? "rgba(255,209,224,0.16)" : "rgba(255,255,255,0.78)",
+    softCard: isDark ? "rgba(67,49,72,0.72)" : "rgba(255,255,255,0.66)",
+    calendarGradient: isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.96)", "rgba(255,242,232,0.9)", "rgba(246,240,255,0.86)"],
+    cardGradient: isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.94)", "rgba(255,240,232,0.84)", "rgba(246,240,255,0.82)"],
+    assistantGradient: isDark ? ["rgba(72,50,76,0.96)", "rgba(38,28,45,0.92)"] : ["rgba(255,255,255,0.94)", "rgba(255,242,232,0.88)", "rgba(246,240,255,0.84)"],
   };
 
   // -- Data loading ------------------------------------------------
@@ -614,7 +679,7 @@ function RegularCalendarScreen() {
     calendarMarks[selectedDay] = {
       ...calendarMarks[selectedDay],
       selected: true,
-      selectedColor: "#48CAE4",
+      selectedColor: theme.selected,
       disableTouchEvent: false,
     };
   }
@@ -801,7 +866,10 @@ function RegularCalendarScreen() {
 
   // -- Render ------------------------------------------------------
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+    <LinearGradient
+      colors={isDark ? ["#2A1B2A", "#211621", "#17151D"] : ["#FFFDFC", "#FFF1EB", "#F6F0FF"]}
+      style={{ flex: 1 }}
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
@@ -822,21 +890,20 @@ function RegularCalendarScreen() {
           {/* --------------- CALENDAR --------------- */}
           <View style={styles.pageHeader}>
             <View>
-              <Text style={styles.pageEyebrow}>CYCLE CALENDAR</Text>
+              <Text style={styles.pageEyebrow}>ციკლის კალენდარი</Text>
               <Text style={[styles.pageTitle, { color: theme.text }]}>შენი კალენდარი</Text>
               <Text style={[styles.pageSubtitle, { color: theme.subText }]}>მართე ციკლი და დღიური ერთ სივრცეში</Text>
-            </View>
-            <View style={styles.pageHeaderIcon}>
-              <Ionicons name="calendar-outline" size={21} color="#E94560" />
             </View>
           </View>
 
           <LinearGradient
-            colors={isDark ? ["#1D191E", "#151417"] : ["#FFFFFF", "#FFF8FA"]}
+            colors={theme.calendarGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.calendarShell}
+            style={[styles.calendarShell, { borderColor: theme.border }]}
           >
+            <View style={styles.calendarGlowPeach} />
+            <View style={styles.calendarGlowLavender} />
             <Calendar
               key={`${isDark ? "dark" : "light"}-${calendarKey}`}
               current={currentDate}
@@ -861,19 +928,19 @@ function RegularCalendarScreen() {
                 calendarBackground: "transparent",
                 dayTextColor: theme.text,
                 monthTextColor: theme.text,
-                todayTextColor: "#48CAE4",
+                todayTextColor: theme.selected,
                 arrowColor: theme.accent,
-                textDisabledColor: isDark ? "#444" : "#d9e1e8",
+                textDisabledColor: isDark ? "rgba(255,255,255,0.24)" : "rgba(143,101,116,0.34)",
                 selectedDayTextColor: "#ffffff",
               }}
             />
           </LinearGradient>
 
           {/* Legend */}
-          <View style={styles.legend}>
+          <View style={[styles.legend, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
             <LegendItem color={theme.accent} label="პერიოდი" textColor={theme.text} />
-            <LegendItem color="#06d6a0" label="ნაყოფიერი" textColor={theme.text} />
-            <LegendItem color="#ffd166" label="ოვულაცია" textColor={theme.text} />
+            <LegendItem color={theme.ovulation} label="ოვულაცია" textColor={theme.text} />
+            <LegendItem color={theme.fertile} label="ნაყოფიერი" textColor={theme.text} />
           </View>
 
           {/* Selected-day details */}
@@ -918,7 +985,7 @@ function RegularCalendarScreen() {
             {dayDetails.loading ? (
               <ActivityIndicator color={theme.accent} style={{ marginTop: 20 }} />
             ) : (
-              <View style={[styles.card, { backgroundColor: theme.card }]}>
+              <LinearGradient colors={theme.cardGradient} style={[styles.card, { borderColor: theme.border, borderWidth: 1 }]}>
                 <View style={styles.statusRow}>
                   <Text style={[styles.statusLabel, { color: theme.subText }]}>სტატუსი:</Text>
                   <Text style={[styles.statusValue, { color: theme.text }]}>
@@ -984,24 +1051,28 @@ function RegularCalendarScreen() {
                 )}
 
                 {isTodaySelected && !todayDiarySaved && (
-                  <View
-                    style={[
-                      styles.assistantBox,
-                      {
-                        backgroundColor: isDark ? "rgba(72,202,228,0.12)" : "#EEF9FD",
-                        borderColor: isDark ? "rgba(72,202,228,0.25)" : "#CDEFF7",
-                      },
-                    ]}
+                  <LinearGradient
+                    colors={theme.assistantGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.assistantBox, { borderColor: theme.border }]}
                   >
-                    <Text style={[styles.assistantTitle, { color: theme.text }]}>
-                      როგორ გრძნობ დღეს თავს?
-                    </Text>
+                    <View style={styles.assistantGlowPeach} />
+                    <View style={styles.assistantHeader}>
+                      <View style={styles.assistantIconBubble}>
+                        <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.assistantGuideImage} resizeMode="cover" />
+                      </View>
+                      <View style={styles.assistantCopy}>
+                        <Text style={styles.assistantEyebrow}>AI ასისტენტი</Text>
+                        <Text style={[styles.assistantTitle, { color: theme.text }]}>როგორ ხარ დღეს?</Text>
+                      </View>
+                    </View>
                     <Text style={[styles.assistantText, { color: theme.subText }]}>
-                      შეავსე დღიური ქვემოთ და ასისტენტი შენზე მორგებულ რჩევას მოგცემს.
+                      შეავსე დღიური და მიიღე შენზე მორგებული მოკლე რჩევა.
                     </Text>
-                  </View>
+                  </LinearGradient>
                 )}
-              </View>
+              </LinearGradient>
             )}
           </View>
 
@@ -1025,23 +1096,30 @@ function RegularCalendarScreen() {
 
               {/* Assistant advice — shown at top of diary after save */}
               {(assistantSupport.loading || assistantSupport.text || (!isPremium && todayDiarySaved)) && (
-                <View
-                  style={[
-                    styles.assistantBox,
-                    {
-                      backgroundColor: isDark ? "rgba(233,69,96,0.12)" : "#FFF5F8",
-                      borderColor: isDark ? "rgba(233,69,96,0.25)" : "#FFD8E5",
-                      marginTop: 16,
-                    },
-                  ]}
+                <LinearGradient
+                  colors={theme.assistantGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.assistantBox, { borderColor: theme.border, marginTop: 16 }]}
                 >
-                  <Text style={[styles.assistantTitle, { color: theme.text }]}>ასისტენტის რჩევა ✨</Text>
+                  <View style={styles.assistantGlowPeach} />
+                  <View style={styles.assistantGlowLavender} />
+                  <View style={styles.assistantHeader}>
+                    <View style={styles.assistantIconBubble}>
+                      <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.assistantGuideImage} resizeMode="cover" />
+                    </View>
+                    <View style={styles.assistantCopy}>
+                      <Text style={styles.assistantEyebrow}>დღიური AI</Text>
+                      <Text style={[styles.assistantTitle, { color: theme.text }]}>ასისტენტის რჩევა</Text>
+                    </View>
+                  </View>
 
                   {!isPremium ? (
                     <PrimePreview
-                      minHeight={80}
+                      minHeight={128}
                       concealCompletely
-                      message="სრული მხარდაჭერის სანახავად გახსენი Prime"
+                      message="სრული რჩევისთვის გახსენი Prime"
+                      buttonLabel="გახსნა"
                     >
                       <View style={styles.assistantHiddenPreview} />
                     </PrimePreview>
@@ -1058,13 +1136,13 @@ function RegularCalendarScreen() {
                     </Text>
                   )}
                   {isPremium && !assistantSupport.loading && assistantSupport.text ? (
-                    <Text style={{ fontSize: 11, color: "#aaa", textAlign: "right", marginTop: 8, opacity: 0.7 }}>ასისტენტი შეიძლება შეცდეს</Text>
+                    <Text style={[styles.assistantDisclaimer, { color: theme.subText }]}>ასისტენტი შეიძლება შეცდეს</Text>
                   ) : null}
-                </View>
+                </LinearGradient>
               )}
 
               {/* Mood */}
-              <View style={[styles.card, { backgroundColor: theme.card, marginTop: 16 }]}>
+              <LinearGradient colors={theme.cardGradient} style={[styles.card, { borderColor: theme.border, borderWidth: 1, marginTop: 16 }]}>
                 <Text style={[styles.cardLabel, { color: theme.text }]}>როგორ გრძნობ თავს</Text>
                 <View style={styles.moodGrid}>
                   {moodOptions.map((m) => {
@@ -1089,7 +1167,7 @@ function RegularCalendarScreen() {
                     );
                   })}
                 </View>
-              </View>
+              </LinearGradient>
 
               {/* Symptom categories */}
               {symptomCategories.map((cat, idx) => (
@@ -1131,7 +1209,7 @@ function RegularCalendarScreen() {
                 <TextInput
                   style={[styles.noteInput, { backgroundColor: theme.inputBg, color: theme.text }]}
                   placeholder="როგორ ჩაიარა დღემ..."
-                  placeholderTextColor={isDark ? "#666" : "#999"}
+                  placeholderTextColor={theme.subText}
                   multiline
                   value={note}
                   onChangeText={setNote}
@@ -1158,7 +1236,7 @@ function RegularCalendarScreen() {
       {/* --------------- MONTH PICKER MODAL --------------- */}
       <Modal visible={showMonthPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.monthPickerCard, { backgroundColor: theme.card }]}>
+          <View style={[styles.monthPickerCard, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
             <View style={styles.yearSelector}>
               <TouchableOpacity onPress={() => changeYear(-1)} style={styles.yearBtn}>
                 <Text style={[styles.yearBtnText, { color: theme.text }]}>{"<"}</Text>
@@ -1179,7 +1257,7 @@ function RegularCalendarScreen() {
                     key={m}
                     style={[
                       styles.monthBtn,
-                      { backgroundColor: isActive ? theme.accent : isDark ? "#252525" : "#F5F5F5" },
+                      { backgroundColor: isActive ? theme.accent : theme.pill },
                     ]}
                     onPress={() => selectMonth(i)}
                   >
@@ -1197,7 +1275,10 @@ function RegularCalendarScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+      <View style={styles.floatingDiaryAvatar}>
+        <DiaryAvatar accent={theme.accent} isDark={isDark} size={46} showHint={false} />
+      </View>
+    </LinearGradient>
   );
 }
 
@@ -1215,23 +1296,26 @@ const LegendItem = ({ color, label, textColor }) => (
 
 const styles = StyleSheet.create({
   // -- Calendar ----------------------------------------------------
-  pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 18 },
-  pageEyebrow: { color: "#E94560", fontSize: 9, fontWeight: "900", letterSpacing: 1.1, marginBottom: 6 },
+  pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingRight: 88, marginBottom: 18 },
+  pageEyebrow: { color: "#FF8A6B", fontSize: 10, fontWeight: "900", letterSpacing: 0.8, marginBottom: 6 },
   pageTitle: { fontSize: 25, fontWeight: "900", letterSpacing: -0.4 },
-  pageSubtitle: { fontSize: 13, fontWeight: "600", marginTop: 5 },
-  pageHeaderIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: "rgba(233,69,96,0.12)", alignItems: "center", justifyContent: "center" },
-  calendarShell: { marginHorizontal: 20, borderRadius: 26, paddingHorizontal: 5, paddingTop: 5, paddingBottom: 10, elevation: 5, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 14, overflow: "hidden" },
+  pageSubtitle: { fontSize: 13, fontWeight: "700", marginTop: 5 },
+  pageHeaderIcon: { width: 48, height: 48, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center", shadowColor: "#D98976", shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 7 }, elevation: 4 },
+  floatingDiaryAvatar: { position: "absolute", top: 54, right: 18, zIndex: 30, elevation: 30 },
+  calendarShell: { marginHorizontal: 20, borderRadius: 30, borderWidth: 1, paddingHorizontal: 5, paddingTop: 5, paddingBottom: 10, elevation: 8, shadowColor: "#D98976", shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 14 }, overflow: "hidden" },
+  calendarGlowPeach: { position: "absolute", width: 190, height: 190, borderRadius: 95, backgroundColor: "rgba(255,158,125,0.16)", top: -84, right: -48 },
+  calendarGlowLavender: { position: "absolute", width: 200, height: 200, borderRadius: 100, backgroundColor: "rgba(184,164,255,0.14)", bottom: -90, left: -68 },
   calHeader: { alignItems: "center", padding: 10, paddingHorizontal: 20 },
   calHeaderText: { fontSize: 17, fontWeight: "800", textTransform: "capitalize" },
-  calHeaderChevron: { color: "#E94560", fontSize: 14, fontWeight: "900" },
-  legend: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 9, marginTop: 16, marginHorizontal: 20, paddingHorizontal: 12, paddingVertical: 11, borderRadius: 16, backgroundColor: "rgba(150,150,150,0.08)" },
-  legendItem: { flexDirection: "row", alignItems: "center", paddingHorizontal: 2 },
+  calHeaderChevron: { color: "#FF4D88", fontSize: 14, fontWeight: "900" },
+  legend: { flexDirection: "row", justifyContent: "space-between", gap: 8, marginTop: 16, marginHorizontal: 20, paddingHorizontal: 10, paddingVertical: 10, borderRadius: 22, borderWidth: 1, shadowColor: "#D98976", shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 7 } },
+  legendItem: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 5, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.30)" },
   legendColor: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-  legendText: { fontSize: 11, fontWeight: "700" },
+  legendText: { fontSize: 10, fontWeight: "800" },
   // -- Shared ------------------------------------------------------
   sectionContainer: { paddingHorizontal: 20, marginTop: 28 },
   sectionTitle: { fontSize: 21, fontWeight: "900", textTransform: "capitalize", letterSpacing: -0.3 },
-  card: { borderRadius: 22, padding: 18, elevation: 3, shadowColor: "#000", shadowOpacity: 0.07, shadowRadius: 12 },
+  card: { borderRadius: 28, padding: 18, elevation: 5, shadowColor: "#D98976", shadowOpacity: 0.12, shadowRadius: 20, shadowOffset: { width: 0, height: 11 }, overflow: "hidden" },
   divider: { borderBottomWidth: 1, marginHorizontal: 20, marginTop: 32, opacity: 0.65 },
   // -- Selected-day card --------------------------------------------
   detailsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
@@ -1247,11 +1331,19 @@ const styles = StyleSheet.create({
   noteBox: { marginTop: 10, padding: 13, borderRadius: 13, borderLeftWidth: 3 },
   noteText: { fontStyle: "italic", fontSize: 13, lineHeight: 19 },
   emptyText: { fontSize: 13, marginTop: 15, fontStyle: "italic", borderTopWidth: 1, paddingTop: 15 },
-  assistantBox: { marginTop: 18, borderRadius: 18, borderWidth: 1, padding: 15, gap: 8 },
-  assistantTitle: { fontSize: 15, fontWeight: "800" },
-  assistantText: { fontSize: 14, lineHeight: 21 },
+  assistantBox: { marginTop: 18, borderRadius: 26, borderWidth: 1, padding: 16, gap: 10, overflow: "hidden", shadowColor: "#D98976", shadowOpacity: 0.10, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
+  assistantGlowPeach: { position: "absolute", width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(255,158,125,0.16)", top: -60, right: -42 },
+  assistantGlowLavender: { position: "absolute", width: 140, height: 140, borderRadius: 70, backgroundColor: "rgba(184,164,255,0.14)", bottom: -64, left: -48 },
+  assistantHeader: { flexDirection: "row", alignItems: "center", gap: 11 },
+  assistantIconBubble: { width: 42, height: 42, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.58)", borderWidth: 1, borderColor: "rgba(255,255,255,0.72)" },
+  assistantGuideImage: { width: "100%", height: "100%", borderRadius: 18 },
+  assistantCopy: { flex: 1 },
+  assistantEyebrow: { color: "#FF8A6B", fontSize: 9, fontWeight: "900", letterSpacing: 1, marginBottom: 3 },
+  assistantTitle: { fontSize: 16, fontWeight: "900" },
+  assistantText: { fontSize: 14, lineHeight: 22, fontWeight: "700" },
   assistantLoadingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  assistantHiddenPreview: { minHeight: 92 },
+  assistantHiddenPreview: { minHeight: 120 },
+  assistantDisclaimer: { fontSize: 11, textAlign: "right", marginTop: 8, opacity: 0.72, fontWeight: "700" },
   // -- Diary -------------------------------------------------------
   diaryHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   diaryHeadingCopy: { flex: 1, paddingRight: 12 },
@@ -1259,17 +1351,17 @@ const styles = StyleSheet.create({
   cardLabel: { fontSize: 17, fontWeight: "800", marginBottom: 14 },
   moodGrid: { flexDirection: "row", justifyContent: "space-between" },
   moodItem: { alignItems: "center", width: "19%", paddingVertical: 10, borderRadius: 14 },
-  activeMood: { backgroundColor: "rgba(233,69,96,0.10)", borderWidth: 1, borderColor: "rgba(233,69,96,0.55)" },
+  activeMood: { borderWidth: 1 },
   moodEmoji: { fontSize: 26, marginBottom: 5 },
   moodLabel: { fontSize: 10, fontWeight: "600", textAlign: "center" },
   chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { flexDirection: "row", alignItems: "center", paddingVertical: 11, paddingHorizontal: 14, borderRadius: 999 },
-  activeChip: { backgroundColor: "#E94560" },
+  chip: { flexDirection: "row", alignItems: "center", paddingVertical: 11, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1 },
+  activeChip: {},
   chipIcon: { marginRight: 6, fontSize: 16 },
   chipText: { fontSize: 13, fontWeight: "600" },
   activeChipText: { color: "#FFF", fontWeight: "800" },
   noteInput: { borderRadius: 17, padding: 16, height: 108, textAlignVertical: "top", fontSize: 14, borderWidth: 1, borderColor: "rgba(150,150,150,0.12)" },
-  saveBtn: { minHeight: 56, borderRadius: 17, alignItems: "center", justifyContent: "center", marginTop: 24, elevation: 3 },
+  saveBtn: { minHeight: 56, borderRadius: 18, alignItems: "center", justifyContent: "center", marginTop: 24, elevation: 5, shadowColor: "#D76586", shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 9 } },
   saveBtnText: { color: "#FFF", fontSize: 16, fontWeight: "800" },
   // -- Month picker modal -------------------------------------------
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.68)", justifyContent: "center", padding: 20 },
