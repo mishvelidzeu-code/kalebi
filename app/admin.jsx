@@ -253,22 +253,33 @@ export default function AdminScreen() {
     const withPaths = profileList.filter((p) => p.avatar_path);
     if (!withPaths.length) return;
 
+    const urlMap = {};
+
+    // try batch signed URLs first
     try {
       const paths = withPaths.map((p) => p.avatar_path);
       const { data } = await supabase.storage.from(AVATAR_BUCKET).createSignedUrls(paths, 3600);
-      if (!data) return;
-
-      const urlMap = {};
-      for (const item of data) {
-        if (item.signedUrl && item.path) {
-          const profile = withPaths.find((p) => p.avatar_path === item.path);
-          if (profile) urlMap[profile.id] = item.signedUrl;
+      if (data) {
+        for (const item of data) {
+          if (item.signedUrl && !item.error) {
+            const profile = withPaths.find((p) => p.avatar_path === item.path);
+            if (profile) urlMap[profile.id] = item.signedUrl;
+          }
         }
       }
-      setAvatarUrls((prev) => ({ ...prev, ...urlMap }));
     } catch (err) {
-      console.log("Avatar URL batch error:", err);
+      console.log("Signed URLs batch error:", err);
     }
+
+    // fallback: getPublicUrl for any that didn't get a signed URL
+    for (const profile of withPaths) {
+      if (!urlMap[profile.id]) {
+        const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(profile.avatar_path);
+        if (data?.publicUrl) urlMap[profile.id] = data.publicUrl;
+      }
+    }
+
+    setAvatarUrls((prev) => ({ ...prev, ...urlMap }));
   }, []);
 
   useEffect(() => {
