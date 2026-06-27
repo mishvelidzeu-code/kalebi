@@ -7,9 +7,11 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Switch,
   Text,
@@ -162,6 +164,10 @@ export default function AdminScreen() {
   const [pushTarget, setPushTarget] = useState("me");
   const [pushEmail, setPushEmail] = useState("");
   const [pushSending, setPushSending] = useState(false);
+
+  // image preview
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewName, setPreviewName] = useState("");
 
   // assistant
   const [assistantInput, setAssistantInput] = useState("");
@@ -626,17 +632,27 @@ export default function AdminScreen() {
               profiles.map((profile, index) => (
                 <View key={profile.id}>
                   <View style={styles.userRow}>
-                    <View style={[styles.avatarBox, { backgroundColor: theme.primary }]}>
-                      {avatarUrls[profile.id] ? (
-                        <Image
-                          source={{ uri: avatarUrls[profile.id] }}
-                          style={styles.avatarImage}
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <Text style={styles.avatarText}>{(profile.name || "U").slice(0, 1).toUpperCase()}</Text>
-                      )}
-                    </View>
+                    <TouchableOpacity
+                      activeOpacity={avatarUrls[profile.id] ? 0.75 : 1}
+                      onPress={() => {
+                        if (avatarUrls[profile.id]) {
+                          setPreviewUrl(avatarUrls[profile.id]);
+                          setPreviewName(profile.name || "");
+                        }
+                      }}
+                    >
+                      <View style={[styles.avatarBox, { backgroundColor: theme.primary }]}>
+                        {avatarUrls[profile.id] ? (
+                          <Image
+                            source={{ uri: avatarUrls[profile.id] }}
+                            style={styles.avatarImage}
+                            contentFit="cover"
+                          />
+                        ) : (
+                          <Text style={styles.avatarText}>{(profile.name || "U").slice(0, 1).toUpperCase()}</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.userName, { color: theme.text }]} numberOfLines={1}>
                         {profile.name || "უსახელო მომხმარებელი"}
@@ -736,6 +752,32 @@ export default function AdminScreen() {
 
         <View style={{ height: 80 }} />
       </ScrollView>
+
+      {/* Full-screen image preview */}
+      <Modal
+        visible={!!previewUrl}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewUrl(null)}
+        statusBarTranslucent
+      >
+        <View style={styles.previewOverlay}>
+          <StatusBar hidden />
+          <TouchableOpacity style={styles.previewClose} onPress={() => setPreviewUrl(null)}>
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {!!previewName && (
+            <Text style={styles.previewName}>{previewName}</Text>
+          )}
+          {!!previewUrl && (
+            <Image
+              source={{ uri: previewUrl }}
+              style={styles.previewImage}
+              contentFit="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -794,6 +836,11 @@ const styles = StyleSheet.create({
   lockText: { textAlign: "center", lineHeight: 22, marginTop: 8, marginBottom: 22 },
   primaryBtn: { borderRadius: 18, paddingHorizontal: 22, paddingVertical: 15 },
   primaryBtnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
+  // image preview modal
+  previewOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", alignItems: "center", justifyContent: "center" },
+  previewClose: { position: "absolute", top: 54, right: 20, zIndex: 10, width: 44, height: 44, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 22 },
+  previewName: { position: "absolute", top: 60, alignSelf: "center", color: "#fff", fontSize: 16, fontWeight: "800" },
+  previewImage: { width: "100%", height: "80%" },
   // assistant
   assistantCard: { borderRadius: 24, padding: 16, marginBottom: 16 },
   assistantHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
