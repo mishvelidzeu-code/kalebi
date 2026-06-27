@@ -76,7 +76,8 @@ async function runAdminQuery(text, stats) {
         .map((p) => `${p.name || "N/A"}: ${p.phone_number || "ნომ. N/A"} · ${p.email || ""}`)
         .join("\n");
     }
-    return "გთხოვ, ჩაწერე სახელი ან გვარი: მაგ. „მომეცი მარიამის ნომერი"";
+    return `გთხოვ, ჩაწერე სახელი ან გვარი: მაგ. "მომეცი მარიამის ნომერი"`;
+
   }
 
   // ── Latest user ──
