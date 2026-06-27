@@ -7,6 +7,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -121,6 +122,7 @@ export default function AssistantScreen() {
 
   const [userName, setUserName] = useState("");
   const [input, setInput] = useState("");
+  const [inputFocused, setInputFocused] = useState(false);
   const [messages, setMessages] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -265,6 +267,7 @@ export default function AssistantScreen() {
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
     setInput("");
+    Keyboard.dismiss();
     setSending(true);
 
     try {
@@ -599,7 +602,14 @@ export default function AssistantScreen() {
               }
               placeholderTextColor={theme.subText}
               multiline
-              style={[styles.input, { color: theme.text }]}
+              blurOnSubmit={false}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              style={[
+                styles.input,
+                { color: theme.text },
+                !inputFocused && !input ? styles.inputCollapsed : styles.inputExpanded,
+              ]}
             />
             <TouchableOpacity
               style={[
@@ -782,12 +792,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   input: {
-    minHeight: 46,
-    maxHeight: 120,
     fontSize: 15,
     paddingHorizontal: 10,
     paddingTop: 10,
     paddingBottom: 10,
+  },
+  inputCollapsed: {
+    height: 42,
+  },
+  inputExpanded: {
+    minHeight: 42,
+    maxHeight: 120,
   },
   sendButton: {
     alignSelf: "flex-end",

@@ -3,6 +3,7 @@ import { Tabs } from "expo-router";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -51,6 +52,7 @@ function TabIcon({ name, color, focused, isAssistant = false, primary, isDark })
 function AdminAssistant({ colors, isDark, stats }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [inputFocused, setInputFocused] = useState(false);
   const [history, setHistory] = useState<{ role: string; text: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
@@ -70,6 +72,7 @@ function AdminAssistant({ colors, isDark, stats }) {
     const text = input.trim();
     if (!text || loading) return;
     setInput("");
+    Keyboard.dismiss();
     setHistory((h) => [...h, { role: "user", text }]);
     setLoading(true);
     try {
@@ -155,9 +158,15 @@ function AdminAssistant({ colors, isDark, stats }) {
                 onChangeText={setInput}
                 placeholder="შეკითხვა..."
                 placeholderTextColor={theme.subText}
-                style={[styles.textInput, { color: theme.text }]}
-                onSubmitEditing={send}
-                returnKeyType="send"
+                multiline
+                blurOnSubmit={false}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
+                style={[
+                  styles.textInput,
+                  { color: theme.text },
+                  !inputFocused && !input ? styles.textInputCollapsed : styles.textInputExpanded,
+                ]}
               />
               <TouchableOpacity
                 onPress={send}
@@ -347,5 +356,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   textInput: { flex: 1, fontSize: 14, paddingVertical: 4 },
+  textInputCollapsed: { height: 36 },
+  textInputExpanded: { minHeight: 36, maxHeight: 110 },
   sendBtn: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
 });
