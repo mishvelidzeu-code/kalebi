@@ -39,104 +39,6 @@ function isProfilePaidPrime(profile) {
   return Number.isNaN(timestamp) ? false : timestamp > Date.now();
 }
 
-// ─── Admin query engine ──────────────────────────────────────────────────────
-async function runAdminQuery(text, stats) {
-  const q = text.toLowerCase().trim();
-
-  // ── Today count ──
-  if (q.includes("დღეს") && (q.includes("დამ") || q.includes("რამდენ") || q.includes("ახალ"))) {
-    const todayStart = dayjs().startOf("day").toISOString();
-    const { data } = await supabase
-      .from("profiles")
-      .select("name, email, phone_number, created_at")
-      .gte("created_at", todayStart)
-      .order("created_at", { ascending: false });
-    const count = data?.length || 0;
-    if (count === 0) return "დღეს ჯერ არც ერთი მომხმარებელი არ დამატებულა.";
-    const lines = (data || []).map(
-      (p) => `• ${p.name || "უსახელო"} — ${p.phone_number || "ნომ. N/A"} (${p.email || ""})`
-    );
-    return `დღეს ${count} მომხმარებელი დაემატა:\n${lines.join("\n")}`;
-  }
-
-  // ── Phone lookup ──
-  if (q.includes("ნომ") || q.includes("ტელ") || q.includes("phone") || q.includes("კონტაქ")) {
-    // strip common words to get the name
-    const cleaned = text
-      .replace(/მომეცი|ნომერი|ტელეფონი|ნომ\.?|ტელ\.?|phone|კონტაქტი|სახელი|გვარი|ვისაც|ჰქვია|ამ/gi, "")
-      .replace(/[?!.,]/g, "")
-      .trim();
-    if (cleaned.length >= 2) {
-      const pattern = `%${cleaned}%`;
-      const { data } = await supabase
-        .from("profiles")
-        .select("name, phone_number, email")
-        .or(`name.ilike.${pattern},email.ilike.${pattern}`)
-        .limit(5);
-      if (!data?.length) return `"${cleaned}" სახელის მომხმარებელი ვერ მოიძებნა.`;
-      return data
-        .map((p) => `${p.name || "N/A"}: ${p.phone_number || "ნომ. N/A"} · ${p.email || ""}`)
-        .join("\n");
-    }
-    return `გთხოვ, ჩაწერე სახელი ან გვარი: მაგ. "მომეცი მარიამის ნომერი"`;
-
-  }
-
-  // ── Latest user ──
-  if (q.includes("ბოლო") || q.includes("უახლეს") || q.includes("ახალი") || q.includes("last")) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("name, email, phone_number, created_at, is_premium")
-      .order("created_at", { ascending: false })
-      .limit(3);
-    if (!data?.length) return "მომხმარებლები ვერ მოიძებნა.";
-    return data
-      .map(
-        (p) =>
-          `${p.name || "უსახელო"} · ${p.email || ""} · ${p.phone_number || "N/A"} · ${dayjs(p.created_at).format("DD.MM.YYYY HH:mm")} · ${p.is_premium ? "Prime" : "Free"}`
-      )
-      .join("\n");
-  }
-
-  // ── Total count ──
-  if (q.includes("სულ") || (q.includes("რამდენ") && !q.includes("დღეს"))) {
-    return `სულ ${stats.users} მომხმარებელია.\nPaid Prime: ${stats.paidPremium}\nAdmin Prime: ${stats.adminPremium}\nPregnancy Paid: ${stats.pregnancyPaid}\nდღეს: ${stats.todayUsers}`;
-  }
-
-  // ── Premium / paid ──
-  if (q.includes("prime") || q.includes("premium") || q.includes("გადახდ") || q.includes("paid")) {
-    return `Paid Prime: ${stats.paidPremium}\nAdmin Prime: ${stats.adminPremium}\nPregnancy Paid: ${stats.pregnancyPaid}`;
-  }
-
-  // ── Email / name / phone lookup (generic) ──
-  const safeQ = text.replace(/[(),]/g, " ").trim();
-  if (safeQ.length >= 2) {
-    const pattern = `%${safeQ}%`;
-    const { data } = await supabase
-      .from("profiles")
-      .select("name, email, phone_number, is_premium, premium_override, goal, created_at")
-      .or(`email.ilike.${pattern},name.ilike.${pattern},phone_number.ilike.${pattern}`)
-      .limit(5);
-    if (data?.length) {
-      return data
-        .map(
-          (p) =>
-            `${p.name || "N/A"} · ${p.email || ""} · ${p.phone_number || "N/A"} · ${p.is_premium || p.premium_override ? "Prime" : "Free"}`
-        )
-        .join("\n");
-    }
-  }
-
-  return [
-    "ვერ ვიპოვე. სცადე:",
-    "- დღეს რამდენი დაემატა",
-    "- მომეცი მარიამ ბერიძის ნომერი",
-    "- სულ რამდენი მომხმარებელია",
-    "- ბოლო დამატებული",
-    "- ან ჩაწერე სახელი / email",
-  ].join("\n");
-}
-// ─────────────────────────────────────────────────────────────────────────────
 
 export default function AdminScreen() {
   const router = useRouter();
@@ -169,10 +71,6 @@ export default function AdminScreen() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewName, setPreviewName] = useState("");
 
-  // assistant
-  const [assistantInput, setAssistantInput] = useState("");
-  const [assistantHistory, setAssistantHistory] = useState([]);
-  const [assistantLoading, setAssistantLoading] = useState(false);
   const scrollRef = useRef(null);
 
   const theme = {
@@ -184,8 +82,6 @@ export default function AdminScreen() {
     input: isDark ? "#242424" : "#FFFFFF",
     primary: isDark ? "#E94560" : "#ff4d88",
     good: "#06D6A0",
-    assistantBg: isDark ? "#1E1025" : "#FFF0F5",
-    assistantBubble: isDark ? "#2D1240" : "#FFE0EF",
     adminBubble: isDark ? "#1A2E20" : "#E0F7EF",
   };
 
@@ -463,29 +359,6 @@ export default function AdminScreen() {
     }
   };
 
-  const handleAssistantSend = async () => {
-    const text = assistantInput.trim();
-    if (!text) return;
-
-    setAssistantInput("");
-    const userMsg = { role: "user", text };
-    setAssistantHistory((prev) => [...prev, userMsg]);
-    setAssistantLoading(true);
-
-    try {
-      const answer = await runAdminQuery(text, stats);
-      setAssistantHistory((prev) => [...prev, { role: "admin", text: answer }]);
-    } catch (err) {
-      console.log("Assistant error:", err);
-      setAssistantHistory((prev) => [
-        ...prev,
-        { role: "admin", text: "შეცდომა მოხდა. სცადე თავიდან." },
-      ]);
-    } finally {
-      setAssistantLoading(false);
-      setTimeout(() => scrollRef.current?.scrollToEnd?.({ animated: true }), 150);
-    }
-  };
 
   if (checkingAccess) {
     return (
@@ -704,63 +577,6 @@ export default function AdminScreen() {
           </View>
         )}
 
-        {/* Admin Assistant */}
-        <View style={[styles.assistantCard, { backgroundColor: theme.card }]}>
-          <View style={styles.assistantHeader}>
-            <Ionicons name="sparkles" size={18} color={theme.primary} />
-            <Text style={[styles.assistantTitle, { color: theme.text }]}>ადმინ ასისტენტი</Text>
-          </View>
-          <Text style={[styles.assistantHint, { color: theme.subText }]}>
-            კითხე: „დღეს რამდენი დაემატა", „მომეცი მარიამის ნომერი", „სულ რამდენია", „ბოლო დამატებული" ...
-          </Text>
-
-          {assistantHistory.length > 0 && (
-            <View style={styles.assistantChat}>
-              {assistantHistory.map((msg, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.bubble,
-                    msg.role === "user"
-                      ? [styles.bubbleUser, { backgroundColor: theme.assistantBubble }]
-                      : [styles.bubbleAdmin, { backgroundColor: theme.adminBubble }],
-                  ]}
-                >
-                  {msg.role === "admin" && (
-                    <Text style={[styles.bubbleRole, { color: theme.good }]}>ადმინი ·</Text>
-                  )}
-                  <Text style={[styles.bubbleText, { color: theme.text }]}>{msg.text}</Text>
-                </View>
-              ))}
-              {assistantLoading && (
-                <View style={[styles.bubble, styles.bubbleAdmin, { backgroundColor: theme.adminBubble }]}>
-                  <ActivityIndicator color={theme.primary} size="small" />
-                </View>
-              )}
-            </View>
-          )}
-
-          <View style={[styles.assistantInputRow, { borderColor: theme.border, backgroundColor: theme.input }]}>
-            <TextInput
-              value={assistantInput}
-              onChangeText={setAssistantInput}
-              placeholder="შეკითხვა..."
-              placeholderTextColor={theme.subText}
-              style={[styles.assistantTextInput, { color: theme.text }]}
-              onSubmitEditing={handleAssistantSend}
-              returnKeyType="send"
-              multiline={false}
-            />
-            <TouchableOpacity
-              onPress={handleAssistantSend}
-              disabled={assistantLoading || !assistantInput.trim()}
-              style={[styles.assistantSendBtn, { backgroundColor: theme.primary }, (assistantLoading || !assistantInput.trim()) && { opacity: 0.4 }]}
-            >
-              <Ionicons name="arrow-up" size={16} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
         <View style={{ height: 80 }} />
       </ScrollView>
 
@@ -852,26 +668,4 @@ const styles = StyleSheet.create({
   previewClose: { position: "absolute", top: 54, right: 20, zIndex: 10, width: 44, height: 44, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 22 },
   previewName: { position: "absolute", top: 60, alignSelf: "center", color: "#fff", fontSize: 16, fontWeight: "800" },
   previewImage: { width: "100%", height: "80%" },
-  // assistant
-  assistantCard: { borderRadius: 24, padding: 16, marginBottom: 16 },
-  assistantHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
-  assistantTitle: { fontSize: 16, fontWeight: "900" },
-  assistantHint: { fontSize: 12, fontWeight: "600", marginBottom: 12, lineHeight: 18 },
-  assistantChat: { gap: 8, marginBottom: 12 },
-  bubble: { borderRadius: 16, padding: 12, maxWidth: "90%" },
-  bubbleUser: { alignSelf: "flex-end" },
-  bubbleAdmin: { alignSelf: "flex-start" },
-  bubbleRole: { fontSize: 10, fontWeight: "900", marginBottom: 3 },
-  bubbleText: { fontSize: 13, fontWeight: "600", lineHeight: 19 },
-  assistantInputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    gap: 8,
-  },
-  assistantTextInput: { flex: 1, fontSize: 14, paddingVertical: 4 },
-  assistantSendBtn: { width: 32, height: 32, borderRadius: 999, alignItems: "center", justifyContent: "center" },
 });
