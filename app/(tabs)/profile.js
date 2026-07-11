@@ -107,6 +107,10 @@ export default function ProfileScreen() {
   const [tempPhoneNumber, setTempPhoneNumber] = useState("");
 
   const goalOptions = ["ციკლის კონტროლი", "დაორსულება", "ჯანმრთელობის მონიტორინგი"];
+  // Display-only rename — the stored goal value stays "დაორსულება" so existing
+  // comparisons/DB rows and the AI's internal goal mapping keep working.
+  const FERTILITY_MODE_LABEL = "მინდა დაორსულება";
+  const getGoalLabel = (value) => (value === "დაორსულება" ? FERTILITY_MODE_LABEL : value);
 
   useEffect(() => {
     loadProfile();
@@ -144,7 +148,7 @@ export default function ProfileScreen() {
 
         await updateGoalMode("დაორსულება");
         setShowFertilityModal(false);
-        Alert.alert("დაორსულების რეჟიმი ჩაირთო", "გადახდა დადასტურდა და დაგეგმვის რეჟიმი ჩაირთო.");
+        Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო`, "გადახდა დადასტურდა და დაგეგმვის რეჟიმი ჩაირთო.");
       } catch (error) {
         console.log("Android pregnancy checkout refresh error:", error);
         Alert.alert("შეცდომა", "გადახდის სტატუსის განახლება ვერ მოხერხდა. სცადე ხელახლა.");
@@ -700,7 +704,7 @@ export default function ProfileScreen() {
       if (isAdmin) {
         await updateGoalMode("დაორსულება");
         setShowFertilityModal(false);
-        Alert.alert("ადმინ წვდომა აქტიურია ✨", "დაორსულების რეჟიმი ჩაირთო შეზღუდვების გარეშე.");
+        Alert.alert("ადმინ წვდომა აქტიურია ✨", `"${FERTILITY_MODE_LABEL}" ჩაირთო შეზღუდვების გარეშე.`);
         return;
       }
 
@@ -710,7 +714,7 @@ export default function ProfileScreen() {
           await updateGoalMode("დაორსულება");
           await reloadPregnancy();
           setShowFertilityModal(false);
-          Alert.alert("დაორსულების რეჟიმი ჩაირთო", "ანგარიშზე უკვე გაქვს აქტიური წვდომა.");
+          Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო`, "ანგარიშზე უკვე გაქვს აქტიური წვდომა.");
           return;
         }
 
@@ -743,12 +747,12 @@ export default function ProfileScreen() {
 
       await reloadPregnancy();
       setShowFertilityModal(false);
-      Alert.alert("დაორსულების რეჟიმი ჩაირთო ✨", "აპი ახლა მორგებულია ოვულაციის, ნაყოფიერი ფანჯრის და ჩასახვის დაგეგმვისთვის.");
+      Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო ✨`, "აპი ახლა მორგებულია ოვულაციის, ნაყოფიერი ფანჯრის და ჩასახვის დაგეგმვისთვის.");
     } catch (error) {
       if (error?.userCancelled || error?.code === "1") {
         // silent cancel
       } else {
-        Alert.alert("შეცდომა", "ვერ ჩაირთო დაორსულების რეჟიმი.");
+        Alert.alert("შეცდომა", `ვერ ჩაირთო "${FERTILITY_MODE_LABEL}".`);
       }
     } finally {
       setFertilitySaving(false);
@@ -757,8 +761,8 @@ export default function ProfileScreen() {
 
   const handleFertilityDisable = () => {
     Alert.alert(
-      "დაორსულების რეჟიმის გამორთვა",
-      "ნამდვილად გსურს დაორსულების რეჟიმის გამორთვა და ჩვეულებრივ რეჟიმზე დაბრუნება?",
+      `"${FERTILITY_MODE_LABEL}" გამორთვა`,
+      `ნამდვილად გსურს "${FERTILITY_MODE_LABEL}" გამორთვა და ჩვეულებრივ რეჟიმზე დაბრუნება?`,
       [
         { text: "გაუქმება", style: "cancel" },
         {
@@ -769,7 +773,7 @@ export default function ProfileScreen() {
               await updateGoalMode("ციკლის კონტროლი");
               Alert.alert("დაბრუნდი ✨", "ჩვეულებრივი ციკლის რეჟიმი ჩაირთო.");
             } catch {
-              Alert.alert("შეცდომა", "ვერ გამოირთო დაორსულების რეჟიმი.");
+              Alert.alert("შეცდომა", `ვერ გამოირთო "${FERTILITY_MODE_LABEL}".`);
             }
           },
         },
@@ -864,7 +868,7 @@ export default function ProfileScreen() {
         <View style={[styles.settingsBlock, glassBlockStyle]}>
           <SettingRow icon="📆" bgColor={isDark ? "#3d1e2a" : "#FFF0F5"} title="ციკლი და პერიოდი" value={`${cycleLength} / ${periodLength} დღე`} onPress={() => setShowCycleModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
-          <SettingRow icon="🎯" bgColor={isDark ? "#1a2a3d" : "#F0F4FF"} title="ჩემი მიზანი" value={goal} onPress={() => setShowGoalModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
+          <SettingRow icon="🎯" bgColor={isDark ? "#1a2a3d" : "#F0F4FF"} title="ჩემი მიზანი" value={getGoalLabel(goal)} onPress={() => setShowGoalModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
         </View>
 
         <Text style={[styles.sectionHeader, { color: theme.subText }]}>ორსულობა</Text>
@@ -874,7 +878,7 @@ export default function ProfileScreen() {
               <SettingRow
                 icon="🌿"
                 bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
-                title="დაორსულების რეჟიმი"
+                title={FERTILITY_MODE_LABEL}
                 value="$2.99/თვე"
                 subtitle="დაჭერით გამოსართავად"
                 onPress={handleFertilityDisable}
@@ -888,7 +892,7 @@ export default function ProfileScreen() {
               <SettingRow
                 icon="🔒"
                 bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
-                title="დაორსულების რეჟიმი"
+                title={FERTILITY_MODE_LABEL}
                 subtitle="მიზნად არჩეულია — გახსენი ოვულაციის/ნაყოფიერი ფანჯრის AI რჩევები $2.99/თვე-ად"
                 onPress={() => setShowFertilityModal(true)}
                 showArrow
@@ -902,7 +906,7 @@ export default function ProfileScreen() {
               <SettingRow
                 icon="🌿"
                 bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
-                title="დაორსულების რეჟიმი"
+                title={FERTILITY_MODE_LABEL}
                 subtitle="ოვულაციისა და ნაყოფიერი ფანჯრის ფოკუსირებული რეჟიმი"
                 onPress={() => setShowFertilityModal(true)}
                 showArrow
@@ -1027,7 +1031,7 @@ export default function ProfileScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowFertilityModal(false)}>
           <Pressable style={[styles.bottomSheet, { backgroundColor: theme.card }]}>
             <View style={styles.sheetHandle} />
-            <Text style={[styles.modalTitle, { color: theme.text }]}>დაორსულების რეჟიმი 🌿</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{FERTILITY_MODE_LABEL} 🌿</Text>
             <Text style={{ color: theme.subText, textAlign: "center", marginBottom: 25, lineHeight: 22 }}>
               ოვულაციის ფანჯარა, ნაყოფიერი დღეები, მიზანზე მორგებული AI რჩევები და უფრო ფოკუსირებული მხარდაჭერა დაორსულების დაგეგმვისთვის.
             </Text>
@@ -1062,7 +1066,7 @@ export default function ProfileScreen() {
                   saveSettings(() => setShowGoalModal(false), { goal: option });
                 }}
               >
-                <Text style={[styles.optionText, { color: theme.text }, goal === option && { color: theme.primary, fontWeight: "700" }]}>{option}</Text>
+                <Text style={[styles.optionText, { color: theme.text }, goal === option && { color: theme.primary, fontWeight: "700" }]}>{getGoalLabel(option)}</Text>
                 {goal === option && <Text>✅</Text>}
               </TouchableOpacity>
             ))}
