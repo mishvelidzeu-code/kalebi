@@ -76,6 +76,9 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin } = useTheme();
   const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, updatePregnancyStartDate, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
+  // Fertility mode reuses the "pregnancy" RevenueCat entitlement — selecting the
+  // goal is free, but the tailored AI/advice content stays locked until paid.
+  const fertilityUnlocked = isAdmin || hasSubscription;
 
   const [userId, setUserId] = useState("");
   const [email, setEmail] = useState("");
@@ -705,6 +708,7 @@ export default function ProfileScreen() {
         const status = await checkPregnancySubscriptionStatus();
         if (status.hasSubscription) {
           await updateGoalMode("დაორსულება");
+          await reloadPregnancy();
           setShowFertilityModal(false);
           Alert.alert("დაორსულების რეჟიმი ჩაირთო", "ანგარიშზე უკვე გაქვს აქტიური წვდომა.");
           return;
@@ -737,6 +741,7 @@ export default function ProfileScreen() {
         }
       }
 
+      await reloadPregnancy();
       setShowFertilityModal(false);
       Alert.alert("დაორსულების რეჟიმი ჩაირთო ✨", "აპი ახლა მორგებულია ოვულაციის, ნაყოფიერი ფანჯრის და ჩასახვის დაგეგმვისთვის.");
     } catch (error) {
@@ -864,7 +869,7 @@ export default function ProfileScreen() {
 
         <Text style={[styles.sectionHeader, { color: theme.subText }]}>ორსულობა</Text>
         <View style={[styles.settingsBlock, glassBlockStyle]}>
-          {goal === "დაორსულება" ? (
+          {goal === "დაორსულება" && fertilityUnlocked ? (
             <>
               <SettingRow
                 icon="🌿"
@@ -873,6 +878,20 @@ export default function ProfileScreen() {
                 value="$2.99/თვე"
                 subtitle="დაჭერით გამოსართავად"
                 onPress={handleFertilityDisable}
+                isDarkTheme={isDark}
+                primaryColor={theme.primary}
+              />
+              <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+            </>
+          ) : goal === "დაორსულება" ? (
+            <>
+              <SettingRow
+                icon="🔒"
+                bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
+                title="დაორსულების რეჟიმი"
+                subtitle="მიზნად არჩეულია — გახსენი ოვულაციის/ნაყოფიერი ფანჯრის AI რჩევები $2.99/თვე-ად"
+                onPress={() => setShowFertilityModal(true)}
+                showArrow
                 isDarkTheme={isDark}
                 primaryColor={theme.primary}
               />

@@ -2,6 +2,7 @@ import dayjs from "dayjs";
 
 import { calculateCycleState, getPregnancyChanceKey } from "../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../utils/cyclePrediction";
+import { isAdminEmail } from "./adminAccess";
 import { generateAiResponse } from "./ai";
 import { supabase } from "./supabase";
 
@@ -285,7 +286,7 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
 
   const today = dayjs().format("YYYY-MM-DD");
   const [profileResponse, cyclesResponse, symptomsResponse, todaySymptomsResponse] = await Promise.all([
-    supabase.from("profiles").select("name, goal, cycle_length, period_length, last_period, pregnancy_mode, pregnancy_start_date").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("name, goal, cycle_length, period_length, last_period, pregnancy_mode, pregnancy_start_date, has_pregnancy_subscription").eq("id", user.id).maybeSingle(),
     supabase.from("cycles").select("start_date, cycle_length, period_length").eq("user_id", user.id).order("start_date", { ascending: false }).limit(6),
     supabase.from("symptoms").select("date, symptoms, mood, note").eq("user_id", user.id).order("date", { ascending: false }).limit(10),
     supabase.from("symptoms").select("date, symptoms, mood, note").eq("user_id", user.id).eq("date", today).maybeSingle(),
@@ -309,10 +310,15 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
     ? Math.max(0, 280 - dayjs().diff(dayjs(pregnancyStartDate), "day"))
     : null;
 
+  // Fertility ("დაორსულება") is a paid tier of the same "pregnancy" entitlement —
+  // picking it as a goal is free, but the tailored AI content stays locked until paid.
+  const fertilityUnlocked = isAdminEmail(user.email) || Boolean(profile.has_pregnancy_subscription);
+  const effectiveGoal = profile.goal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL_LABEL : profile.goal;
+
   const context = {
     user_name: profile.name || user.email?.split("@")[0] || "მომხმარებელი",
-    user_goal: mapGoalToAssistantGoal(profile.goal),
-    user_goal_label: String(profile.goal || DEFAULT_GOAL_LABEL).trim() || DEFAULT_GOAL_LABEL,
+    user_goal: mapGoalToAssistantGoal(effectiveGoal),
+    user_goal_label: String(effectiveGoal || DEFAULT_GOAL_LABEL).trim() || DEFAULT_GOAL_LABEL,
     pregnancy_mode: profile.pregnancy_mode ?? false,
     pregnancy_week: pregnancyWeek,
     pregnancy_trimester: pregnancyTrimester,

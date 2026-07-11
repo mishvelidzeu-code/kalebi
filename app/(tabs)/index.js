@@ -433,7 +433,7 @@ function PregnancyHomeScreen({ isDark }) {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { isDark, isPremium } = useTheme();
+  const { isDark, isPremium, isAdmin } = useTheme();
   const { pregnancyMode } = usePregnancy();
   const lastAdviceKeyRef = useRef("");
   const adviceRequestKeyRef = useRef("");
@@ -578,7 +578,11 @@ export default function HomeScreen() {
       const cycles = cyclesRes.data || [];
       const profile = profileRes.data;
       const todayEntry = todaySymptomsRes.data || null;
-      const currentGoal = profile?.goal || DEFAULT_GOAL;
+      const rawGoal = profile?.goal || DEFAULT_GOAL;
+      // Fertility goal is free to pick, but the tailored advice pool is locked
+      // behind the same "pregnancy" entitlement until the user pays for it.
+      const fertilityUnlocked = isAdmin || Boolean(profile?.has_pregnancy_subscription);
+      const currentGoal = rawGoal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL : rawGoal;
 
       setUserName(profile?.name || user.email?.split("@")[0] || "ანი");
 
@@ -667,7 +671,7 @@ export default function HomeScreen() {
         hasLoadedOnceRef.current = true;
       }
     }
-  }, [getPhaseAndChance, isPremium, refreshHomeAdvice]);
+  }, [getPhaseAndChance, isPremium, isAdmin, refreshHomeAdvice]);
 
   useFocusEffect(
     useCallback(() => {
