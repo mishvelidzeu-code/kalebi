@@ -87,9 +87,42 @@ function getPrimeEntitlementInfo(customerInfo) {
   );
 }
 
+function getPregnancyEntitlementInfo(customerInfo) {
+  return (
+    customerInfo?.entitlements?.active?.[PREGNANCY_ENTITLEMENT_ID]
+    || customerInfo?.entitlements?.all?.[PREGNANCY_ENTITLEMENT_ID]
+    || null
+  );
+}
+
 function getPrimeExpirationDate(customerInfo) {
   const entitlementInfo = getPrimeEntitlementInfo(customerInfo);
   return entitlementInfo?.expirationDate || customerInfo?.latestExpirationDate || null;
+}
+
+function getPregnancyExpirationDate(customerInfo) {
+  const entitlementInfo = getPregnancyEntitlementInfo(customerInfo);
+  return entitlementInfo?.expirationDate || customerInfo?.latestExpirationDate || null;
+}
+
+function getPaymentTimestamp(entitlementInfo) {
+  return (
+    entitlementInfo?.latestPurchaseDate
+    || entitlementInfo?.originalPurchaseDate
+    || new Date().toISOString()
+  );
+}
+
+function getExternalOrderId(entitlementInfo) {
+  return (
+    entitlementInfo?.transactionIdentifier
+    || entitlementInfo?.originalTransactionIdentifier
+    || null
+  );
+}
+
+function getPurchaseSource() {
+  return Platform.OS === "ios" ? "revenuecat_ios" : "revenuecat";
 }
 
 export async function getCurrentSupabaseUser() {
@@ -225,7 +258,7 @@ function hasActiveEntitlement(customerInfo) {
   return Boolean(customerInfo?.entitlements?.active?.[getEntitlementId()]);
 }
 
-async function writePremiumStatusToProfile(user, isPremium, premiumUntil = null) {
+async function writePremiumStatusToProfile(user, isPremium, premiumUntil = null, metadata = {}) {
   const { error } = await supabase
     .from("profiles")
     .upsert(
@@ -234,6 +267,10 @@ async function writePremiumStatusToProfile(user, isPremium, premiumUntil = null)
         email: user.email,
         is_premium: isPremium,
         premium_until: premiumUntil,
+        premium_plan: metadata.plan || null,
+        premium_source: metadata.source || (isPremium ? getPurchaseSource() : null),
+        premium_last_payment_at: metadata.lastPaymentAt || null,
+        premium_order_id: metadata.orderId || null,
       },
       { onConflict: "id" }
     );
@@ -265,9 +302,15 @@ export async function syncPremiumStatusFromPurchases() {
 
   const customerInfo = await Purchases.getCustomerInfo();
   const isPremium = hasActiveEntitlement(customerInfo);
+  const entitlementInfo = getPrimeEntitlementInfo(customerInfo);
   const premiumUntil = getPrimeExpirationDate(customerInfo);
 
-  await writePremiumStatusToProfile(user, isPremium, premiumUntil);
+  await writePremiumStatusToProfile(user, isPremium, premiumUntil, {
+    plan: entitlementInfo?.productIdentifier || null,
+    source: getPurchaseSource(),
+    lastPaymentAt: isPremium ? getPaymentTimestamp(entitlementInfo) : null,
+    orderId: getExternalOrderId(entitlementInfo),
+  });
 
   return {
     isPremium,
@@ -364,9 +407,15 @@ export async function purchasePrimePackage(packageToPurchase) {
 
   const purchaseResult = await Purchases.purchasePackage(packageToPurchase);
   const isPremium = hasActiveEntitlement(purchaseResult.customerInfo);
+  const entitlementInfo = getPrimeEntitlementInfo(purchaseResult.customerInfo);
   const premiumUntil = getPrimeExpirationDate(purchaseResult.customerInfo);
 
-  await writePremiumStatusToProfile(user, isPremium, premiumUntil);
+  await writePremiumStatusToProfile(user, isPremium, premiumUntil, {
+    plan: packageToPurchase?.product?.identifier || entitlementInfo?.productIdentifier || null,
+    source: getPurchaseSource(),
+    lastPaymentAt: isPremium ? getPaymentTimestamp(entitlementInfo) : null,
+    orderId: getExternalOrderId(entitlementInfo),
+  });
 
   if (isPremium) {
     logMetaPrimePurchase(packageToPurchase, purchaseResult.customerInfo);
@@ -383,10 +432,22 @@ function hasActivePregnancyEntitlement(customerInfo) {
   return Boolean(customerInfo?.entitlements?.active?.[PREGNANCY_ENTITLEMENT_ID]);
 }
 
-async function writePregnancyStatusToProfile(userId, hasSub) {
+async function writePregnancyStatusToProfile(user, hasSub, pregnancyUntil = null, metadata = {}) {
   const { error } = await supabase
     .from("profiles")
-    .upsert({ id: userId, has_pregnancy_subscription: hasSub }, { onConflict: "id" });
+    .upsert(
+      {
+        id: user.id,
+        email: user.email,
+        has_pregnancy_subscription: hasSub,
+        pregnancy_until: pregnancyUntil,
+        pregnancy_plan: metadata.plan || null,
+        pregnancy_source: metadata.source || (hasSub ? getPurchaseSource() : null),
+        pregnancy_last_payment_at: metadata.lastPaymentAt || null,
+        pregnancy_order_id: metadata.orderId || null,
+      },
+      { onConflict: "id" }
+    );
   if (error) throw error;
 }
 
@@ -418,8 +479,15 @@ export async function purchasePregnancyPackage(packageToPurchase) {
 
   const purchaseResult = await Purchases.purchasePackage(packageToPurchase);
   const hasSub = hasActivePregnancyEntitlement(purchaseResult.customerInfo);
+  const entitlementInfo = getPregnancyEntitlementInfo(purchaseResult.customerInfo);
+  const pregnancyUntil = getPregnancyExpirationDate(purchaseResult.customerInfo);
 
-  await writePregnancyStatusToProfile(user.id, hasSub);
+  await writePregnancyStatusToProfile(user, hasSub, pregnancyUntil, {
+    plan: packageToPurchase?.product?.identifier || entitlementInfo?.productIdentifier || null,
+    source: getPurchaseSource(),
+    lastPaymentAt: hasSub ? getPaymentTimestamp(entitlementInfo) : null,
+    orderId: getExternalOrderId(entitlementInfo),
+  });
 
   if (hasSub) {
     logMetaPregnancyPurchase(packageToPurchase, purchaseResult.customerInfo);
@@ -446,10 +514,17 @@ export async function checkPregnancySubscriptionStatus() {
 
   const customerInfo = await Purchases.getCustomerInfo();
   const hasSub = hasActivePregnancyEntitlement(customerInfo);
+  const entitlementInfo = getPregnancyEntitlementInfo(customerInfo);
+  const pregnancyUntil = getPregnancyExpirationDate(customerInfo);
 
-  await writePregnancyStatusToProfile(user.id, hasSub);
+  await writePregnancyStatusToProfile(user, hasSub, pregnancyUntil, {
+    plan: entitlementInfo?.productIdentifier || null,
+    source: getPurchaseSource(),
+    lastPaymentAt: hasSub ? getPaymentTimestamp(entitlementInfo) : null,
+    orderId: getExternalOrderId(entitlementInfo),
+  });
 
-  return { hasSubscription: hasSub, customerInfo, source: "revenuecat" };
+  return { hasSubscription: hasSub, pregnancyUntil, customerInfo, source: "revenuecat" };
 }
 
 export async function restorePregnancyPurchases() {
@@ -461,10 +536,17 @@ export async function restorePregnancyPurchases() {
 
   const customerInfo = await Purchases.restorePurchases();
   const hasSub = hasActivePregnancyEntitlement(customerInfo);
+  const entitlementInfo = getPregnancyEntitlementInfo(customerInfo);
+  const pregnancyUntil = getPregnancyExpirationDate(customerInfo);
 
-  await writePregnancyStatusToProfile(user.id, hasSub);
+  await writePregnancyStatusToProfile(user, hasSub, pregnancyUntil, {
+    plan: entitlementInfo?.productIdentifier || null,
+    source: getPurchaseSource(),
+    lastPaymentAt: hasSub ? getPaymentTimestamp(entitlementInfo) : null,
+    orderId: getExternalOrderId(entitlementInfo),
+  });
 
-  return { hasSubscription: hasSub, customerInfo };
+  return { hasSubscription: hasSub, pregnancyUntil, customerInfo };
 }
 
 export async function restorePrimePurchases() {
@@ -480,9 +562,15 @@ export async function restorePrimePurchases() {
 
   const customerInfo = await Purchases.restorePurchases();
   const isPremium = hasActiveEntitlement(customerInfo);
+  const entitlementInfo = getPrimeEntitlementInfo(customerInfo);
   const premiumUntil = getPrimeExpirationDate(customerInfo);
 
-  await writePremiumStatusToProfile(user, isPremium, premiumUntil);
+  await writePremiumStatusToProfile(user, isPremium, premiumUntil, {
+    plan: entitlementInfo?.productIdentifier || null,
+    source: getPurchaseSource(),
+    lastPaymentAt: isPremium ? getPaymentTimestamp(entitlementInfo) : null,
+    orderId: getExternalOrderId(entitlementInfo),
+  });
 
   return {
     isPremium,

@@ -90,6 +90,21 @@ export function PregnancyProvider({ children }) {
     }, 500);
   }, []);
 
+  const updatePregnancyStartDate = useCallback(async (startDate) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from("profiles").update({
+      pregnancy_start_date: startDate,
+    }).eq("id", user.id);
+
+    setPregnancyStartDate(startDate);
+
+    setTimeout(() => {
+      schedulePregnancyNotifications(startDate).catch(() => {});
+    }, 500);
+  }, []);
+
   const disablePregnancyMode = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -134,6 +149,7 @@ export function PregnancyProvider({ children }) {
       currentTrimester,
       daysRemaining,
       enablePregnancyMode,
+      updatePregnancyStartDate,
       disablePregnancyMode,
       reload: loadPregnancyData,
     }}>

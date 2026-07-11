@@ -25,6 +25,7 @@ import { isAdminEmail } from "../services/adminAccess";
 import { supabase } from "../services/supabase";
 
 const AVATAR_BUCKET = "avatars";
+const PAGE_SIZE = 50;
 
 function isProfilePaidPrime(profile) {
   if (!profile?.is_premium) {
@@ -67,11 +68,18 @@ export default function AdminScreen() {
   const [pushEmail, setPushEmail] = useState("");
   const [pushSending, setPushSending] = useState(false);
 
+  // pagination
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [currentListType, setCurrentListType] = useState("");
+  const [listOffset, setListOffset] = useState(0);
+
   // image preview
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewName, setPreviewName] = useState("");
 
   const scrollRef = useRef(null);
+  const listYOffset = useRef(0);
 
   const theme = {
     bg: isDark ? "#0F0F0F" : "#F7F8FA",
@@ -227,42 +235,70 @@ export default function AdminScreen() {
     }
   }, [loadAvatarUrls]);
 
+  const buildListRequest = useCallback((type, offset) => {
+    const todayStart = dayjs().startOf("day").toISOString();
+    let request = supabase
+      .from("profiles")
+      .select("id, email, name, phone_number, goal, is_premium, premium_until, premium_override, pregnancy_mode, has_pregnancy_subscription, avatar_path, created_at")
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    if (type === "paid-prime") {
+      request = request.eq("is_premium", true);
+    } else if (type === "today") {
+      request = request.gte("created_at", todayStart).order("created_at", { ascending: false });
+    } else if (type === "pregnancy-paid") {
+      request = request.eq("has_pregnancy_subscription", true);
+    } else if (type === "with-photos") {
+      request = request.not("avatar_path", "is", null).neq("avatar_path", "").order("created_at", { ascending: false });
+    }
+    return request;
+  }, []);
+
   const loadProfileList = useCallback(async (type) => {
     setQuery("");
+    setCurrentListType(type);
+    setListOffset(0);
+    setHasMore(false);
     setSearchLoading(true);
     try {
-      const todayStart = dayjs().startOf("day").toISOString();
-      let request = supabase
-        .from("profiles")
-        .select("id, email, name, phone_number, goal, is_premium, premium_until, premium_override, pregnancy_mode, has_pregnancy_subscription, avatar_path, created_at")
-        .limit(50);
+      if (type === "paid-prime") setActiveListTitle("Paid Prime მომხმარებლები");
+      else if (type === "today") setActiveListTitle("დღეს დამატებული მომხმარებლები");
+      else if (type === "pregnancy-paid") setActiveListTitle("Pregnancy Paid მომხმარებლები");
+      else if (type === "with-photos") setActiveListTitle("სურათი ატვირთეს");
 
-      if (type === "paid-prime") {
-        request = request.eq("is_premium", true);
-        setActiveListTitle("Paid Prime მომხმარებლები");
-      } else if (type === "today") {
-        request = request.gte("created_at", todayStart).order("created_at", { ascending: false });
-        setActiveListTitle("დღეს დამატებული მომხმარებლები");
-      } else if (type === "pregnancy-paid") {
-        request = request.eq("has_pregnancy_subscription", true);
-        setActiveListTitle("Pregnancy Paid მომხმარებლები");
-      } else if (type === "with-photos") {
-        request = request.not("avatar_path", "is", null).neq("avatar_path", "").order("created_at", { ascending: false });
-        setActiveListTitle("სურათი ატვირთეს");
-      }
-
-      const { data, error } = await request;
+      const { data, error } = await buildListRequest(type, 0);
       if (error) throw error;
       const list = type === "paid-prime" ? (data || []).filter(isProfilePaidPrime) : (data || []);
       setProfiles(list);
+      setHasMore((data || []).length === PAGE_SIZE);
       loadAvatarUrls(list);
+      setTimeout(() => scrollRef.current?.scrollTo({ y: listYOffset.current, animated: true }), 100);
     } catch (error) {
       console.log("Admin list load error:", error);
       setProfiles([]);
     } finally {
       setSearchLoading(false);
     }
-  }, [loadAvatarUrls]);
+  }, [buildListRequest, loadAvatarUrls]);
+
+  const loadMoreProfiles = useCallback(async () => {
+    if (loadingMore || !hasMore || !currentListType) return;
+    setLoadingMore(true);
+    const nextOffset = listOffset + PAGE_SIZE;
+    try {
+      const { data, error } = await buildListRequest(currentListType, nextOffset);
+      if (error) throw error;
+      const newItems = currentListType === "paid-prime" ? (data || []).filter(isProfilePaidPrime) : (data || []);
+      setProfiles((prev) => [...prev, ...newItems]);
+      setListOffset(nextOffset);
+      setHasMore((data || []).length === PAGE_SIZE);
+      loadAvatarUrls(newItems);
+    } catch (error) {
+      console.log("Load more error:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, currentListType, listOffset, buildListRequest, loadAvatarUrls]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -494,7 +530,10 @@ export default function AdminScreen() {
         {loading ? (
           <ActivityIndicator color={theme.primary} style={{ marginTop: 30 }} />
         ) : (
-          <View style={[styles.list, { backgroundColor: theme.card }]}>
+          <View
+            style={[styles.list, { backgroundColor: theme.card }]}
+            onLayout={(e) => { listYOffset.current = e.nativeEvent.layout.y; }}
+          >
             {!!activeListTitle && !searchLoading && profiles.length > 0 && (
               <Text style={[styles.listTitle, { color: theme.text }]}>{activeListTitle}</Text>
             )}
@@ -573,6 +612,21 @@ export default function AdminScreen() {
 
             {!searchLoading && query.trim().length >= 2 && profiles.length === 0 && (
               <Text style={[styles.emptyText, { color: theme.subText }]}>მომხმარებელი ვერ მოიძებნა.</Text>
+            )}
+
+            {!searchLoading && hasMore && (
+              <TouchableOpacity
+                style={[styles.loadMoreBtn, { borderColor: theme.primary }]}
+                onPress={loadMoreProfiles}
+                disabled={loadingMore}
+                activeOpacity={0.75}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator color={theme.primary} size="small" />
+                ) : (
+                  <Text style={[styles.loadMoreText, { color: theme.primary }]}>მეტის ნახვა</Text>
+                )}
+              </TouchableOpacity>
             )}
           </View>
         )}
@@ -659,6 +713,8 @@ const styles = StyleSheet.create({
   emptyText: { padding: 24, textAlign: "center", fontWeight: "700" },
   searchLoadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, padding: 24 },
   searchLoadingText: { fontSize: 14, fontWeight: "700" },
+  loadMoreBtn: { margin: 16, borderRadius: 18, borderWidth: 1.5, paddingVertical: 14, alignItems: "center" },
+  loadMoreText: { fontSize: 14, fontWeight: "900" },
   lockTitle: { fontSize: 22, fontWeight: "900", marginTop: 16 },
   lockText: { textAlign: "center", lineHeight: 22, marginTop: 8, marginBottom: 22 },
   primaryBtn: { borderRadius: 18, paddingHorizontal: 22, paddingVertical: 15 },

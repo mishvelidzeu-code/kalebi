@@ -75,7 +75,7 @@ const getFileExtension = (asset) => {
 export default function ProfileScreen() {
   const router = useRouter();
   const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin } = useTheme();
-  const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
+  const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, updatePregnancyStartDate, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
 
   const [userId, setUserId] = useState("");
   const [email, setEmail] = useState("");
@@ -94,6 +94,7 @@ export default function ProfileScreen() {
   const [showProfileEdit, setShowProfileEdit] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showPregnancyModal, setShowPregnancyModal] = useState(false);
+  const [pregnancyModalMode, setPregnancyModalMode] = useState("enable");
   const [showFertilityModal, setShowFertilityModal] = useState(false);
   const [selectedPregnancyDate, setSelectedPregnancyDate] = useState(new Date());
   const [pregnancySaving, setPregnancySaving] = useState(false);
@@ -590,6 +591,40 @@ export default function ProfileScreen() {
     }
   };
 
+  const handlePregnancyDateUpdate = async () => {
+    setPregnancySaving(true);
+    try {
+      const fallbackDate = pregnancyStartDate ? dayjs(pregnancyStartDate).toDate() : new Date();
+      const nextDate = selectedPregnancyDate instanceof Date ? selectedPregnancyDate : fallbackDate;
+      const dateStr = dayjs(nextDate).format("YYYY-MM-DD");
+
+      await updatePregnancyStartDate(dateStr);
+      invalidateAssistantContextCache();
+      setShowPregnancyModal(false);
+      Alert.alert("თარიღი განახლდა ✨", "ორსულობის კვირა და კალენდარი ახალი თარიღით გადაითვლება.");
+    } catch (error) {
+      console.log("Pregnancy date update error:", error);
+      Alert.alert("შეცდომა", "ორსულობის თარიღის შეცვლა ვერ მოხერხდა.");
+    } finally {
+      setPregnancySaving(false);
+    }
+  };
+
+  const handlePregnancyModalSubmit = () => {
+    if (pregnancyModalMode === "edit") {
+      handlePregnancyDateUpdate();
+      return;
+    }
+
+    handlePregnancyEnable();
+  };
+
+  const openPregnancyDateEditor = () => {
+    setSelectedPregnancyDate(pregnancyStartDate ? dayjs(pregnancyStartDate).toDate() : new Date());
+    setPregnancyModalMode("edit");
+    setShowPregnancyModal(true);
+  };
+
   const handlePregnancyDisable = () => {
     Alert.alert(
       "ორსულობის რეჟიმის გამორთვა",
@@ -608,13 +643,23 @@ export default function ProfileScreen() {
     );
   };
 
+  const handlePregnancyActivePress = () => {
+    Alert.alert(
+      "ორსულობის რეჟიმი",
+      "შეგიძლია შეცვალო ბოლო მენსტრუაციის თარიღი ან გამორთო ორსულობის რეჟიმი.",
+      [
+        { text: "გაუქმება", style: "cancel" },
+        { text: "თარიღის შეცვლა", onPress: openPregnancyDateEditor },
+        { text: "გამორთვა", style: "destructive", onPress: handlePregnancyDisable },
+      ]
+    );
+  };
+
   const handlePregnancyEntryPress = async () => {
     if (isAdmin || hasSubscription) {
-      const directStartDate =
-        pregnancyStartDate
-        || (selectedPregnancyDate instanceof Date ? dayjs(selectedPregnancyDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"));
-
-      handlePregnancyEnable(directStartDate);
+      setSelectedPregnancyDate(pregnancyStartDate ? dayjs(pregnancyStartDate).toDate() : new Date());
+      setPregnancyModalMode("enable");
+      setShowPregnancyModal(true);
       return;
     }
 
@@ -631,11 +676,9 @@ export default function ProfileScreen() {
           .maybeSingle();
 
         if (data?.has_pregnancy_subscription) {
-          const directStartDate =
-            data.pregnancy_start_date
-            || (selectedPregnancyDate instanceof Date ? dayjs(selectedPregnancyDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"));
-
-          handlePregnancyEnable(directStartDate);
+          setSelectedPregnancyDate(data.pregnancy_start_date ? dayjs(data.pregnancy_start_date).toDate() : new Date());
+          setPregnancyModalMode("enable");
+          setShowPregnancyModal(true);
           return;
         }
       }
@@ -643,6 +686,8 @@ export default function ProfileScreen() {
       console.log("Pregnancy access check error:", error);
     }
 
+    setSelectedPregnancyDate(new Date());
+    setPregnancyModalMode("enable");
     setShowPregnancyModal(true);
   };
 
@@ -854,8 +899,8 @@ export default function ProfileScreen() {
               bgColor={isDark ? "#3d1e2a" : "#FFF0F5"}
               title="ორსულობის რეჟიმი"
               value={`კვირა ${currentWeek}`}
-              subtitle="დაჭერით გამორთვისთვის"
-              onPress={handlePregnancyDisable}
+              subtitle={pregnancyStartDate ? `ბოლო მენსტრუაცია: ${dayjs(pregnancyStartDate).format("D MMMM YYYY")} · შეცვლა` : "თარიღის შეცვლა"}
+              onPress={handlePregnancyActivePress}
               isDarkTheme={isDark}
               primaryColor={theme.primary}
             />
@@ -926,9 +971,11 @@ export default function ProfileScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowPregnancyModal(false)}>
           <Pressable style={[styles.bottomSheet, { backgroundColor: theme.card }]}>
             <View style={styles.sheetHandle} />
-            <Text style={[styles.modalTitle, { color: theme.text }]}>ორსულობის რეჟიმი 🤰</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{pregnancyModalMode === "edit" ? "თარიღის შეცვლა 🤰" : "ორსულობის რეჟიმი 🤰"}</Text>
             <Text style={{ color: theme.subText, textAlign: "center", marginBottom: 25, lineHeight: 22 }}>
-              კვირეული განვითარება, ორსულობის კალენდარი, AI ასისტენტი და სიმპტომების ტრეკინგი — ყველაფერი მორგებული შენზე.
+              {pregnancyModalMode === "edit"
+                ? "აირჩიე ბოლო მენსტრუაციის სწორი თარიღი, რომ კვირა, კალენდარი და შეტყობინებები თავიდან გადაითვალოს."
+                : "კვირეული განვითარება, ორსულობის კალენდარი, AI ასისტენტი და სიმპტომების ტრეკინგი — ყველაფერი მორგებული შენზე."}
             </Text>
             <Text style={[styles.inputLabel, { color: theme.subText }]}>ბოლო მენსტრუაციის თარიღი</Text>
             <View style={[styles.pickerCard, { backgroundColor: theme.pickerBg, borderColor: theme.pickerBorder }]}>
@@ -947,8 +994,8 @@ export default function ProfileScreen() {
                 />
               )}
             </View>
-            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handlePregnancyEnable}>
-              {pregnancySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>ჩართვა — $2.99/თვე</Text>}
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handlePregnancyModalSubmit}>
+              {pregnancySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{pregnancyModalMode === "edit" ? "თარიღის შენახვა" : "ჩართვა — $2.99/თვე"}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowPregnancyModal(false)}>
               <Text style={styles.cancelBtnText}>გაუქმება</Text>

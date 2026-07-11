@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import dayjs from "dayjs";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -123,6 +123,7 @@ export default function AssistantScreen() {
   const [userName, setUserName] = useState("");
   const [input, setInput] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [messages, setMessages] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -237,6 +238,20 @@ export default function AssistantScreen() {
     }, [loadScreenData])
   );
 
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardWillShow", () => {
+      setKeyboardVisible(true);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    });
+    const hide = Keyboard.addListener("keyboardWillHide", () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
   const sendMessage = async (forcedPrompt = null) => {
     const prompt = (forcedPrompt ?? input).trim();
     if (!prompt || sending) return;
@@ -303,12 +318,23 @@ export default function AssistantScreen() {
       }
     } catch (error) {
       console.log("Assistant send error:", error);
+      const isDailyLimitError = String(error?.message || "").includes("assistant-daily-limit");
+
+      if (isDailyLimitError) {
+        // Server says the daily budget is spent — sync the local counter so the
+        // limit alert shows immediately on the next attempt.
+        setQuestionsUsedToday(dailyQuestionLimit);
+        await setAssistantDailyUsage(assistantUserId, dailyQuestionLimit);
+      }
+
       setMessages((prev) => [
         ...prev,
         {
           id: `assistant-error-${Date.now()}`,
           role: "assistant",
-          text: "ახლა პასუხის მიღება ვერ მოხერხდა. სცადე თავიდან ცოტა მოგვიანებით.",
+          text: isDailyLimitError
+            ? "დღევანდელი კითხვების ლიმიტი უკვე ამოწურულია. ახალი კითხვები ხვალ განახლდება."
+            : "ახლა პასუხის მიღება ვერ მოხერხდა. სცადე თავიდან ცოტა მოგვიანებით.",
         },
       ]);
     } finally {
@@ -357,7 +383,7 @@ export default function AssistantScreen() {
         <ScrollView
           ref={scrollRef}
           style={styles.chatScroll}
-          contentContainerStyle={[styles.chatContent, { paddingBottom: tabBarClearance + 18 }]}
+          contentContainerStyle={[styles.chatContent, { paddingBottom: 18 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() =>
@@ -545,7 +571,7 @@ export default function AssistantScreen() {
                 ? theme.composerBg
                 : theme.composerBg,
               borderColor: theme.border,
-              paddingBottom: tabBarClearance,
+              paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 8),
             },
           ]}
         >
@@ -603,7 +629,10 @@ export default function AssistantScreen() {
               placeholderTextColor={theme.subText}
               multiline
               blurOnSubmit={false}
-              onFocus={() => setInputFocused(true)}
+              onFocus={() => {
+                setInputFocused(true);
+                setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+              }}
               onBlur={() => setInputFocused(false)}
               style={[
                 styles.input,
