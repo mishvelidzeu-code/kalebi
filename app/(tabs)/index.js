@@ -473,6 +473,7 @@ export default function HomeScreen() {
     heroGradient: isDark ? ["#3A2A44", "#2A2036", "#1B1721"] : ["#FFFFFF", "#FFF2E8", "#F4ECFF"],
     cardGradient: isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.92)", "rgba(255,240,232,0.84)", "rgba(246,240,255,0.82)"],
     bannerGradient: isDark ? ["#3A2330", "#241B2C", "#173028"] : ["#FFFFFF", "#FFF0EA", "#EFFBF5"],
+    fertilityBannerGradient: isDark ? ["#16332B", "#1C2B33", "#122336"] : ["#F2FFFB", "#E7FBF1", "#EAF4FF"],
   };
 
   const refreshHomeAdvice = useCallback(async (userId, adviceKey, forceRefresh = false) => {
@@ -965,26 +966,26 @@ export default function HomeScreen() {
       {!isPremium && !pregnancyMode && (
         <TouchableOpacity
           activeOpacity={0.82}
-          style={styles.pregnancyBanner}
+          style={[styles.pregnancyBanner, styles.fertilityBannerShell]}
           onPress={() => router.push({ pathname: "/(tabs)/profile", params: { openFertility: String(Date.now()) } })}
         >
           <LinearGradient
-            colors={theme.bannerGradient}
+            colors={theme.fertilityBannerGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.pregnancyBannerGradient}
           >
-            <View style={styles.pregnancyBannerGlowPink} />
-            <View style={styles.pregnancyBannerGlowMint} />
+            <View style={styles.fertilityBannerGlowGreen} />
+            <View style={styles.fertilityBannerGlowBlue} />
             <View style={styles.pregnancyBannerLeft}>
               <View style={[styles.pregnancyBannerIcon, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
-                <Ionicons name="leaf" size={23} color="#06B98A" />
+                <Ionicons name="leaf" size={23} color="#0E9F6E" />
               </View>
               <View style={styles.pregnancyBannerCopy}>
                 <View style={styles.pregnancyBannerEyebrow}>
-                  <Text style={styles.pregnancyBannerEyebrowText}>FERTILITY</Text>
-                  <View style={styles.pregnancyBannerDot} />
-                  <Text style={styles.pregnancyBannerEyebrowText}>PREMIUM</Text>
+                  <Text style={styles.fertilityBannerEyebrowText}>FERTILITY</Text>
+                  <View style={styles.fertilityBannerDot} />
+                  <Text style={styles.fertilityBannerEyebrowText}>PREMIUM</Text>
                 </View>
                 <Text style={[styles.pregnancyBannerTitle, { color: theme.text }]}>მინდა დაორსულება</Text>
                 <Text style={[styles.pregnancyBannerSub, { color: theme.subText }]}>ოვულაცია, ნაყოფიერი ფანჯარა და AI რჩევები ჩასახვის დაგეგმვისთვის</Text>
@@ -1321,7 +1322,7 @@ const styles = StyleSheet.create({
     elevation: 7,
   },
   pregnancyBannerGradient: {
-    minHeight: 132,
+    minHeight: 152,
     padding: 16,
     flexDirection: "row",
     alignItems: "center",
@@ -1347,6 +1348,12 @@ const styles = StyleSheet.create({
   pregnancyBannerDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: "#FF8A6B" },
   pregnancyBannerTitle: { fontSize: 18, fontWeight: "900", marginBottom: 4 },
   pregnancyBannerSub: { fontSize: 12, lineHeight: 17, paddingRight: 6, fontWeight: "700" },
-  pregnancyBannerImageWrap: { width: 78, height: 98, borderRadius: 26, overflow: "hidden", marginLeft: 8, backgroundColor: "rgba(255,255,255,0.46)", borderWidth: 1, borderColor: "rgba(255,255,255,0.72)" },
+  pregnancyBannerImageWrap: { width: 104, height: 124, borderRadius: 26, overflow: "hidden", marginLeft: 8, backgroundColor: "rgba(255,255,255,0.46)", borderWidth: 1, borderColor: "rgba(255,255,255,0.72)" },
   pregnancyBannerImage: { width: "100%", height: "100%" },
+  // Fertility banner variant — same layout as the pregnancy banner, its own palette.
+  fertilityBannerShell: { borderColor: "rgba(53,201,155,0.55)", shadowColor: "#2E9C7C" },
+  fertilityBannerGlowGreen: { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(53,201,155,0.20)", top: -58, left: -40 },
+  fertilityBannerGlowBlue: { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(96,165,250,0.18)", bottom: -70, right: -36 },
+  fertilityBannerEyebrowText: { color: "#0E9F6E", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  fertilityBannerDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: "#60A5FA" },
 });
