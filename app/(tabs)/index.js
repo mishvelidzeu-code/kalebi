@@ -9,7 +9,7 @@ import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Modal, Pressable, 
 
 import DiaryAvatar from "../../components/DiaryAvatar";
 import PrimePreview from "../../components/PrimePreview";
-import { TEMP_PRIME_UNLOCKS_FERTILITY } from "../../constants/tempFlags";
+import { TEMP_UNLOCK_FERTILITY_FOR_ALL } from "../../constants/tempFlags";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { getHomeAssistantAdvice, getPregnancyWeeklyAdvice, invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
@@ -582,9 +582,9 @@ export default function HomeScreen() {
       const rawGoal = profile?.goal || DEFAULT_GOAL;
       // Fertility goal is free to pick, but the tailored advice pool is locked
       // behind the same "pregnancy" entitlement until the user pays for it.
-      // TEMP_PRIME_UNLOCKS_FERTILITY additionally lets Prime members in for
+      // TEMP_UNLOCK_FERTILITY_FOR_ALL additionally lets any account in for
       // free — see constants/tempFlags.js.
-      const fertilityUnlocked = isAdmin || Boolean(profile?.has_pregnancy_subscription) || (TEMP_PRIME_UNLOCKS_FERTILITY && isPremium);
+      const fertilityUnlocked = isAdmin || Boolean(profile?.has_pregnancy_subscription) || TEMP_UNLOCK_FERTILITY_FOR_ALL;
       const currentGoal = rawGoal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL : rawGoal;
 
       setUserName(profile?.name || user.email?.split("@")[0] || "ანი");

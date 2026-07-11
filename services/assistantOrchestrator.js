@@ -2,10 +2,9 @@ import dayjs from "dayjs";
 
 import { calculateCycleState, getPregnancyChanceKey } from "../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../utils/cyclePrediction";
-import { TEMP_PRIME_UNLOCKS_FERTILITY } from "../constants/tempFlags";
+import { TEMP_UNLOCK_FERTILITY_FOR_ALL } from "../constants/tempFlags";
 import { isAdminEmail } from "./adminAccess";
 import { generateAiResponse } from "./ai";
-import { resolvePremiumAccessFromProfile } from "./purchases";
 import { supabase } from "./supabase";
 
 const DEFAULT_GOAL_LABEL = "ციკლის კონტროლი";
@@ -288,7 +287,7 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
 
   const today = dayjs().format("YYYY-MM-DD");
   const [profileResponse, cyclesResponse, symptomsResponse, todaySymptomsResponse] = await Promise.all([
-    supabase.from("profiles").select("name, goal, cycle_length, period_length, last_period, pregnancy_mode, pregnancy_start_date, has_pregnancy_subscription, is_premium, premium_override, premium_until").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("name, goal, cycle_length, period_length, last_period, pregnancy_mode, pregnancy_start_date, has_pregnancy_subscription").eq("id", user.id).maybeSingle(),
     supabase.from("cycles").select("start_date, cycle_length, period_length").eq("user_id", user.id).order("start_date", { ascending: false }).limit(6),
     supabase.from("symptoms").select("date, symptoms, mood, note").eq("user_id", user.id).order("date", { ascending: false }).limit(10),
     supabase.from("symptoms").select("date, symptoms, mood, note").eq("user_id", user.id).eq("date", today).maybeSingle(),
@@ -314,12 +313,12 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
 
   // Fertility ("დაორსულება") is a paid tier of the same "pregnancy" entitlement —
   // picking it as a goal is free, but the tailored AI content stays locked until paid.
-  // TEMP_PRIME_UNLOCKS_FERTILITY additionally lets Prime members in for free —
+  // TEMP_UNLOCK_FERTILITY_FOR_ALL additionally lets any account in for free —
   // see constants/tempFlags.js.
   const fertilityUnlocked =
     isAdminEmail(user.email)
     || Boolean(profile.has_pregnancy_subscription)
-    || (TEMP_PRIME_UNLOCKS_FERTILITY && resolvePremiumAccessFromProfile(profile));
+    || TEMP_UNLOCK_FERTILITY_FOR_ALL;
   const effectiveGoal = profile.goal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL_LABEL : profile.goal;
 
   const context = {

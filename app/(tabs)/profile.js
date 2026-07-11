@@ -15,7 +15,7 @@ import { ActivityIndicator, Alert, AppState, Modal, Platform, Pressable, Refresh
 
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
-import { TEMP_PRIME_UNLOCKS_FERTILITY } from "../../constants/tempFlags";
+import { TEMP_UNLOCK_FERTILITY_FOR_ALL } from "../../constants/tempFlags";
 import { invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { disableCycleReminders, getNotificationsEnabled, setNotificationsEnabled, syncCycleRemindersForUser } from "../../services/notifications";
 import {
@@ -75,13 +75,13 @@ const getFileExtension = (asset) => {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin, isPremium } = useTheme();
+  const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin } = useTheme();
   const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, updatePregnancyStartDate, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
   // Fertility mode reuses the "pregnancy" RevenueCat entitlement — selecting the
   // goal is free, but the tailored AI/advice content stays locked until paid.
-  // TEMP_PRIME_UNLOCKS_FERTILITY additionally lets Prime members in for free
+  // TEMP_UNLOCK_FERTILITY_FOR_ALL additionally lets any account in for free
   // while the mode's own UI/pricing is being designed — see constants/tempFlags.js.
-  const fertilityUnlocked = isAdmin || hasSubscription || (TEMP_PRIME_UNLOCKS_FERTILITY && isPremium);
+  const fertilityUnlocked = isAdmin || hasSubscription || TEMP_UNLOCK_FERTILITY_FOR_ALL;
 
   const [userId, setUserId] = useState("");
   const [email, setEmail] = useState("");
@@ -711,13 +711,13 @@ export default function ProfileScreen() {
         return;
       }
 
-      // TEMP: Prime members skip the separate fertility purchase — see
-      // constants/tempFlags.js (TEMP_PRIME_UNLOCKS_FERTILITY).
-      if (TEMP_PRIME_UNLOCKS_FERTILITY && isPremium) {
+      // TEMP: every account skips the separate fertility purchase — see
+      // constants/tempFlags.js (TEMP_UNLOCK_FERTILITY_FOR_ALL).
+      if (TEMP_UNLOCK_FERTILITY_FOR_ALL) {
         await updateGoalMode("დაორსულება");
         await reloadPregnancy();
         setShowFertilityModal(false);
-        Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო ✨`, "Prime წევრობით გააქტიურდა.");
+        Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო ✨`, "");
         return;
       }
 
