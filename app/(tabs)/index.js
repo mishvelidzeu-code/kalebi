@@ -9,7 +9,7 @@ import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Modal, Pressable, 
 
 import DiaryAvatar from "../../components/DiaryAvatar";
 import PrimePreview from "../../components/PrimePreview";
-import { TEMP_UNLOCK_FERTILITY_FOR_ALL } from "../../constants/tempFlags";
+import { TEMP_FERTILITY_COMING_SOON } from "../../constants/tempFlags";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { getHomeAssistantAdvice, getPregnancyWeeklyAdvice, invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
@@ -584,9 +584,7 @@ export default function HomeScreen() {
       const rawGoal = profile?.goal || DEFAULT_GOAL;
       // Fertility goal is free to pick, but the tailored advice pool is locked
       // behind the same "pregnancy" entitlement until the user pays for it.
-      // TEMP_UNLOCK_FERTILITY_FOR_ALL additionally lets any account in for
-      // free — see constants/tempFlags.js.
-      const fertilityUnlocked = isAdmin || Boolean(profile?.has_pregnancy_subscription) || TEMP_UNLOCK_FERTILITY_FOR_ALL;
+      const fertilityUnlocked = isAdmin || Boolean(profile?.has_pregnancy_subscription);
       const currentGoal = rawGoal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL : rawGoal;
 
       setUserName(profile?.name || user.email?.split("@")[0] || "ანი");
@@ -967,7 +965,13 @@ export default function HomeScreen() {
         <TouchableOpacity
           activeOpacity={0.82}
           style={[styles.pregnancyBanner, styles.fertilityBannerShell]}
-          onPress={() => router.push({ pathname: "/(tabs)/profile", params: { openFertility: String(Date.now()) } })}
+          onPress={() => {
+            if (TEMP_FERTILITY_COMING_SOON) {
+              Alert.alert("მალე დაემატება 🌿", "\"მინდა დაორსულება\" რეჟიმი მალე გაეშვება — ცოტაც მოითმინე.");
+              return;
+            }
+            router.push({ pathname: "/(tabs)/profile", params: { openFertility: String(Date.now()) } });
+          }}
         >
           <LinearGradient
             colors={theme.fertilityBannerGradient}

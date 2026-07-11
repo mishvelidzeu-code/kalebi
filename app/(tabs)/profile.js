@@ -15,7 +15,7 @@ import { ActivityIndicator, Alert, AppState, Modal, Platform, Pressable, Refresh
 
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
-import { TEMP_UNLOCK_FERTILITY_FOR_ALL } from "../../constants/tempFlags";
+import { TEMP_FERTILITY_COMING_SOON } from "../../constants/tempFlags";
 import { invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { disableCycleReminders, getNotificationsEnabled, setNotificationsEnabled, syncCycleRemindersForUser } from "../../services/notifications";
 import {
@@ -80,9 +80,7 @@ export default function ProfileScreen() {
   const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, updatePregnancyStartDate, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
   // Fertility mode reuses the "pregnancy" RevenueCat entitlement — selecting the
   // goal is free, but the tailored AI/advice content stays locked until paid.
-  // TEMP_UNLOCK_FERTILITY_FOR_ALL additionally lets any account in for free
-  // while the mode's own UI/pricing is being designed — see constants/tempFlags.js.
-  const fertilityUnlocked = isAdmin || hasSubscription || TEMP_UNLOCK_FERTILITY_FOR_ALL;
+  const fertilityUnlocked = isAdmin || hasSubscription;
 
   const [userId, setUserId] = useState("");
   const [email, setEmail] = useState("");
@@ -116,12 +114,27 @@ export default function ProfileScreen() {
   const FERTILITY_MODE_LABEL = "მინდა დაორსულება";
   const getGoalLabel = (value) => (value === "დაორსულება" ? FERTILITY_MODE_LABEL : value);
 
+  // TEMP: fertility mode is blocked while it is being finished — every entry
+  // point shows this alert instead of the paywall (see constants/tempFlags.js).
+  const showFertilityComingSoon = () => {
+    Alert.alert("მალე დაემატება 🌿", `"${FERTILITY_MODE_LABEL}" რეჟიმი მალე გაეშვება — ცოტაც მოითმინე.`);
+  };
+
+  const openFertilityFlow = () => {
+    if (TEMP_FERTILITY_COMING_SOON) {
+      showFertilityComingSoon();
+      return;
+    }
+    setShowFertilityModal(true);
+  };
+
   // Home-screen "მინდა დაორსულება" banner deep-links here with a timestamp
   // param so each tap re-opens the fertility modal.
   useEffect(() => {
     if (openFertility) {
-      setShowFertilityModal(true);
+      openFertilityFlow();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openFertility]);
 
   useEffect(() => {
@@ -711,22 +724,20 @@ export default function ProfileScreen() {
   };
 
   const handleFertilityEnable = async () => {
+    // TEMP: hard-blocked for everyone (admin included) while the mode is being
+    // finished — no activation, no payment. See constants/tempFlags.js.
+    if (TEMP_FERTILITY_COMING_SOON) {
+      setShowFertilityModal(false);
+      showFertilityComingSoon();
+      return;
+    }
+
     setFertilitySaving(true);
     try {
       if (isAdmin) {
         await updateGoalMode("დაორსულება");
         setShowFertilityModal(false);
         Alert.alert("ადმინ წვდომა აქტიურია ✨", `"${FERTILITY_MODE_LABEL}" ჩაირთო შეზღუდვების გარეშე.`);
-        return;
-      }
-
-      // TEMP: every account skips the separate fertility purchase — see
-      // constants/tempFlags.js (TEMP_UNLOCK_FERTILITY_FOR_ALL).
-      if (TEMP_UNLOCK_FERTILITY_FOR_ALL) {
-        await updateGoalMode("დაორსულება");
-        await reloadPregnancy();
-        setShowFertilityModal(false);
-        Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო ✨`, "");
         return;
       }
 
@@ -916,7 +927,7 @@ export default function ProfileScreen() {
                 bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
                 title={FERTILITY_MODE_LABEL}
                 subtitle="მიზნად არჩეულია — გახსენი ოვულაციის/ნაყოფიერი ფანჯრის AI რჩევები $2.99/თვე-ად"
-                onPress={() => setShowFertilityModal(true)}
+                onPress={openFertilityFlow}
                 showArrow
                 isDarkTheme={isDark}
                 primaryColor={theme.primary}
@@ -930,7 +941,7 @@ export default function ProfileScreen() {
                 bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
                 title={FERTILITY_MODE_LABEL}
                 subtitle="ოვულაციისა და ნაყოფიერი ფანჯრის ფოკუსირებული რეჟიმი"
-                onPress={() => setShowFertilityModal(true)}
+                onPress={openFertilityFlow}
                 showArrow
                 isDarkTheme={isDark}
                 primaryColor={theme.primary}

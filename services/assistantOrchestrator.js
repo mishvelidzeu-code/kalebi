@@ -2,7 +2,6 @@ import dayjs from "dayjs";
 
 import { calculateCycleState, getPregnancyChanceKey } from "../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../utils/cyclePrediction";
-import { TEMP_UNLOCK_FERTILITY_FOR_ALL } from "../constants/tempFlags";
 import { isAdminEmail } from "./adminAccess";
 import { generateAiResponse } from "./ai";
 import { supabase } from "./supabase";
@@ -313,12 +312,9 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
 
   // Fertility ("დაორსულება") is a paid tier of the same "pregnancy" entitlement —
   // picking it as a goal is free, but the tailored AI content stays locked until paid.
-  // TEMP_UNLOCK_FERTILITY_FOR_ALL additionally lets any account in for free —
-  // see constants/tempFlags.js.
   const fertilityUnlocked =
     isAdminEmail(user.email)
-    || Boolean(profile.has_pregnancy_subscription)
-    || TEMP_UNLOCK_FERTILITY_FOR_ALL;
+    || Boolean(profile.has_pregnancy_subscription);
   const effectiveGoal = profile.goal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL_LABEL : profile.goal;
 
   const context = {
