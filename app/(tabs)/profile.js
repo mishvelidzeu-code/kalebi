@@ -8,7 +8,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, AppState, Modal, Platform, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -75,6 +75,7 @@ const getFileExtension = (asset) => {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { openFertility } = useLocalSearchParams();
   const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin } = useTheme();
   const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, updatePregnancyStartDate, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
   // Fertility mode reuses the "pregnancy" RevenueCat entitlement — selecting the
@@ -114,6 +115,14 @@ export default function ProfileScreen() {
   // comparisons/DB rows and the AI's internal goal mapping keep working.
   const FERTILITY_MODE_LABEL = "მინდა დაორსულება";
   const getGoalLabel = (value) => (value === "დაორსულება" ? FERTILITY_MODE_LABEL : value);
+
+  // Home-screen "მინდა დაორსულება" banner deep-links here with a timestamp
+  // param so each tap re-opens the fertility modal.
+  useEffect(() => {
+    if (openFertility) {
+      setShowFertilityModal(true);
+    }
+  }, [openFertility]);
 
   useEffect(() => {
     loadProfile();

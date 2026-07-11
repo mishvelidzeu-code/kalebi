@@ -26,6 +26,7 @@ const HOME_ADVICE_CACHE_KEY_PREFIX = "@cycle-care/home-advice";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
 const PREGNANCY_BANNER_IMAGE = require("../../assets/images/pregnancy-banner-hero.png");
+const FERTILITY_BANNER_IMAGE = require("../../assets/images/minda-daorsuleba.png");
 const ASSISTANT_GUIDE_IMAGE = require("../../assets/images/assistant-guide.png");
 
 function getBabyImageUrl(week) {
@@ -956,6 +957,41 @@ export default function HomeScreen() {
             </View>
             <View style={[styles.pregnancyBannerImageWrap, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
               <Image source={PREGNANCY_BANNER_IMAGE} style={styles.pregnancyBannerImage} resizeMode="cover" />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+
+      {!isPremium && !pregnancyMode && (
+        <TouchableOpacity
+          activeOpacity={0.82}
+          style={styles.pregnancyBanner}
+          onPress={() => router.push({ pathname: "/(tabs)/profile", params: { openFertility: String(Date.now()) } })}
+        >
+          <LinearGradient
+            colors={theme.bannerGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.pregnancyBannerGradient}
+          >
+            <View style={styles.pregnancyBannerGlowPink} />
+            <View style={styles.pregnancyBannerGlowMint} />
+            <View style={styles.pregnancyBannerLeft}>
+              <View style={[styles.pregnancyBannerIcon, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
+                <Ionicons name="leaf" size={23} color="#06B98A" />
+              </View>
+              <View style={styles.pregnancyBannerCopy}>
+                <View style={styles.pregnancyBannerEyebrow}>
+                  <Text style={styles.pregnancyBannerEyebrowText}>FERTILITY</Text>
+                  <View style={styles.pregnancyBannerDot} />
+                  <Text style={styles.pregnancyBannerEyebrowText}>PREMIUM</Text>
+                </View>
+                <Text style={[styles.pregnancyBannerTitle, { color: theme.text }]}>მინდა დაორსულება</Text>
+                <Text style={[styles.pregnancyBannerSub, { color: theme.subText }]}>ოვულაცია, ნაყოფიერი ფანჯარა და AI რჩევები ჩასახვის დაგეგმვისთვის</Text>
+              </View>
+            </View>
+            <View style={[styles.pregnancyBannerImageWrap, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
+              <Image source={FERTILITY_BANNER_IMAGE} style={styles.pregnancyBannerImage} resizeMode="cover" />
             </View>
           </LinearGradient>
         </TouchableOpacity>
