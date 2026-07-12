@@ -150,13 +150,18 @@ function buildAndroidPrimePaymentUrl(userId) {
   return `${ANDROID_PRIME_PAYMENT_URL}${separator}user_id=${encodeURIComponent(userId)}`;
 }
 
-function buildAndroidPregnancyPaymentUrl(userId) {
+function buildAndroidPregnancyPaymentUrl(userId, context = null) {
   if (!ANDROID_PREGNANCY_PAYMENT_URL) {
     return "";
   }
 
   const separator = ANDROID_PREGNANCY_PAYMENT_URL.includes("?") ? "&" : "?";
-  return `${ANDROID_PREGNANCY_PAYMENT_URL}${separator}user_id=${encodeURIComponent(userId)}`;
+  let url = `${ANDROID_PREGNANCY_PAYMENT_URL}${separator}user_id=${encodeURIComponent(userId)}`;
+  // Analytics-only marker for the web checkout server, if it wants to log it.
+  if (context) {
+    url += `&context=${encodeURIComponent(context)}`;
+  }
+  return url;
 }
 
 async function readPremiumStatusFromProfile(userId) {
@@ -345,13 +350,13 @@ export async function openAndroidPrimeCheckout() {
   };
 }
 
-export async function openAndroidPregnancyCheckout() {
+export async function openAndroidPregnancyCheckout({ context = null } = {}) {
   const user = await getCurrentSupabaseUser();
   if (!user) {
     throw new Error("user-not-found");
   }
 
-  const paymentUrl = buildAndroidPregnancyPaymentUrl(user.id);
+  const paymentUrl = buildAndroidPregnancyPaymentUrl(user.id, context);
   if (!paymentUrl) {
     throw new Error("android-pregnancy-payment-url-not-configured");
   }
@@ -433,22 +438,45 @@ function hasActivePregnancyEntitlement(customerInfo) {
 }
 
 async function writePregnancyStatusToProfile(user, hasSub, pregnancyUntil = null, metadata = {}) {
+  const payload = {
+    id: user.id,
+    email: user.email,
+    has_pregnancy_subscription: hasSub,
+    pregnancy_until: pregnancyUntil,
+    pregnancy_plan: metadata.plan || null,
+    pregnancy_source: metadata.source || (hasSub ? getPurchaseSource() : null),
+    pregnancy_last_payment_at: metadata.lastPaymentAt || null,
+    pregnancy_order_id: metadata.orderId || null,
+  };
+
+  // Analytics-only marker for which screen drove the purchase. Only written when
+  // explicitly provided, so status-refresh calls (which pass no context) never
+  // overwrite the original value with null.
+  if (metadata.context) {
+    payload.pregnancy_purchase_context = metadata.context;
+  }
+
   const { error } = await supabase
     .from("profiles")
-    .upsert(
-      {
-        id: user.id,
-        email: user.email,
-        has_pregnancy_subscription: hasSub,
-        pregnancy_until: pregnancyUntil,
-        pregnancy_plan: metadata.plan || null,
-        pregnancy_source: metadata.source || (hasSub ? getPurchaseSource() : null),
-        pregnancy_last_payment_at: metadata.lastPaymentAt || null,
-        pregnancy_order_id: metadata.orderId || null,
-      },
-      { onConflict: "id" }
-    );
+    .upsert(payload, { onConflict: "id" });
   if (error) throw error;
+}
+
+// Records which screen initiated a shared pregnancy/fertility purchase, for
+// analytics only. Used by the Android web-checkout return flow, where the app
+// learns about the purchase after the fact. Fail-silent — never blocks access.
+export async function recordPregnancyPurchaseContext(context) {
+  if (!context) return;
+  try {
+    const user = await getCurrentSupabaseUser();
+    if (!user) return;
+    await supabase
+      .from("profiles")
+      .update({ pregnancy_purchase_context: context })
+      .eq("id", user.id);
+  } catch (error) {
+    console.log("recordPregnancyPurchaseContext skipped:", error);
+  }
 }
 
 export async function getPregnancyOfferings() {
@@ -470,7 +498,7 @@ export async function getPregnancyOfferings() {
   }
 }
 
-export async function purchasePregnancyPackage(packageToPurchase) {
+export async function purchasePregnancyPackage(packageToPurchase, { context = null } = {}) {
   const user = await getCurrentSupabaseUser();
   if (!user) throw new Error("user-not-found");
 
@@ -487,6 +515,8 @@ export async function purchasePregnancyPackage(packageToPurchase) {
     source: getPurchaseSource(),
     lastPaymentAt: hasSub ? getPaymentTimestamp(entitlementInfo) : null,
     orderId: getExternalOrderId(entitlementInfo),
+    // Analytics-only marker recorded on the purchase itself.
+    context: hasSub ? context : null,
   });
 
   if (hasSub) {

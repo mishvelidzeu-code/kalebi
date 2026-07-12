@@ -25,6 +25,7 @@ import {
   openAndroidPregnancyCheckout,
   purchasePregnancyPackage,
   checkPregnancySubscriptionStatus,
+  recordPregnancyPurchaseContext,
 } from "../../services/purchases";
 import { supabase } from "../../services/supabase";
 
@@ -163,6 +164,9 @@ export default function ProfileScreen() {
           return;
         }
 
+        // Analytics-only marker for which screen drove this web-checkout purchase.
+        await recordPregnancyPurchaseContext(pendingCheckout.type);
+
         if (pendingCheckout.type === "pregnancy") {
           await enablePregnancyMode(pendingCheckout.dateStr);
           setShowPregnancyModal(false);
@@ -194,7 +198,8 @@ export default function ProfileScreen() {
       throw new Error("android-pregnancy-payment-url-not-configured");
     }
 
-    await openAndroidPregnancyCheckout();
+    // payload.type ("fertility" | "pregnancy") doubles as the analytics context.
+    await openAndroidPregnancyCheckout({ context: payload?.type || null });
     setPendingAndroidCheckout(payload);
   }, []);
 
@@ -596,7 +601,7 @@ export default function ProfileScreen() {
         if (status.hasSubscription) {
           await enablePregnancyMode(dateStr);
         } else if (availablePackage) {
-          const result = await purchasePregnancyPackage(availablePackage);
+          const result = await purchasePregnancyPackage(availablePackage, { context: "pregnancy" });
           if (result.hasSubscription) {
             await enablePregnancyMode(dateStr);
           } else {
@@ -765,7 +770,7 @@ export default function ProfileScreen() {
         if (status.hasSubscription) {
           await updateGoalMode("დაორსულება");
         } else if (availablePackage) {
-          const result = await purchasePregnancyPackage(availablePackage);
+          const result = await purchasePregnancyPackage(availablePackage, { context: "fertility" });
           if (result.hasSubscription) {
             await updateGoalMode("დაორსულება");
           } else {
@@ -1072,7 +1077,7 @@ export default function ProfileScreen() {
               <Text style={[styles.modalLabel, { color: theme.subText, marginBottom: 10 }]}>რას მიიღებ</Text>
               <Text style={[styles.fertilityBenefit, { color: theme.text }]}>• ნაყოფიერი ფანჯრის მკაფიო ფოკუსი</Text>
               <Text style={[styles.fertilityBenefit, { color: theme.text }]}>• დაორსულების მიზანზე მორგებული რჩევები</Text>
-              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>• იგივე ფასი, რაც ორსულობის რეჟიმს — $2.99/თვე</Text>
+              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>• ერთი გამოწერა ორივე რეჟიმს ხსნის (ორსულობის ჩათვლით) — $2.99/თვე</Text>
             </View>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handleFertilityEnable}>
               {fertilitySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>ჩართვა — $2.99/თვე</Text>}
