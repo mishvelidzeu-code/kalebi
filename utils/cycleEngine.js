@@ -98,9 +98,22 @@ export function getCyclePhaseKey(cycleDay, cycleLength = 28, periodLength = 5) {
 export function getPregnancyChanceKey(cycleDay, cycleLength = 28) {
   const ovulationDay = cycleLength - 13;
 
-  if (cycleDay >= ovulationDay - 5 && cycleDay <= ovulationDay + 1) {
-    return cycleDay === ovulationDay || cycleDay === ovulationDay - 1 ? "veryHigh" : "high";
+  if (cycleDay <= 0) return null;
+
+  // Peak: ovulation day and the day before — highest conception chance.
+  if (cycleDay === ovulationDay || cycleDay === ovulationDay - 1) {
+    return "veryHigh";
   }
 
-  return cycleDay <= 0 ? null : cycleDay ? "low" : null;
+  // Core fertile window (ovulation −5 .. +1 excluding the two peak days).
+  if (cycleDay >= ovulationDay - 5 && cycleDay <= ovulationDay + 1) {
+    return "high";
+  }
+
+  // Approaching / just-past the fertile window — a moderate chance.
+  if (cycleDay >= ovulationDay - 7 && cycleDay <= ovulationDay + 3) {
+    return "medium";
+  }
+
+  return "low";
 }

@@ -12,6 +12,7 @@ import PrimePreview from "../../components/PrimePreview";
 import { TEMP_FERTILITY_COMING_SOON } from "../../constants/tempFlags";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
+import { useFertility } from "../../context/FertilityContext";
 import { getHomeAssistantAdvice, getPregnancyWeeklyAdvice, invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { syncCycleRemindersForUser } from "../../services/notifications";
 import { supabase } from "../../services/supabase";
@@ -437,6 +438,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { isDark, isPremium, isAdmin } = useTheme();
   const { pregnancyMode } = usePregnancy();
+  const { fertilityMode } = useFertility();
   const lastAdviceKeyRef = useRef("");
   const adviceRequestKeyRef = useRef("");
   const hasLoadedOnceRef = useRef(false);
@@ -746,6 +748,16 @@ export default function HomeScreen() {
   const progress = cycleDay ? (cycleDay / cycleLength) * 100 : 0;
   const stats = getDailyStats(cycleDay, cycleLength, periodLength);
   const ovulationDay = cycleLength - 13;
+  // Days until the estimated ovulation, rolling into the next cycle once passed.
+  let daysToOvulation = cycleDay ? ovulationDay - cycleDay : null;
+  if (daysToOvulation != null && daysToOvulation < -1) daysToOvulation += cycleLength;
+  const ovulationLabel = daysToOvulation == null
+    ? "დაამატე ციკლი პროგნოზისთვის"
+    : daysToOvulation > 0
+      ? `ოვულაციამდე ${daysToOvulation} დღე`
+      : daysToOvulation === 0
+        ? "ოვულაცია სავარაუდოდ დღეს 🌟"
+        : "ოვულაცია ახლახან იყო";
   const calendarColors = {
     period: "#E94560",
     ovulation: "#FFD166",
@@ -825,6 +837,23 @@ export default function HomeScreen() {
             <Text style={styles.trackerCtaText}>ციკლი დამეწყო დღეს</Text>
           </TouchableOpacity>
         </LinearGradient>
+
+        {fertilityMode && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.fertilityStrip, { backgroundColor: theme.softCard, borderColor: theme.border }]}
+            onPress={() => router.push("/(tabs)/calendar")}
+          >
+            <View style={[styles.fertilityStripIcon, { backgroundColor: "rgba(14,159,110,0.14)" }]}>
+              <Ionicons name="leaf" size={20} color="#0E9F6E" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.fertilityStripTitle, { color: theme.text }]}>{ovulationLabel}</Text>
+              <Text style={[styles.fertilityStripSub, { color: theme.subText }]}>დღეს: {pregnancyChance} · აღრიცხე ტესტი, ტემპერატურა და ნიშნები</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.subText} />
+          </TouchableOpacity>
+        )}
 
         <View style={[styles.weekMiniCard, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
           <View style={styles.weekMiniRow}>
@@ -1215,6 +1244,10 @@ const styles = StyleSheet.create({
   trackerCta: { width: "78%", minHeight: 54, borderRadius: 999, backgroundColor: "#FF8A6B", paddingHorizontal: 24, marginTop: 18, alignItems: "center", justifyContent: "center", shadowColor: "#FF8A6B", shadowOpacity: 0.28, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 5 },
   trackerCtaText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900", textAlign: "center" },
   trackerProgressDot: { position: "absolute", top: 121, left: 121, width: 14, height: 14, borderRadius: 7, borderWidth: 3, borderColor: "#FFFFFF" },
+  fertilityStrip: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 22, borderWidth: 1, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 14 },
+  fertilityStripIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  fertilityStripTitle: { fontSize: 15, fontWeight: "900" },
+  fertilityStripSub: { fontSize: 12, fontWeight: "600", marginTop: 3 },
   weekMiniCard: { borderRadius: 24, borderWidth: 1, padding: 12, marginBottom: 22, shadowColor: "#E6A08C", shadowOpacity: 0.10, shadowRadius: 16, shadowOffset: { width: 0, height: 9 }, elevation: 4 },
   weekMiniRow: { flexDirection: "row", justifyContent: "space-between" },
   weekMiniDayWrap: { alignItems: "center", width: "13.5%" },

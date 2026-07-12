@@ -26,8 +26,10 @@ import PrimePreview from "../../components/PrimePreview";
 import { getDiaryAssistantSupport, invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
+import { useFertility } from "../../context/FertilityContext";
 import { useCycles } from "../../hooks/useCycles";
 import { supabase } from "../../services/supabase";
+import { FERTILITY_LOG_TYPES, getFertilityLogsForDay, getFertilityLogsRange, upsertFertilityLog } from "../../services/fertilityLogs";
 
 dayjs.locale("ka");
 
@@ -1282,9 +1284,390 @@ function RegularCalendarScreen() {
   );
 }
 
+// ================= FERTILITY ("მინდა დაორსულება") =================
+
+const LH_TEST_OPTIONS = [
+  { id: "negative", label: "უარყოფითი", icon: "➖" },
+  { id: "weak", label: "სუსტი დადებითი", icon: "🌗" },
+  { id: "positive", label: "დადებითი", icon: "➕" },
+  { id: "peak", label: "პიკი", icon: "🔥" },
+];
+
+const MUCUS_OPTIONS = [
+  { id: "dry", label: "მშრალი", icon: "🍂" },
+  { id: "sticky", label: "წებოვანი", icon: "🩹" },
+  { id: "creamy", label: "კრემისებრი", icon: "🥛" },
+  { id: "watery", label: "წყლიანი", icon: "💧" },
+  { id: "eggwhite", label: "კვერცხის ცილა", icon: "🥚" },
+];
+
+const OVULATION_SYMPTOMS = [
+  { id: "cramps", label: "მუცლის ტკივილი", icon: "😣" },
+  { id: "breast", label: "მკერდის მგრძნობელობა", icon: "🌸" },
+  { id: "libido", label: "ლიბიდოს ცვლილება", icon: "💗" },
+  { id: "fatigue", label: "დაღლილობა", icon: "🥱" },
+  { id: "nausea", label: "გულისრევა", icon: "🤢" },
+  { id: "energy", label: "ენერგიის მომატება", icon: "⚡" },
+];
+
+// A day is fertile if the base cycle marks paint it as fertile (green) or
+// ovulation (yellow). Reuses the marks the user already sees on the calendar.
+function isFertileDayFromMarks(marks, dateStr) {
+  const color = marks?.[dateStr]?.selectedColor || "";
+  return color.startsWith("#06d6a0") || color.startsWith("#ffd166");
+}
+
+function FertilityCalendarScreen() {
+  const { isDark } = useTheme();
+  const { markedDates, loadData } = useCycles();
+
+  const todayStr = dayjs().format("YYYY-MM-DD");
+  const [currentDate, setCurrentDate] = useState(todayStr);
+  const [selectedDay, setSelectedDay] = useState(todayStr);
+  const [calendarKey, setCalendarKey] = useState(1);
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [dayLogs, setDayLogs] = useState({});
+  const [logsLoading, setLogsLoading] = useState(true);
+  const [monthLogDates, setMonthLogDates] = useState({});
+  const [bbtInput, setBbtInput] = useState("");
+
+  const theme = {
+    text: isDark ? "#EAFBF4" : "#183A30",
+    subText: isDark ? "#A7D8C6" : "#5C8A79",
+    accent: "#0E9F6E",
+    selected: "#0E9F6E",
+    fertile: "#35C99B",
+    ovulation: "#FFD166",
+    period: "#FF6FA0",
+    card: isDark ? "rgba(22,51,43,0.9)" : "rgba(255,255,255,0.82)",
+    chip: isDark ? "rgba(53,201,155,0.12)" : "rgba(53,201,155,0.10)",
+    chipActive: "#0E9F6E",
+    border: isDark ? "rgba(53,201,155,0.22)" : "rgba(14,159,110,0.18)",
+    softCard: isDark ? "rgba(28,43,51,0.72)" : "rgba(255,255,255,0.7)",
+    inputBg: isDark ? "rgba(53,201,155,0.10)" : "rgba(255,255,255,0.7)",
+    calendarGradient: isDark
+      ? ["rgba(22,51,43,0.96)", "rgba(18,35,54,0.94)"]
+      : ["rgba(242,255,251,0.96)", "rgba(231,251,241,0.9)", "rgba(234,244,255,0.86)"],
+  };
+
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener("cycleUpdated", () => loadData());
+    return () => subscription.remove();
+  }, [loadData]);
+
+  const loadDayLogs = useCallback(async (dateStr) => {
+    setLogsLoading(true);
+    setDayLogs(await getFertilityLogsForDay(dateStr));
+    setLogsLoading(false);
+  }, []);
+
+  const loadMonthLogs = useCallback(async (anchorDate) => {
+    const start = dayjs(anchorDate).startOf("month").subtract(7, "day").format("YYYY-MM-DD");
+    const end = dayjs(anchorDate).endOf("month").add(7, "day").format("YYYY-MM-DD");
+    const rows = await getFertilityLogsRange(start, end);
+    const byDate = {};
+    rows.forEach((row) => { byDate[row.date] = true; });
+    setMonthLogDates(byDate);
+  }, []);
+
+  useEffect(() => {
+    loadDayLogs(selectedDay);
+  }, [selectedDay, loadDayLogs]);
+
+  useEffect(() => {
+    loadMonthLogs(currentDate);
+  }, [currentDate, loadMonthLogs]);
+
+  // Keep the BBT text field in sync with the selected day's stored value.
+  useEffect(() => {
+    const stored = dayLogs[FERTILITY_LOG_TYPES.bbt]?.temp;
+    setBbtInput(stored != null ? String(stored) : "");
+  }, [dayLogs]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadData(), loadDayLogs(selectedDay), loadMonthLogs(currentDate)]);
+    setRefreshing(false);
+  };
+
+  const saveLog = async (type, value) => {
+    // Optimistic update so the UI responds instantly.
+    setDayLogs((prev) => {
+      const next = { ...prev };
+      if (value == null) delete next[type];
+      else next[type] = value;
+      return next;
+    });
+    await upsertFertilityLog(selectedDay, type, value);
+    setMonthLogDates((prev) => ({ ...prev, [selectedDay]: true }));
+  };
+
+  const changeYear = (amount) => {
+    setCurrentDate(dayjs(currentDate).add(amount, "year").format("YYYY-MM-DD"));
+    setCalendarKey(Date.now());
+  };
+  const selectMonth = (index) => {
+    setCurrentDate(dayjs(currentDate).month(index).format("YYYY-MM-DD"));
+    setCalendarKey(Date.now());
+    setShowMonthPicker(false);
+  };
+
+  const calendarMarks = { ...markedDates };
+  // Overlay a small dot on days that already have a fertility log.
+  Object.keys(monthLogDates).forEach((dateStr) => {
+    calendarMarks[dateStr] = { ...(calendarMarks[dateStr] || {}), marked: true, dotColor: theme.accent };
+  });
+  if (selectedDay) {
+    calendarMarks[selectedDay] = {
+      ...calendarMarks[selectedDay],
+      selected: true,
+      selectedColor: theme.selected,
+    };
+  }
+
+  const intercourseLog = dayLogs[FERTILITY_LOG_TYPES.intercourse];
+  const lhResult = dayLogs[FERTILITY_LOG_TYPES.lhTest]?.result || null;
+  const mucusValue = dayLogs[FERTILITY_LOG_TYPES.cervicalMucus]?.mucus || null;
+  const ovSymptoms = dayLogs[FERTILITY_LOG_TYPES.ovulationSymptom]?.symptoms || [];
+  const selectedIsFertile = isFertileDayFromMarks(markedDates, selectedDay);
+
+  const toggleOvSymptom = (id) => {
+    const next = ovSymptoms.includes(id) ? ovSymptoms.filter((s) => s !== id) : [...ovSymptoms, id];
+    saveLog(FERTILITY_LOG_TYPES.ovulationSymptom, next.length ? { symptoms: next } : null);
+  };
+
+  const saveBbt = () => {
+    const clean = bbtInput.replace(",", ".").trim();
+    if (!clean) { saveLog(FERTILITY_LOG_TYPES.bbt, null); return; }
+    const temp = Number(clean);
+    if (Number.isNaN(temp) || temp < 34 || temp > 43) {
+      Alert.alert("არასწორი ტემპერატურა", "შეიყვანე ბაზალური ტემპერატურა 34–43 °C შუალედში.");
+      return;
+    }
+    saveLog(FERTILITY_LOG_TYPES.bbt, { temp });
+  };
+
+  return (
+    <LinearGradient
+      colors={isDark ? ["#12241D", "#141E20", "#14161D"] : ["#F4FFFB", "#EBF9F2", "#EEF6FF"]}
+      style={{ flex: 1 }}
+    >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 120, paddingTop: 60 }}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
+        >
+          <View style={styles.pageHeader}>
+            <View>
+              <Text style={[styles.pageEyebrow, { color: theme.accent }]}>დაორსულების კალენდარი</Text>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>ნაყოფიერების ტრეკერი 🌿</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>აღრიცხე ტესტები, ტემპერატურა და ნიშნები</Text>
+            </View>
+          </View>
+
+          <LinearGradient
+            colors={theme.calendarGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.calendarShell, { borderColor: theme.border }]}
+          >
+            <Calendar
+              key={`fertility-${isDark ? "dark" : "light"}-${calendarKey}`}
+              current={currentDate}
+              onMonthChange={(month) => setCurrentDate(month.dateString)}
+              markedDates={calendarMarks}
+              firstDay={1}
+              enableSwipeMonths
+              onDayPress={(day) => setSelectedDay(day.dateString)}
+              renderHeader={(date) => (
+                <TouchableOpacity style={styles.calHeader} activeOpacity={0.7} onPress={() => setShowMonthPicker(true)}>
+                  <Text style={[styles.calHeaderText, { color: theme.text }]}>
+                    {dayjs(date).format("MMMM YYYY")} <Text style={styles.calHeaderChevron}>⌄</Text>
+                  </Text>
+                </TouchableOpacity>
+              )}
+              theme={{
+                calendarBackground: "transparent",
+                dayTextColor: theme.text,
+                monthTextColor: theme.text,
+                todayTextColor: theme.accent,
+                arrowColor: theme.accent,
+                textDisabledColor: isDark ? "rgba(255,255,255,0.24)" : "rgba(92,138,121,0.34)",
+                selectedDayTextColor: "#ffffff",
+              }}
+            />
+          </LinearGradient>
+
+          <View style={[styles.legend, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
+            <LegendItem color={theme.period} label="პერიოდი" textColor={theme.text} />
+            <LegendItem color={theme.ovulation} label="ოვულაცია" textColor={theme.text} />
+            <LegendItem color={theme.fertile} label="ნაყოფიერი" textColor={theme.text} />
+          </View>
+
+          {/* Selected-day fertility logging */}
+          <View style={styles.sectionContainer}>
+            <View style={styles.detailsHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>{dayjs(selectedDay).format("D MMMM")}</Text>
+              {selectedIsFertile && (
+                <View style={[styles.fertBadge, { backgroundColor: theme.fertile + "22", borderColor: theme.fertile }]}>
+                  <Text style={[styles.fertBadgeText, { color: theme.accent }]}>ნაყოფიერი დღე 🌿</Text>
+                </View>
+              )}
+            </View>
+
+            {logsLoading ? (
+              <ActivityIndicator color={theme.accent} style={{ marginTop: 24 }} />
+            ) : (
+              <>
+                {/* Intercourse */}
+                <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>❤️ ინტიმური ურთიერთობა</Text>
+                  <View style={styles.fertRow}>
+                    <FertChip
+                      label="დაცული" active={intercourseLog?.protected === true} theme={theme}
+                      onPress={() => saveLog(FERTILITY_LOG_TYPES.intercourse, intercourseLog?.protected === true ? null : { protected: true })}
+                    />
+                    <FertChip
+                      label="დაუცველი" active={intercourseLog?.protected === false} theme={theme}
+                      onPress={() => saveLog(FERTILITY_LOG_TYPES.intercourse, intercourseLog?.protected === false ? null : { protected: false })}
+                    />
+                  </View>
+                  {intercourseLog && selectedIsFertile && (
+                    <Text style={[styles.fertHint, { color: theme.accent }]}>✓ დაემთხვა ნაყოფიერ დღეს</Text>
+                  )}
+                </View>
+
+                {/* LH test */}
+                <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>🧪 ოვულაციის ტესტი</Text>
+                  <View style={styles.fertWrap}>
+                    {LH_TEST_OPTIONS.map((opt) => (
+                      <FertChip
+                        key={opt.id} label={`${opt.icon} ${opt.label}`} active={lhResult === opt.id} theme={theme}
+                        onPress={() => saveLog(FERTILITY_LOG_TYPES.lhTest, lhResult === opt.id ? null : { result: opt.id })}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                {/* BBT */}
+                <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>🌡️ ბაზალური ტემპერატურა</Text>
+                  <View style={styles.fertRow}>
+                    <TextInput
+                      value={bbtInput}
+                      onChangeText={setBbtInput}
+                      keyboardType="decimal-pad"
+                      placeholder="36.6"
+                      placeholderTextColor={theme.subText}
+                      style={[styles.bbtInput, { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text }]}
+                    />
+                    <Text style={[styles.bbtUnit, { color: theme.subText }]}>°C</Text>
+                    <TouchableOpacity style={[styles.bbtSaveBtn, { backgroundColor: theme.accent }]} onPress={saveBbt}>
+                      <Text style={styles.bbtSaveText}>შენახვა</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Cervical mucus */}
+                <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>💧 საშვილოსნოს ყელის ლორწო</Text>
+                  <View style={styles.fertWrap}>
+                    {MUCUS_OPTIONS.map((opt) => (
+                      <FertChip
+                        key={opt.id} label={`${opt.icon} ${opt.label}`} active={mucusValue === opt.id} theme={theme}
+                        onPress={() => saveLog(FERTILITY_LOG_TYPES.cervicalMucus, mucusValue === opt.id ? null : { mucus: opt.id })}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                {/* Ovulation symptoms */}
+                <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>🌸 ოვულაციის ნიშნები</Text>
+                  <View style={styles.fertWrap}>
+                    {OVULATION_SYMPTOMS.map((opt) => (
+                      <FertChip
+                        key={opt.id} label={`${opt.icon} ${opt.label}`} active={ovSymptoms.includes(opt.id)} theme={theme}
+                        onPress={() => toggleOvSymptom(opt.id)}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                <Text style={[styles.fertDisclaimer, { color: theme.subText }]}>
+                  ℹ️ ეს მონაცემები ინფორმაციული დანიშნულებისაა და არ ცვლის ექიმის კონსულტაციას.
+                </Text>
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <Modal visible={showMonthPicker} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.monthPickerCard, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
+            <View style={styles.yearSelector}>
+              <TouchableOpacity onPress={() => changeYear(-1)} style={styles.yearBtn}>
+                <Text style={[styles.yearBtnText, { color: theme.text }]}>{"<"}</Text>
+              </TouchableOpacity>
+              <Text style={[styles.yearText, { color: theme.text }]}>{dayjs(currentDate).year()}</Text>
+              <TouchableOpacity onPress={() => changeYear(1)} style={styles.yearBtn}>
+                <Text style={[styles.yearBtnText, { color: theme.text }]}>{">"}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.monthsGrid}>
+              {shortMonths.map((m, i) => {
+                const isActive = dayjs(currentDate).month() === i;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.monthBtn, { backgroundColor: isActive ? theme.accent : theme.chip }]}
+                    onPress={() => selectMonth(i)}
+                  >
+                    <Text style={[styles.monthBtnText, { color: isActive ? "#FFF" : theme.text }]}>{m}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowMonthPicker(false)}>
+              <Text style={styles.closeModalBtnText}>დახურვა</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <View style={styles.floatingDiaryAvatar}>
+        <DiaryAvatar accent={theme.accent} isDark={isDark} size={46} showHint={false} />
+      </View>
+    </LinearGradient>
+  );
+}
+
+const FertChip = ({ label, active, onPress, theme }) => (
+  <TouchableOpacity
+    activeOpacity={0.8}
+    onPress={onPress}
+    style={[
+      styles.fertChip,
+      { backgroundColor: active ? theme.chipActive : theme.chip, borderColor: active ? theme.chipActive : theme.border },
+    ]}
+  >
+    <Text style={[styles.fertChipText, { color: active ? "#fff" : theme.text }]}>{label}</Text>
+  </TouchableOpacity>
+);
+
 export default function CalendarScreen() {
   const { pregnancyMode } = usePregnancy();
-  return pregnancyMode ? <PregnancyCalendarScreen /> : <RegularCalendarScreen />;
+  const { fertilityMode } = useFertility();
+  if (pregnancyMode) return <PregnancyCalendarScreen />;
+  if (fertilityMode) return <FertilityCalendarScreen />;
+  return <RegularCalendarScreen />;
 }
 
 const LegendItem = ({ color, label, textColor }) => (
@@ -1295,6 +1678,22 @@ const LegendItem = ({ color, label, textColor }) => (
 );
 
 const styles = StyleSheet.create({
+  // -- Fertility mode ----------------------------------------------
+  fertBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1 },
+  fertBadgeText: { fontSize: 12, fontWeight: "800" },
+  fertBlock: { marginTop: 14, borderRadius: 22, borderWidth: 1, padding: 16 },
+  fertBlockTitle: { fontSize: 15, fontWeight: "800", marginBottom: 12 },
+  fertRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  fertWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  fertHint: { marginTop: 10, fontSize: 13, fontWeight: "700" },
+  fertChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, borderWidth: 1 },
+  fertChipText: { fontSize: 13, fontWeight: "700" },
+  bbtInput: { flex: 1, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 11, fontSize: 16, fontWeight: "700" },
+  bbtUnit: { fontSize: 15, fontWeight: "800" },
+  bbtSaveBtn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 14 },
+  bbtSaveText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  fertDisclaimer: { marginTop: 18, fontSize: 12, lineHeight: 18, fontWeight: "600", textAlign: "center" },
+
   // -- Calendar ----------------------------------------------------
   pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingRight: 88, marginBottom: 18 },
   pageEyebrow: { color: "#FF8A6B", fontSize: 10, fontWeight: "900", letterSpacing: 0.8, marginBottom: 6 },
