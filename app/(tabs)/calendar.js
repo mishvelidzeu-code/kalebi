@@ -30,6 +30,7 @@ import { useFertility } from "../../context/FertilityContext";
 import { useCycles } from "../../hooks/useCycles";
 import { supabase } from "../../services/supabase";
 import { FERTILITY_LOG_TYPES, getFertilityLogsForDay, getFertilityLogsRange, upsertFertilityLog } from "../../services/fertilityLogs";
+import { SUPPLEMENT_OPTIONS } from "../../utils/fertilityPlan";
 
 dayjs.locale("ka");
 
@@ -1431,11 +1432,19 @@ function FertilityCalendarScreen() {
   const lhResult = dayLogs[FERTILITY_LOG_TYPES.lhTest]?.result || null;
   const mucusValue = dayLogs[FERTILITY_LOG_TYPES.cervicalMucus]?.mucus || null;
   const ovSymptoms = dayLogs[FERTILITY_LOG_TYPES.ovulationSymptom]?.symptoms || [];
+  const takenSupplements = dayLogs[FERTILITY_LOG_TYPES.supplement]?.taken || [];
   const selectedIsFertile = isFertileDayFromMarks(markedDates, selectedDay);
 
   const toggleOvSymptom = (id) => {
     const next = ovSymptoms.includes(id) ? ovSymptoms.filter((s) => s !== id) : [...ovSymptoms, id];
     saveLog(FERTILITY_LOG_TYPES.ovulationSymptom, next.length ? { symptoms: next } : null);
+  };
+
+  const toggleSupplement = (id) => {
+    const next = takenSupplements.includes(id)
+      ? takenSupplements.filter((s) => s !== id)
+      : [...takenSupplements, id];
+    saveLog(FERTILITY_LOG_TYPES.supplement, next.length ? { taken: next } : null);
   };
 
   const saveBbt = () => {
@@ -1595,6 +1604,19 @@ function FertilityCalendarScreen() {
                       <FertChip
                         key={opt.id} label={`${opt.icon} ${opt.label}`} active={ovSymptoms.includes(opt.id)} theme={theme}
                         onPress={() => toggleOvSymptom(opt.id)}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                {/* Supplements */}
+                <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>💊 ვიტამინები და დამატებები</Text>
+                  <View style={styles.fertWrap}>
+                    {SUPPLEMENT_OPTIONS.map((opt) => (
+                      <FertChip
+                        key={opt.id} label={`${opt.icon} ${opt.label}`} active={takenSupplements.includes(opt.id)} theme={theme}
+                        onPress={() => toggleSupplement(opt.id)}
                       />
                     ))}
                   </View>

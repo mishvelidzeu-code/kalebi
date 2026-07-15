@@ -10,6 +10,8 @@ import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Modal, Pressable, 
 import DiaryAvatar from "../../components/DiaryAvatar";
 import PrimePreview from "../../components/PrimePreview";
 import { TEMP_FERTILITY_COMING_SOON } from "../../constants/tempFlags";
+import { getFertilityLogsForDay } from "../../services/fertilityLogs";
+import { buildDailyPlan } from "../../utils/fertilityPlan";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { useFertility } from "../../context/FertilityContext";
@@ -457,6 +459,7 @@ export default function HomeScreen() {
   const [userName, setUserName] = useState("");
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [dailyAdvice, setDailyAdvice] = useState("დღეს საკუთარ სხეულს მოუსმინე და ჩაინიშნე როგორ გრძნობ თავს.");
+  const [dailyPlan, setDailyPlan] = useState(null);
 
   const theme = {
     bg: isDark ? "#211621" : "#FFFDFC",
@@ -632,6 +635,14 @@ export default function HomeScreen() {
       setPregnancyChance(status.chance);
       setPhaseColor(status.color);
 
+      // Fertility mode: today's action plan, ticked off from today's logs.
+      if (fertilityMode) {
+        const todayLogs = await getFertilityLogsForDay(todayKey);
+        setDailyPlan(buildDailyPlan({ forecast: cycleState, todayLogs, referenceDate: today }));
+      } else {
+        setDailyPlan(null);
+      }
+
       const fallbackAdvice = getDailyAdvice({
         phaseKey: status.phaseKey,
         goal: currentGoal,
@@ -676,7 +687,7 @@ export default function HomeScreen() {
         hasLoadedOnceRef.current = true;
       }
     }
-  }, [getPhaseAndChance, isPremium, isAdmin, refreshHomeAdvice]);
+  }, [getPhaseAndChance, isPremium, isAdmin, fertilityMode, refreshHomeAdvice]);
 
   useFocusEffect(
     useCallback(() => {
@@ -853,6 +864,56 @@ export default function HomeScreen() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.subText} />
           </TouchableOpacity>
+        )}
+
+        {fertilityMode && dailyPlan && (
+          <LinearGradient colors={theme.cardGradient} style={[styles.planCard, { borderColor: theme.border }]}>
+            <View style={styles.planHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.planEyebrow, { color: "#0E9F6E" }]}>დღევანდელი გეგმა</Text>
+                <Text style={[styles.planTitle, { color: theme.text }]}>
+                  {dailyPlan.isPeakDay
+                    ? "პიკის დღეა 🔥"
+                    : dailyPlan.inFertileWindow
+                      ? "ნაყოფიერ ფანჯარაში ხარ 🌿"
+                      : "დღევანდელი ნაბიჯები"}
+                </Text>
+              </View>
+              <View style={[styles.planCountPill, { backgroundColor: "rgba(14,159,110,0.14)" }]}>
+                <Text style={[styles.planCountText, { color: "#0E9F6E" }]}>
+                  {dailyPlan.doneCount}/{dailyPlan.totalCount}
+                </Text>
+              </View>
+            </View>
+
+            {dailyPlan.items.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                activeOpacity={0.8}
+                style={[styles.planItem, { borderColor: theme.border, backgroundColor: theme.softCard }]}
+                onPress={() => router.push("/(tabs)/calendar")}
+              >
+                <Text style={styles.planItemIcon}>{item.icon}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.planItemTitle,
+                      { color: theme.text },
+                      item.done && styles.planItemTitleDone,
+                    ]}
+                  >
+                    {item.title}
+                  </Text>
+                  <Text style={[styles.planItemSub, { color: theme.subText }]} numberOfLines={2}>{item.subtitle}</Text>
+                </View>
+                <Ionicons
+                  name={item.done ? "checkmark-circle" : "ellipse-outline"}
+                  size={22}
+                  color={item.done ? "#0E9F6E" : theme.subText}
+                />
+              </TouchableOpacity>
+            ))}
+          </LinearGradient>
         )}
 
         <View style={[styles.weekMiniCard, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
@@ -1244,6 +1305,17 @@ const styles = StyleSheet.create({
   trackerCta: { width: "78%", minHeight: 54, borderRadius: 999, backgroundColor: "#FF8A6B", paddingHorizontal: 24, marginTop: 18, alignItems: "center", justifyContent: "center", shadowColor: "#FF8A6B", shadowOpacity: 0.28, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 5 },
   trackerCtaText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900", textAlign: "center" },
   trackerProgressDot: { position: "absolute", top: 121, left: 121, width: 14, height: 14, borderRadius: 7, borderWidth: 3, borderColor: "#FFFFFF" },
+  planCard: { borderRadius: 26, borderWidth: 1, padding: 16, marginBottom: 14 },
+  planHeaderRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  planEyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 0.8, marginBottom: 4 },
+  planTitle: { fontSize: 18, fontWeight: "900" },
+  planCountPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+  planCountText: { fontSize: 13, fontWeight: "900" },
+  planItem: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 18, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 13, marginTop: 8 },
+  planItemIcon: { fontSize: 20 },
+  planItemTitle: { fontSize: 14, fontWeight: "800" },
+  planItemTitleDone: { textDecorationLine: "line-through", opacity: 0.6 },
+  planItemSub: { fontSize: 11, fontWeight: "600", marginTop: 2, lineHeight: 15 },
   fertilityStrip: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 22, borderWidth: 1, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 14 },
   fertilityStripIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   fertilityStripTitle: { fontSize: 15, fontWeight: "900" },

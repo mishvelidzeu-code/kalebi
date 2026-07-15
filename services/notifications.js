@@ -4,6 +4,8 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
+import { isAdminEmail } from "./adminAccess";
+import { resolvePregnancyAccessFromProfile } from "./purchases";
 import { supabase } from "./supabase";
 
 const NOTIFICATIONS_ENABLED_KEY = "@cycle-care/notifications-enabled";
@@ -280,6 +282,87 @@ async function scheduleWellnessCheckins() {
   return scheduledIds;
 }
 
+// -- Fertility ("მინდა დაორსულება") reminders ----------------------
+// iOS only keeps 64 pending local notifications, so the daily nudges use
+// repeating triggers (1 slot each) and the dated ones cover 2 cycles.
+const FERTILITY_CYCLES_TO_SCHEDULE = 2;
+
+const FERTILITY_DAILY_REMINDERS = [
+  { hour: 7, minute: 0, title: "ბაზალური ტემპერატურა 🌡️", body: "გაზომე ტემპერატურა ადგომამდე, სანამ დღე დაიწყება." },
+  { hour: 10, minute: 0, title: "ვიტამინები 💊", body: "ფოლიუმის მჟავა და დანარჩენი დამატებები დღეს მიიღე?" },
+  { hour: 15, minute: 0, title: "წყალი 💧", body: "დალიე წყალი — ჰიდრატაცია ლორწოს ხარისხზეც აისახება." },
+];
+
+async function scheduleDailyRepeatingNotification({ hour, minute, title, body }) {
+  return Notifications.scheduleNotificationAsync({
+    content: { title, body, sound: "default" },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour,
+      minute,
+    },
+  });
+}
+
+export async function scheduleFertilityReminders(lastPeriodDate, cycleLength) {
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    await setupNotificationChannel();
+
+    const alignedCycleStart = getAlignedCycleStart(lastPeriodDate, cycleLength);
+    if (!alignedCycleStart) return [];
+
+    const scheduledIds = [];
+
+    for (const reminder of FERTILITY_DAILY_REMINDERS) {
+      const id = await scheduleDailyRepeatingNotification(reminder);
+      if (id) scheduledIds.push(id);
+    }
+
+    let cycleStart = new Date(alignedCycleStart);
+
+    for (let i = 0; i < FERTILITY_CYCLES_TO_SCHEDULE; i += 1) {
+      const cycleDates = calculateCycleDates(cycleStart, cycleLength);
+      if (!cycleDates) break;
+
+      const ovulation = parseCycleDate(cycleDates.ovulation);
+
+      // LH testing ramp-up: the 3 days before ovulation.
+      for (let offset = -4; offset <= -2; offset += 1) {
+        const id = await scheduleLocalNotification(
+          "ოვულაციის ტესტი 🧪",
+          "ტესტირების ფანჯარაა — დღეში ერთი ტესტი საკმარისია.",
+          addDays(ovulation, offset)
+        );
+        if (id) scheduledIds.push(id);
+      }
+
+      // Peak days: the day before ovulation and ovulation itself.
+      for (let offset = -1; offset <= 0; offset += 1) {
+        const id = await scheduleLocalNotification(
+          "პიკის დღეა 💕",
+          "ჩასახვის შანსი დღეს მაქსიმალურია.",
+          addDays(ovulation, offset)
+        );
+        if (id) scheduledIds.push(id);
+      }
+
+      const [fertileId, periodId] = await Promise.all([
+        scheduleFertileNotification(cycleDates.fertileStart),
+        schedulePeriodNotification(cycleDates.nextPeriod),
+      ]);
+      scheduledIds.push(fertileId, periodId);
+
+      cycleStart = cycleDates.nextPeriod;
+    }
+
+    return scheduledIds.filter(Boolean);
+  } catch (error) {
+    console.log("Schedule fertility reminders error:", error);
+    return [];
+  }
+}
+
 export async function scheduleCycleReminders(lastPeriodDate, cycleLength) {
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
@@ -419,7 +502,7 @@ export async function syncCycleRemindersForUser() {
         .limit(1),
       supabase
         .from("profiles")
-        .select("last_period, cycle_length, pregnancy_mode")
+        .select("last_period, cycle_length, pregnancy_mode, goal, has_pregnancy_subscription, pregnancy_until")
         .eq("id", user.id)
         .maybeSingle(),
     ]);
@@ -440,6 +523,14 @@ export async function syncCycleRemindersForUser() {
     if (!lastPeriodDate) {
       await Notifications.cancelAllScheduledNotificationsAsync();
       return [];
+    }
+
+    // Fertility mode: same access rule as FertilityContext (admin or the
+    // shared pregnancy entitlement), swapping in conception-focused nudges.
+    const fertilityAccess =
+      isAdminEmail(user.email) || resolvePregnancyAccessFromProfile(profile);
+    if (profile?.goal === "დაორსულება" && fertilityAccess) {
+      return scheduleFertilityReminders(lastPeriodDate, cycleLength);
     }
 
     return scheduleCycleReminders(lastPeriodDate, cycleLength);

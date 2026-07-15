@@ -10,6 +10,7 @@ export const FERTILITY_LOG_TYPES = {
   bbt: "bbt",
   cervicalMucus: "cervical_mucus",
   ovulationSymptom: "ovulation_symptom",
+  supplement: "supplement",
 };
 
 // Writes (or overwrites) the single entry for a given day + type.
