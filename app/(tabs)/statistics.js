@@ -8,10 +8,19 @@ import { ActivityIndicator, Animated, RefreshControl, SafeAreaView, ScrollView, 
 
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
+import { useFertility } from "../../context/FertilityContext";
 import DiaryAvatar from "../../components/DiaryAvatar";
+import { getFertilityLogsRange } from "../../services/fertilityLogs";
 import { supabase } from "../../services/supabase";
 import { calculateCycleState } from "../../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../../utils/cyclePrediction";
+import {
+  analyzeCycleRegularity,
+  buildFertileWindows,
+  computePregnancyTestTiming,
+  computeTryingHistory,
+  summarizeFertilityLogs,
+} from "../../utils/fertilityStats";
 
 dayjs.locale("ka");
 
@@ -29,6 +38,15 @@ const SYMPTOM_LABELS = {
   heartburn: "გულძმარვა",
   movement: "ბავშვი იძრვის",
   urination: "ხშირი შარდვა",
+};
+
+const OVULATION_SYMPTOM_LABELS = {
+  cramps: "მუცლის ტკივილი",
+  breast: "მკერდის მგრძნობელობა",
+  libido: "ლიბიდოს ცვლილება",
+  fatigue: "დაღლილობა",
+  nausea: "გულისრევა",
+  energy: "ენერგიის მომატება",
 };
 
 const PREGNANCY_MILESTONES = [
@@ -544,12 +562,398 @@ function RegularStatisticsScreen() {
   );
 }
 
+// ================= FERTILITY ("მინდა დაორსულება") STATS =================
+
+const EMPTY_FERTILITY_STATS = {
+  regularity: null,
+  trying: null,
+  logs: null,
+  testTiming: null,
+  lastOvulation: null,
+  avgOvulationDay: null,
+  history: [],
+};
+
+function FertilityStatisticsScreen() {
+  const { isDark } = useTheme();
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const [stats, setStats] = useState(EMPTY_FERTILITY_STATS);
+
+  const theme = {
+    text: isDark ? "#EAFBF4" : "#183A30",
+    subText: isDark ? "#A7D8C6" : "#5C8A79",
+    accent: "#0E9F6E",
+    peach: "#35C99B",
+    iconBg: isDark ? "rgba(53,201,155,0.12)" : "rgba(53,201,155,0.10)",
+    divider: isDark ? "rgba(53,201,155,0.16)" : "rgba(14,159,110,0.12)",
+    border: isDark ? "rgba(53,201,155,0.22)" : "rgba(14,159,110,0.18)",
+    track: isDark ? "rgba(53,201,155,0.14)" : "rgba(14,159,110,0.10)",
+    activeSoft: isDark ? "rgba(14,159,110,0.20)" : "rgba(14,159,110,0.12)",
+    activeBorder: isDark ? "rgba(53,201,155,0.35)" : "rgba(14,159,110,0.35)",
+    pageGradient: isDark ? ["#12241D", "#141E20", "#14161D"] : ["#F4FFFB", "#EBF9F2", "#EEF6FF"],
+    cardGradient: isDark
+      ? ["rgba(22,51,43,0.96)", "rgba(18,35,54,0.94)"]
+      : ["rgba(255,255,255,0.94)", "rgba(231,251,241,0.86)", "rgba(234,244,255,0.82)"],
+    heroGradient: isDark ? ["#1C5343", "#16403C", "#122336"] : ["#35C99B", "#2BB6A6", "#60A5FA"],
+  };
+
+  const startEntranceAnimation = useCallback(() => {
+    fadeAnim.setValue(0);
+    slideAnim.setValue(30);
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
+  const loadAllStats = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const [cyclesRes, profileRes] = await Promise.all([
+        supabase.from("cycles").select("*").eq("user_id", user.id).order("start_date", { ascending: true }),
+        supabase.from("profiles").select("*").eq("id", user.id).single(),
+      ]);
+
+      const cycles = cyclesRes.data || [];
+      const profile = profileRes.data;
+
+      const avgC = getPreferredCycleLength(cycles, profile);
+      const avgP = getPreferredPeriodLength(cycles, profile);
+
+      // Pull every fertility log we could have — the tracker is young, so a
+      // wide window is cheap and keeps the "trying history" honest.
+      const from = cycles[0]?.start_date
+        ? dayjs(cycles[0].start_date).subtract(1, "month").format("YYYY-MM-DD")
+        : dayjs().subtract(2, "year").format("YYYY-MM-DD");
+      const logs = await getFertilityLogsRange(from, dayjs().format("YYYY-MM-DD"));
+
+      const regularity = analyzeCycleRegularity(cycles, avgC);
+      const fertileWindows = buildFertileWindows(cycles, regularity.avgCycle || avgC);
+      const logSummary = summarizeFertilityLogs(logs, fertileWindows);
+      const trying = computeTryingHistory(cycles, logs, fertileWindows);
+
+      const lastStart = cycles.length > 0 ? cycles[cycles.length - 1].start_date : profile?.last_period;
+      const forecast = calculateCycleState({
+        lastStartDate: lastStart,
+        cycleLength: regularity.avgCycle || avgC,
+        periodLength: avgP,
+      });
+
+      const pastWindows = fertileWindows.filter((w) => !w.ovulation.isAfter(dayjs(), "day"));
+      const lastOvulation = pastWindows.length ? pastWindows[pastWindows.length - 1].ovulation : null;
+
+      setStats({
+        regularity,
+        trying,
+        logs: logSummary,
+        testTiming: computePregnancyTestTiming(forecast),
+        lastOvulation,
+        avgOvulationDay: (regularity.avgCycle || avgC) - 13,
+        history: logSummary.bbtValues.slice(-6),
+      });
+
+      startEntranceAnimation();
+    } catch (err) {
+      console.log("Fertility statistics error:", err);
+    } finally {
+      if (!hasLoadedOnceRef.current) {
+        setLoading(false);
+        hasLoadedOnceRef.current = true;
+      }
+    }
+  }, [startEntranceAnimation]);
+
+  useFocusEffect(useCallback(() => { loadAllStats(); }, [loadAllStats]));
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAllStats();
+    setRefreshing(false);
+  };
+
+  if (loading && !refreshing) {
+    return (
+      <LinearGradient colors={theme.pageGradient} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={{ flex: 1 }}>
+        <View style={[styles.center, { backgroundColor: "transparent" }]}>
+          <ActivityIndicator size="large" color={theme.accent} />
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  const { regularity, trying, logs, testTiming, lastOvulation, avgOvulationDay } = stats;
+  const heroDays = testTiming?.daysToReliable ?? null;
+
+  return (
+    <LinearGradient colors={theme.pageGradient} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: "transparent" }}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" />
+        <ScrollView style={styles.container} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}>
+          <View style={styles.pageHeader}>
+            <View>
+              <Text style={[styles.pageEyebrow, { color: theme.accent }]}>FERTILITY INSIGHTS</Text>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>ნაყოფიერების ანალიტიკა</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>შენი მცდელობის სურათი ერთ სივრცეში</Text>
+            </View>
+          </View>
+
+          <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+            {/* Hero — pregnancy test timing */}
+            <LinearGradient
+              colors={theme.heroGradient}
+              start={{ x: 0.05, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.heroCard, { borderColor: theme.border, borderWidth: 1 }]}
+            >
+              <View style={styles.heroGlow} />
+              {testTiming ? (
+                testTiming.isReliableNow ? (
+                  <>
+                    <Text style={styles.heroLabel}>ორსულობის ტესტი</Text>
+                    <Text style={styles.heroNumber}>ახლა 🎯</Text>
+                    <View style={styles.heroDateBadge}>
+                      <Text style={styles.heroDate}>შედეგი უკვე სანდოა</Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.heroLabel}>სანდო ტესტამდე დარჩა</Text>
+                    <Text style={styles.heroNumber}>
+                      {heroDays} <Text style={styles.heroSubText}>დღე</Text>
+                    </Text>
+                    <View style={styles.heroDateBadge}>
+                      <Text style={styles.heroDate}>
+                        {testTiming.canTestNow
+                          ? "ადრეული ტესტი უკვე შესაძლებელია"
+                          : `ყველაზე ადრე: ${testTiming.earliest.format("D MMM")}`}
+                      </Text>
+                    </View>
+                  </>
+                )
+              ) : (
+                <>
+                  <Text style={styles.heroLabel}>ორსულობის ტესტი</Text>
+                  <Text style={styles.heroNumber}>—</Text>
+                  <View style={styles.heroDateBadge}>
+                    <Text style={styles.heroDate}>დაამატე ციკლი პროგნოზისთვის</Text>
+                  </View>
+                </>
+              )}
+            </LinearGradient>
+
+            {/* Trying history */}
+            <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>მცდელობის ისტორია</Text>
+                <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
+                  <Ionicons name="time-outline" size={17} color={theme.accent} />
+                </View>
+              </View>
+              <Text style={[styles.cardSubtitle, { color: theme.subText }]}>
+                {trying?.startedOn ? `თრექინგი დაიწყო ${trying.startedOn.format("D MMMM YYYY")}` : "ჯერ არაფერი აღგირიცხავს"}
+              </Text>
+              <View style={styles.fertStatGrid}>
+                <FertStatCell value={trying?.monthsTrying ?? 0} unit="თვე" label="ცდილობ" theme={theme} />
+                <FertStatCell value={trying?.cyclesCount ?? 0} unit="ციკლი" label="აღრიცხული" theme={theme} />
+                <FertStatCell value={trying?.fertileDaysTracked ?? 0} unit="დღე" label="ნაყოფიერი" theme={theme} />
+                <FertStatCell value={logs?.intercourseInFertile ?? 0} unit="ჯერ" label="დაემთხვა ფანჯარას" theme={theme} />
+              </View>
+            </LinearGradient>
+
+            {/* Cycle regularity */}
+            <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>ციკლის რეგულარულობა</Text>
+                <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
+                  <Ionicons name="repeat-outline" size={17} color={theme.accent} />
+                </View>
+              </View>
+              {regularity?.sampleSize > 0 ? (
+                <>
+                  <View style={styles.fertRowBetween}>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>საშუალო ციკლი</Text>
+                    <Text style={[styles.fertRowValue, { color: theme.text }]}>{regularity.avgCycle} დღე</Text>
+                  </View>
+                  <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
+                  <View style={styles.fertRowBetween}>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>ციკლების სხვაობა</Text>
+                    <Text style={[styles.fertRowValue, { color: theme.text }]}>
+                      {regularity.shortest}–{regularity.longest} დღე ({regularity.spread})
+                    </Text>
+                  </View>
+                  <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
+                  <View style={styles.fertRowBetween}>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>რეგულარულია?</Text>
+                    <Text style={[styles.fertRowValue, { color: regularity.isRegular ? theme.accent : "#E8894A" }]}>
+                      {regularity.isRegular ? "დიახ ✓" : "არარეგულარული"}
+                    </Text>
+                  </View>
+                  <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
+                  <View style={styles.fertRowBetween}>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>პროგნოზის სიზუსტე</Text>
+                    <Text style={[styles.fertRowValue, { color: theme.text }]}>{regularity.accuracyLabel}</Text>
+                  </View>
+                  {!regularity.isRegular && (
+                    <Text style={[styles.fertNote, { color: theme.subText }]}>
+                      არარეგულარულ ციკლზე ოვულაციის თარიღი მიახლოებითია — ტესტი და ტემპერატურა უფრო სანდოა.
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text style={[styles.fertNote, { color: theme.subText }]}>
+                  რეგულარულობის შესაფასებლად მინიმუმ 2 ციკლია საჭირო. დაამატე ციკლები კალენდარში.
+                </Text>
+              )}
+            </LinearGradient>
+
+            {/* Fertility stats */}
+            <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>ნაყოფიერების მაჩვენებლები</Text>
+                <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
+                  <Ionicons name="leaf-outline" size={17} color={theme.accent} />
+                </View>
+              </View>
+              <View style={styles.fertRowBetween}>
+                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>საშ. ოვულაციის დღე</Text>
+                <Text style={[styles.fertRowValue, { color: theme.text }]}>ციკლის {avgOvulationDay}-ე დღე</Text>
+              </View>
+              <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
+              <View style={styles.fertRowBetween}>
+                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>ბოლო ოვულაცია</Text>
+                <Text style={[styles.fertRowValue, { color: theme.text }]}>
+                  {lastOvulation ? lastOvulation.format("D MMMM") : "—"}
+                </Text>
+              </View>
+              <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
+              <View style={styles.fertRowBetween}>
+                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>ურთიერთობა ნაყოფიერ დღეს</Text>
+                <Text style={[styles.fertRowValue, { color: theme.text }]}>
+                  {logs?.intercourseInFertile ?? 0} / {logs?.intercourseCount ?? 0}
+                </Text>
+              </View>
+              <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
+              <View style={styles.fertRowBetween}>
+                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>დადებითი ოვ. ტესტი</Text>
+                <Text style={[styles.fertRowValue, { color: theme.text }]}>
+                  {logs?.lhPositiveCount ?? 0}
+                  {logs?.lastLhPositive ? ` · ბოლო ${dayjs(logs.lastLhPositive).format("D MMM")}` : ""}
+                </Text>
+              </View>
+              <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
+              <View style={styles.fertRowBetween}>
+                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>ტემპერატურის ჩანაწერი</Text>
+                <Text style={[styles.fertRowValue, { color: theme.text }]}>{logs?.bbtCount ?? 0}</Text>
+              </View>
+            </LinearGradient>
+
+            {/* BBT trend */}
+            {stats.history.length > 1 && (
+              <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={[styles.cardTitle, { color: theme.text }]}>ბაზალური ტემპერატურა</Text>
+                  <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
+                    <Ionicons name="thermometer-outline" size={17} color={theme.accent} />
+                  </View>
+                </View>
+                <Text style={[styles.cardSubtitle, { color: theme.subText }]}>ბოლო ჩანაწერები</Text>
+                <View style={styles.chartContainer}>
+                  {stats.history.map((item, index) => (
+                    <AnimatedBar
+                      key={index}
+                      index={index}
+                      // Zoom into the 35-38°C band so small shifts stay visible.
+                      value={Math.max(0, (item.temp - 35) * 10)}
+                      maxValue={30}
+                      label={dayjs(item.date).format("D MMM")}
+                      isDark={isDark}
+                      accent={theme.accent}
+                      trackColor={theme.track}
+                    />
+                  ))}
+                </View>
+              </LinearGradient>
+            )}
+
+            {/* Ovulation symptom frequency */}
+            {logs?.topSymptoms?.length > 0 && (
+              <LinearGradient colors={theme.cardGradient} style={[styles.symptomsCard, { borderColor: theme.border, borderWidth: 1 }]}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={[styles.cardTitle, { color: theme.text }]}>ოვულაციის ნიშნები</Text>
+                  <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
+                    <Ionicons name="pulse-outline" size={17} color={theme.accent} />
+                  </View>
+                </View>
+                {logs.topSymptoms.map((s, i) => {
+                  const maxCount = logs.topSymptoms[0].count;
+                  const percent = (s.count / maxCount) * 100;
+                  return (
+                    <View key={i} style={styles.symptomRow}>
+                      <View style={styles.symptomHeader}>
+                        <Text style={[styles.symptomName, { color: theme.text }]}>{OVULATION_SYMPTOM_LABELS[s.id] || s.id}</Text>
+                        <Text style={[styles.symptomCount, { color: theme.accent }]}>{s.count}-ჯერ</Text>
+                      </View>
+                      <View style={[styles.symptomTrack, { backgroundColor: theme.track }]}>
+                        <View style={[styles.symptomFill, { width: `${percent}%`, backgroundColor: theme.accent }]} />
+                      </View>
+                    </View>
+                  );
+                })}
+              </LinearGradient>
+            )}
+
+            <Text style={[styles.fertNote, { color: theme.subText, textAlign: "center", marginHorizontal: 20 }]}>
+              ℹ️ ეს მაჩვენებლები შენს ჩანაწერებზეა დაფუძნებული და არ ცვლის ექიმის კონსულტაციას.
+            </Text>
+
+            <View style={{ height: 100 }} />
+          </Animated.View>
+        </ScrollView>
+      </SafeAreaView>
+      <View style={styles.floatingDiaryAvatar}>
+        <DiaryAvatar accent={theme.accent} isDark={isDark} size={46} showHint={false} />
+      </View>
+    </LinearGradient>
+  );
+}
+
+const FertStatCell = ({ value, unit, label, theme }) => (
+  <View style={[styles.fertStatCell, { backgroundColor: theme.iconBg, borderColor: theme.border }]}>
+    <Text style={[styles.fertStatValue, { color: theme.text }]}>
+      {value} <Text style={[styles.fertStatUnit, { color: theme.subText }]}>{unit}</Text>
+    </Text>
+    <Text style={[styles.fertStatLabel, { color: theme.subText }]} numberOfLines={2}>{label}</Text>
+  </View>
+);
+
 export default function StatisticsScreen() {
   const { pregnancyMode } = usePregnancy();
-  return pregnancyMode ? <PregnancyStatisticsScreen /> : <RegularStatisticsScreen />;
+  const { fertilityMode } = useFertility();
+  if (pregnancyMode) return <PregnancyStatisticsScreen />;
+  if (fertilityMode) return <FertilityStatisticsScreen />;
+  return <RegularStatisticsScreen />;
 }
 
 const styles = StyleSheet.create({
+  // -- Fertility stats ---------------------------------------------
+  fertStatGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 },
+  fertStatCell: { flexBasis: "47%", flexGrow: 1, borderRadius: 18, borderWidth: 1, paddingVertical: 14, paddingHorizontal: 14 },
+  fertStatValue: { fontSize: 22, fontWeight: "900" },
+  fertStatUnit: { fontSize: 12, fontWeight: "700" },
+  fertStatLabel: { fontSize: 11, fontWeight: "700", marginTop: 4 },
+  fertRowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 11, gap: 12 },
+  fertRowLabel: { fontSize: 13, fontWeight: "700", flexShrink: 1 },
+  fertRowValue: { fontSize: 14, fontWeight: "800", textAlign: "right", flexShrink: 1 },
+  fertRowDivider: { height: 1, opacity: 0.8 },
+  fertNote: { fontSize: 12, lineHeight: 18, fontWeight: "600", marginTop: 12 },
+
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 12 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 22, paddingRight: 70 },
