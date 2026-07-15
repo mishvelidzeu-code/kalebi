@@ -21,6 +21,12 @@ import {
   computeTryingHistory,
   summarizeFertilityLogs,
 } from "../../utils/fertilityStats";
+import {
+  LIFESTYLE_TIPS,
+  PARTNER_TIPS,
+  evaluateDoctorVisitSignals,
+  getAgeFromBirthDate,
+} from "../../utils/fertilityInsights";
 
 dayjs.locale("ka");
 
@@ -572,6 +578,7 @@ const EMPTY_FERTILITY_STATS = {
   lastOvulation: null,
   avgOvulationDay: null,
   history: [],
+  doctorSignals: [],
 };
 
 function FertilityStatisticsScreen() {
@@ -649,6 +656,8 @@ function FertilityStatisticsScreen() {
       const pastWindows = fertileWindows.filter((w) => !w.ovulation.isAfter(dayjs(), "day"));
       const lastOvulation = pastWindows.length ? pastWindows[pastWindows.length - 1].ovulation : null;
 
+      const age = getAgeFromBirthDate(profile?.birth_date);
+
       setStats({
         regularity,
         trying,
@@ -657,6 +666,7 @@ function FertilityStatisticsScreen() {
         lastOvulation,
         avgOvulationDay: (regularity.avgCycle || avgC) - 13,
         history: logSummary.bbtValues.slice(-6),
+        doctorSignals: evaluateDoctorVisitSignals({ regularity, trying, logSummary, age }),
       });
 
       startEntranceAnimation();
@@ -909,6 +919,68 @@ function FertilityStatisticsScreen() {
               </LinearGradient>
             )}
 
+            {/* Doctor visit signals — informational, never a diagnosis */}
+            {stats.doctorSignals?.length > 0 && (
+              <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: "#E8894A55", borderWidth: 1 }]}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={[styles.cardTitle, { color: theme.text }]}>ღირს ექიმთან ახსენო</Text>
+                  <View style={[styles.cardHeaderIcon, { backgroundColor: "rgba(232,137,74,0.14)", borderColor: "#E8894A55", borderWidth: 1 }]}>
+                    <Ionicons name="medkit-outline" size={17} color="#E8894A" />
+                  </View>
+                </View>
+                <Text style={[styles.cardSubtitle, { color: theme.subText }]}>
+                  ეს არ არის დიაგნოზი — უბრალოდ თემები, რომლებზეც კონსულტაცია გამოგადგება.
+                </Text>
+                {stats.doctorSignals.map((signal) => (
+                  <View key={signal.id} style={styles.fertTipRow}>
+                    <Text style={styles.fertTipIcon}>{signal.icon}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.fertTipTitle, { color: theme.text }]}>{signal.title}</Text>
+                      <Text style={[styles.fertTipText, { color: theme.subText }]}>{signal.text}</Text>
+                    </View>
+                  </View>
+                ))}
+              </LinearGradient>
+            )}
+
+            {/* Partner support */}
+            <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>პარტნიორის მხარდაჭერა</Text>
+                <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
+                  <Ionicons name="people-outline" size={17} color={theme.accent} />
+                </View>
+              </View>
+              {PARTNER_TIPS.map((tip) => (
+                <View key={tip.id} style={styles.fertTipRow}>
+                  <Text style={styles.fertTipIcon}>{tip.icon}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.fertTipTitle, { color: theme.text }]}>{tip.title}</Text>
+                    <Text style={[styles.fertTipText, { color: theme.subText }]}>{tip.text}</Text>
+                  </View>
+                </View>
+              ))}
+            </LinearGradient>
+
+            {/* Lifestyle */}
+            <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>ცხოვრების წესი</Text>
+                <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
+                  <Ionicons name="heart-outline" size={17} color={theme.accent} />
+                </View>
+              </View>
+              {LIFESTYLE_TIPS.map((tip) => (
+                <View key={tip.id} style={styles.fertTipRow}>
+                  <Text style={styles.fertTipIcon}>{tip.icon}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.fertTipTitle, { color: theme.text }]}>{tip.title}</Text>
+                    <Text style={[styles.fertTipText, { color: theme.subText }]}>{tip.text}</Text>
+                  </View>
+                </View>
+              ))}
+            </LinearGradient>
+
             <Text style={[styles.fertNote, { color: theme.subText, textAlign: "center", marginHorizontal: 20 }]}>
               ℹ️ ეს მაჩვენებლები შენს ჩანაწერებზეა დაფუძნებული და არ ცვლის ექიმის კონსულტაციას.
             </Text>
@@ -953,6 +1025,10 @@ const styles = StyleSheet.create({
   fertRowValue: { fontSize: 14, fontWeight: "800", textAlign: "right", flexShrink: 1 },
   fertRowDivider: { height: 1, opacity: 0.8 },
   fertNote: { fontSize: 12, lineHeight: 18, fontWeight: "600", marginTop: 12 },
+  fertTipRow: { flexDirection: "row", gap: 10, marginTop: 12 },
+  fertTipIcon: { fontSize: 18, marginTop: 1 },
+  fertTipTitle: { fontSize: 13, fontWeight: "800", marginBottom: 2 },
+  fertTipText: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
 
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 12 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },

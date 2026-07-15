@@ -2,8 +2,16 @@ import dayjs from "dayjs";
 
 import { calculateCycleState, getPregnancyChanceKey } from "../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../utils/cyclePrediction";
+import { buildFertilityAiContext } from "../utils/fertilityInsights";
+import {
+  analyzeCycleRegularity,
+  buildFertileWindows,
+  computeTryingHistory,
+  summarizeFertilityLogs,
+} from "../utils/fertilityStats";
 import { isAdminEmail } from "./adminAccess";
 import { generateAiResponse } from "./ai";
+import { getFertilityLogsForDay, getFertilityLogsRange } from "./fertilityLogs";
 import { supabase } from "./supabase";
 
 const DEFAULT_GOAL_LABEL = "ციკლის კონტროლი";
@@ -129,6 +137,20 @@ Your entire approach, tone, and advice MUST adapt to the {{user_goal}}:
 - Treat todayEntry and currentCycle as the strongest source of truth for what is happening right now.
 - If todayEntry has no symptoms or mood, clearly say that today's specific entry is not logged yet.
 - Use recent history only for pattern analysis, NEVER describe old symptoms as if they are today's symptoms.
+
+# FERTILITY TRACKING DATA (only when context.fertilityTracking exists)
+When the user is in fertility mode ("მინდა დაორსულება"), context.fertilityTracking holds what they actually logged. Use it — it is stronger evidence than the calendar estimate alone.
+- today.lh_test: "negative" | "weak" | "positive" | "peak". A positive/peak surge means ovulation typically follows within 24-36 hours — this is the single most useful same-day signal.
+- today.cervical_mucus: "dry" | "sticky" | "creamy" | "watery" | "eggwhite". Egg-white mucus indicates peak fertility.
+- today.bbt_celsius: basal body temperature. A sustained rise SUGGESTS ovulation has already happened; a single reading proves nothing.
+- cycle_regularity.prediction_confidence: "high" | "medium" | "low". If it is "low" or is_regular is false, you MUST hedge: give ranges, not exact dates, and lean on LH/mucus/BBT over the calendar.
+- trying_history.months_trying: if it is long, be extra gentle and never imply they are doing something wrong.
+- If a signal is null, say it is not logged yet instead of guessing.
+
+# FERTILITY SAFETY (STRICT)
+- NEVER promise conception, predict a pregnancy outcome, or interpret a pregnancy test result as definitive.
+- Advise a pregnancy test only from ~11 days past ovulation, and note that earlier tests are often falsely negative.
+- Do not diagnose infertility. If they have been trying 12+ months (or 6+ if 35 or older), gently suggest a specialist as a routine next step, not as alarming news.
 
 # SAFETY & BOUNDARIES (STRICT)
 - You are an AI assistant, NOT a certified doctor. You cannot diagnose diseases or prescribe medication.
@@ -286,7 +308,7 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
 
   const today = dayjs().format("YYYY-MM-DD");
   const [profileResponse, cyclesResponse, symptomsResponse, todaySymptomsResponse] = await Promise.all([
-    supabase.from("profiles").select("name, goal, cycle_length, period_length, last_period, pregnancy_mode, pregnancy_start_date, has_pregnancy_subscription").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("name, goal, cycle_length, period_length, last_period, pregnancy_mode, pregnancy_start_date, has_pregnancy_subscription, birth_date").eq("id", user.id).maybeSingle(),
     supabase.from("cycles").select("start_date, cycle_length, period_length").eq("user_id", user.id).order("start_date", { ascending: false }).limit(6),
     supabase.from("symptoms").select("date, symptoms, mood, note").eq("user_id", user.id).order("date", { ascending: false }).limit(10),
     supabase.from("symptoms").select("date, symptoms, mood, note").eq("user_id", user.id).eq("date", today).maybeSingle(),
@@ -316,6 +338,37 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
     isAdminEmail(user.email)
     || Boolean(profile.has_pregnancy_subscription);
   const effectiveGoal = profile.goal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL_LABEL : profile.goal;
+
+  // Fertility mode injects the tracked signals (LH / BBT / mucus) so answers
+  // can reason about what the user actually logged, not just the calendar.
+  const isFertilityMode = effectiveGoal === "დაორსულება" && !profile.pregnancy_mode;
+  let fertilityTracking = null;
+
+  if (isFertilityMode) {
+    try {
+      const chronological = [...cycles].sort((a, b) => dayjs(a.start_date).diff(dayjs(b.start_date)));
+      const forecast = calculateCycleState({
+        lastStartDate: currentCycle.last_period,
+        cycleLength: currentCycle.cycle_length,
+        periodLength: currentCycle.period_length,
+      });
+
+      const [todayLogs, rangeLogs] = await Promise.all([
+        getFertilityLogsForDay(today),
+        getFertilityLogsRange(dayjs().subtract(6, "month").format("YYYY-MM-DD"), today),
+      ]);
+
+      const regularity = analyzeCycleRegularity(chronological, currentCycle.cycle_length);
+      const fertileWindows = buildFertileWindows(chronological, regularity.avgCycle || currentCycle.cycle_length);
+      const logSummary = summarizeFertilityLogs(rangeLogs, fertileWindows);
+      const trying = computeTryingHistory(chronological, rangeLogs, fertileWindows);
+
+      fertilityTracking = buildFertilityAiContext({ logSummary, regularity, trying, todayLogs, forecast });
+    } catch (error) {
+      // Never let the fertility extras break the base assistant context.
+      console.log("Fertility AI context skipped:", error);
+    }
+  }
 
   const context = {
     user_name: profile.name || user.email?.split("@")[0] || "მომხმარებელი",
@@ -353,6 +406,7 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
       })),
       top_symptoms: summarizeSymptoms(symptoms),
     },
+    ...(fertilityTracking ? { fertilityTracking } : {}),
   };
 
   assistantContextCache = {

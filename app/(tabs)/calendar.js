@@ -31,6 +31,9 @@ import { useCycles } from "../../hooks/useCycles";
 import { supabase } from "../../services/supabase";
 import { FERTILITY_LOG_TYPES, getFertilityLogsForDay, getFertilityLogsRange, upsertFertilityLog } from "../../services/fertilityLogs";
 import { SUPPLEMENT_OPTIONS } from "../../utils/fertilityPlan";
+import { buildFertilityRecommendations } from "../../utils/fertilityInsights";
+import { calculateCycleState } from "../../utils/cycleEngine";
+import { getPreferredCycleLength, getPreferredPeriodLength } from "../../utils/cyclePrediction";
 
 dayjs.locale("ka");
 
@@ -1320,7 +1323,7 @@ function isFertileDayFromMarks(marks, dateStr) {
 
 function FertilityCalendarScreen() {
   const { isDark } = useTheme();
-  const { markedDates, loadData } = useCycles();
+  const { markedDates, loadData, rawCycles } = useCycles();
 
   const todayStr = dayjs().format("YYYY-MM-DD");
   const [currentDate, setCurrentDate] = useState(todayStr);
@@ -1434,6 +1437,20 @@ function FertilityCalendarScreen() {
   const ovSymptoms = dayLogs[FERTILITY_LOG_TYPES.ovulationSymptom]?.symptoms || [];
   const takenSupplements = dayLogs[FERTILITY_LOG_TYPES.supplement]?.taken || [];
   const selectedIsFertile = isFertileDayFromMarks(markedDates, selectedDay);
+
+  // Contextual tips for today, driven by what has actually been logged.
+  // Only meaningful for today — past days show their logs, not advice.
+  const isTodaySelected = selectedDay === todayStr;
+  const recommendations = isTodaySelected
+    ? buildFertilityRecommendations({
+        forecast: calculateCycleState({
+          lastStartDate: rawCycles?.length ? rawCycles[rawCycles.length - 1].start_date : null,
+          cycleLength: getPreferredCycleLength(rawCycles || [], null),
+          periodLength: getPreferredPeriodLength(rawCycles || [], null),
+        }),
+        todayLogs: dayLogs,
+      })
+    : [];
 
   const toggleOvSymptom = (id) => {
     const next = ovSymptoms.includes(id) ? ovSymptoms.filter((s) => s !== id) : [...ovSymptoms, id];
@@ -1622,6 +1639,21 @@ function FertilityCalendarScreen() {
                   </View>
                 </View>
 
+                {recommendations.length > 0 && (
+                  <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <Text style={[styles.fertBlockTitle, { color: theme.text }]}>💡 დღევანდელი რეკომენდაციები</Text>
+                    {recommendations.map((tip) => (
+                      <View key={tip.id} style={styles.fertTipRow}>
+                        <Text style={styles.fertTipIcon}>{tip.icon}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.fertTipTitle, { color: theme.text }]}>{tip.title}</Text>
+                          <Text style={[styles.fertTipText, { color: theme.subText }]}>{tip.text}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
                 <Text style={[styles.fertDisclaimer, { color: theme.subText }]}>
                   ℹ️ ეს მონაცემები ინფორმაციული დანიშნულებისაა და არ ცვლის ექიმის კონსულტაციას.
                 </Text>
@@ -1715,6 +1747,10 @@ const styles = StyleSheet.create({
   bbtSaveBtn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 14 },
   bbtSaveText: { color: "#fff", fontSize: 14, fontWeight: "800" },
   fertDisclaimer: { marginTop: 18, fontSize: 12, lineHeight: 18, fontWeight: "600", textAlign: "center" },
+  fertTipRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  fertTipIcon: { fontSize: 18, marginTop: 1 },
+  fertTipTitle: { fontSize: 13, fontWeight: "800", marginBottom: 2 },
+  fertTipText: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
 
   // -- Calendar ----------------------------------------------------
   pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingRight: 88, marginBottom: 18 },
