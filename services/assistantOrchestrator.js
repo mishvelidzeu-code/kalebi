@@ -9,6 +9,12 @@ import {
   computeTryingHistory,
   summarizeFertilityLogs,
 } from "../utils/fertilityStats";
+import {
+  confirmOvulation,
+  getConfirmedOvulationsByCycle,
+  getPersonalizedLutealLength,
+  refineOvulationEstimate,
+} from "../utils/ovulationDetection";
 import { isAdminEmail } from "./adminAccess";
 import { generateAiResponse } from "./ai";
 import { getFertilityLogsForDay, getFertilityLogsRange } from "./fertilityLogs";
@@ -144,6 +150,9 @@ When the user is in fertility mode ("მინდა დაორსულებ
 - today.cervical_mucus: "dry" | "sticky" | "creamy" | "watery" | "eggwhite". Egg-white mucus indicates peak fertility.
 - today.bbt_celsius: basal body temperature. A sustained rise SUGGESTS ovulation has already happened; a single reading proves nothing.
 - cycle_regularity.prediction_confidence: "high" | "medium" | "low". If it is "low" or is_regular is false, you MUST hedge: give ranges, not exact dates, and lean on LH/mucus/BBT over the calendar.
+- confirmed_ovulation: set only when this cycle's own signals (BBT shift / LH surge / mucus peak) point to a day. It is RETROSPECTIVE EVIDENCE, not proof — say "ნიშნების მიხედვით სავარაუდოდ", never "დადასტურდა" as a medical fact. If signals_agree is false, mention that the signals disagree.
+- best_ovulation_estimate.source: "signals" (this cycle's own data — trust most), "personalized" (their measured luteal phase), or "calendar" (generic 14-day assumption — weakest, hedge accordingly).
+- personal_luteal_phase_days: their measured luteal length. Prefer it over the textbook 14 days when present.
 - trying_history.months_trying: if it is long, be extra gentle and never imply they are doing something wrong.
 - If a signal is null, say it is not logged yet instead of guessing.
 
@@ -363,7 +372,24 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
       const logSummary = summarizeFertilityLogs(rangeLogs, fertileWindows);
       const trying = computeTryingHistory(chronological, rangeLogs, fertileWindows);
 
-      fertilityTracking = buildFertilityAiContext({ logSummary, regularity, trying, todayLogs, forecast });
+      // Symptothermal evidence, so answers can lean on real signals.
+      const confirmations = getConfirmedOvulationsByCycle(chronological, rangeLogs);
+      const lutealLength = getPersonalizedLutealLength(confirmations);
+      const currentConfirmation = currentCycle.last_period
+        ? confirmOvulation({ logs: rangeLogs, cycleStart: currentCycle.last_period, cycleEnd: null })
+        : null;
+      const refinedOvulation = refineOvulationEstimate({ forecast, currentConfirmation, lutealLength });
+
+      fertilityTracking = buildFertilityAiContext({
+        logSummary,
+        regularity,
+        trying,
+        todayLogs,
+        forecast,
+        currentConfirmation,
+        refinedOvulation,
+        lutealLength,
+      });
     } catch (error) {
       // Never let the fertility extras break the base assistant context.
       console.log("Fertility AI context skipped:", error);

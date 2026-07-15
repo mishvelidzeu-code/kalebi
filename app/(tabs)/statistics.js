@@ -27,6 +27,13 @@ import {
   evaluateDoctorVisitSignals,
   getAgeFromBirthDate,
 } from "../../utils/fertilityInsights";
+import {
+  buildPredictionQuality,
+  confirmOvulation,
+  getConfirmedOvulationsByCycle,
+  getPersonalizedLutealLength,
+  refineOvulationEstimate,
+} from "../../utils/ovulationDetection";
 
 dayjs.locale("ka");
 
@@ -579,7 +586,14 @@ const EMPTY_FERTILITY_STATS = {
   avgOvulationDay: null,
   history: [],
   doctorSignals: [],
+  currentConfirmation: null,
+  refinedOvulation: null,
+  lutealLength: null,
+  quality: null,
 };
+
+const METHOD_LABELS = { bbt: "ტემპერატურა", lh: "ოვულაციის ტესტი", mucus: "ლორწო" };
+const CONFIDENCE_LABELS = { high: "მაღალი", medium: "საშუალო", low: "დაბალი", none: "—" };
 
 function FertilityStatisticsScreen() {
   const { isDark } = useTheme();
@@ -658,15 +672,33 @@ function FertilityStatisticsScreen() {
 
       const age = getAgeFromBirthDate(profile?.birth_date);
 
+      // Symptothermal evidence: confirm past cycles, learn this user's own
+      // luteal length, and refine the current estimate. Never overwrites the
+      // shared cycleEngine prediction — fertility screens only.
+      const confirmations = getConfirmedOvulationsByCycle(cycles, logs);
+      const lutealLength = getPersonalizedLutealLength(confirmations);
+      const currentConfirmation = lastStart
+        ? confirmOvulation({ logs, cycleStart: lastStart, cycleEnd: null })
+        : null;
+      const refinedOvulation = refineOvulationEstimate({ forecast, currentConfirmation, lutealLength });
+      const quality = buildPredictionQuality({ regularity, confirmations, lutealLength });
+
+      // Test timing follows the best ovulation estimate we have.
+      const timingBase = refinedOvulation?.date ? { ovulation: refinedOvulation.date } : forecast;
+
       setStats({
         regularity,
         trying,
         logs: logSummary,
-        testTiming: computePregnancyTestTiming(forecast),
+        testTiming: computePregnancyTestTiming(timingBase),
         lastOvulation,
         avgOvulationDay: (regularity.avgCycle || avgC) - 13,
         history: logSummary.bbtValues.slice(-6),
         doctorSignals: evaluateDoctorVisitSignals({ regularity, trying, logSummary, age }),
+        currentConfirmation,
+        refinedOvulation,
+        lutealLength,
+        quality,
       });
 
       startEntranceAnimation();
@@ -822,6 +854,96 @@ function FertilityStatisticsScreen() {
                 </Text>
               )}
             </LinearGradient>
+
+            {/* Ovulation confirmation from tracked signals */}
+            <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>ოვულაციის დადასტურება</Text>
+                <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
+                  <Ionicons name="checkmark-done-outline" size={17} color={theme.accent} />
+                </View>
+              </View>
+
+              {stats.currentConfirmation?.confirmed ? (
+                <>
+                  <Text style={[styles.cardSubtitle, { color: theme.subText }]}>
+                    მიმდინარე ციკლის ნიშნების მიხედვით
+                  </Text>
+                  <View style={styles.fertRowBetween}>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>სავარაუდო ოვულაცია</Text>
+                    <Text style={[styles.fertRowValue, { color: theme.text }]}>
+                      {dayjs(stats.currentConfirmation.date).format("D MMMM")}
+                    </Text>
+                  </View>
+                  <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
+                  <View style={styles.fertRowBetween}>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>რის მიხედვით</Text>
+                    <Text style={[styles.fertRowValue, { color: theme.text }]}>
+                      {stats.currentConfirmation.methods.map((m) => METHOD_LABELS[m] || m).join(" + ")}
+                    </Text>
+                  </View>
+                  <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
+                  <View style={styles.fertRowBetween}>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>სანდოობა</Text>
+                    <Text style={[styles.fertRowValue, { color: stats.currentConfirmation.confidence === "high" ? theme.accent : theme.text }]}>
+                      {CONFIDENCE_LABELS[stats.currentConfirmation.confidence]}
+                    </Text>
+                  </View>
+                  {stats.currentConfirmation.agreement === false && (
+                    <Text style={[styles.fertNote, { color: "#E8894A" }]}>
+                      ⚠️ ნიშნები ერთმანეთს არ ემთხვევა — ტემპერატურა და ტესტი სხვადასხვა დღეზე მიუთითებს.
+                    </Text>
+                  )}
+                  <Text style={[styles.fertNote, { color: theme.subText }]}>
+                    ეს რეტროსპექტული შეფასებაა შენს ჩანაწერებზე დაყრდნობით, არა სამედიცინო დადასტურება.
+                  </Text>
+                </>
+              ) : (
+                <Text style={[styles.fertNote, { color: theme.subText }]}>
+                  ამ ციკლში ოვულაცია ჯერ ვერ დადასტურდა. ბაზალური ტემპერატურა (მინიმუმ 9 დღე) და ოვულაციის ტესტები ამის საშუალებას მოგცემს.
+                </Text>
+              )}
+
+              {stats.lutealLength && (
+                <>
+                  <View style={[styles.fertRowDivider, { backgroundColor: theme.divider, marginTop: 12 }]} />
+                  <View style={styles.fertRowBetween}>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>შენი ლუტეალური ფაზა</Text>
+                    <Text style={[styles.fertRowValue, { color: theme.text }]}>
+                      {stats.lutealLength.days} დღე ({stats.lutealLength.sampleSize} ციკლი)
+                    </Text>
+                  </View>
+                  <Text style={[styles.fertNote, { color: theme.subText }]}>
+                    სტანდარტული 14 დღის ნაცვლად, პროგნოზი ახლა შენს რეალურ ხანგრძლივობას იყენებს.
+                  </Text>
+                </>
+              )}
+            </LinearGradient>
+
+            {/* Prediction quality */}
+            {stats.quality && (
+              <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={[styles.cardTitle, { color: theme.text }]}>პროგნოზის ხარისხი</Text>
+                  <View style={[styles.qualityPill, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder }]}>
+                    <Text style={[styles.qualityPillText, { color: stats.quality.level === "high" ? theme.accent : theme.text }]}>
+                      {stats.quality.label}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.cardSubtitle, { color: theme.subText }]}>
+                  {stats.quality.confirmedCount > 0
+                    ? `${stats.quality.confirmedCount} ციკლში ოვულაცია დადასტურდა`
+                    : "ჯერ არცერთი ოვულაცია არ დადასტურებულა"}
+                </Text>
+                {stats.quality.suggestions.map((s, i) => (
+                  <View key={i} style={styles.fertTipRow}>
+                    <Text style={styles.fertTipIcon}>💡</Text>
+                    <Text style={[styles.fertTipText, { color: theme.subText, flex: 1 }]}>{s}</Text>
+                  </View>
+                ))}
+              </LinearGradient>
+            )}
 
             {/* Fertility stats */}
             <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
@@ -1029,6 +1151,8 @@ const styles = StyleSheet.create({
   fertTipIcon: { fontSize: 18, marginTop: 1 },
   fertTipTitle: { fontSize: 13, fontWeight: "800", marginBottom: 2 },
   fertTipText: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
+  qualityPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1 },
+  qualityPillText: { fontSize: 12, fontWeight: "900" },
 
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 12 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },

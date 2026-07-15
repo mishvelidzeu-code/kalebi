@@ -159,11 +159,37 @@ export function evaluateDoctorVisitSignals({ regularity, trying, logSummary, age
 }
 
 // Compact fertility summary injected into the AI context.
-export function buildFertilityAiContext({ logSummary, regularity, trying, todayLogs = {}, forecast } = {}) {
+export function buildFertilityAiContext({
+  logSummary,
+  regularity,
+  trying,
+  todayLogs = {},
+  forecast,
+  currentConfirmation = null,
+  refinedOvulation = null,
+  lutealLength = null,
+} = {}) {
   const ovulation = forecast?.ovulation || null;
 
   return {
     is_fertility_mode: true,
+    // Evidence from the user's own signals beats the calendar estimate.
+    confirmed_ovulation: currentConfirmation?.confirmed
+      ? {
+          date: dayjs(currentConfirmation.date).format("YYYY-MM-DD"),
+          based_on: currentConfirmation.methods,
+          confidence: currentConfirmation.confidence,
+          signals_agree: currentConfirmation.agreement,
+        }
+      : null,
+    best_ovulation_estimate: refinedOvulation
+      ? {
+          date: dayjs(refinedOvulation.date).format("YYYY-MM-DD"),
+          source: refinedOvulation.source,
+          confidence: refinedOvulation.confidence,
+        }
+      : null,
+    personal_luteal_phase_days: lutealLength?.days ?? null,
     today: {
       lh_test: todayLogs.lh_test?.result || null,
       bbt_celsius: todayLogs.bbt?.temp ?? null,
