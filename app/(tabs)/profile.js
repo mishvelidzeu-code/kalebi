@@ -764,7 +764,11 @@ export default function ProfileScreen() {
       const { configured, availablePackage } = await getPregnancyOfferings();
 
       if (!configured) {
-        await updateGoalMode("დაორსულება");
+        // Without offerings we cannot grant access (fertilityUnlocked needs the
+        // entitlement), so claiming success here would lock the user out behind
+        // a "ჩაირთო ✨" message. Fail honestly instead.
+        Alert.alert("დროებით მიუწვდომელია", "გამოწერა ამჟამად ვერ ჩაიტვირთა. სცადე ცოტა ხანში.");
+        return;
       } else {
         const status = await checkPregnancySubscriptionStatus();
         if (status.hasSubscription) {
