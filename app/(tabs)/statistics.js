@@ -2,9 +2,11 @@ import dayjs from "dayjs";
 import "dayjs/locale/ka";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
@@ -34,6 +36,7 @@ import {
   getPersonalizedLutealLength,
   refineOvulationEstimate,
 } from "../../utils/ovulationDetection";
+import { buildFertilityReport, buildPregnancyTransition } from "../../utils/fertilityExport";
 
 dayjs.locale("ka");
 
@@ -590,6 +593,8 @@ const EMPTY_FERTILITY_STATS = {
   refinedOvulation: null,
   lutealLength: null,
   quality: null,
+  // Kept raw so the doctor report and the pregnancy switch can use them.
+  raw: { cycles: [], logs: [], confirmations: [], userName: "", age: null, lastStart: null },
 };
 
 const METHOD_LABELS = { bbt: "ტემპერატურა", lh: "ოვულაციის ტესტი", mucus: "ლორწო" };
@@ -597,9 +602,12 @@ const CONFIDENCE_LABELS = { high: "მაღალი", medium: "საშუა
 
 function FertilityStatisticsScreen() {
   const { isDark } = useTheme();
+  const { enablePregnancyMode } = usePregnancy();
+  const { reload: reloadFertility } = useFertility();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const hasLoadedOnceRef = useRef(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -699,6 +707,7 @@ function FertilityStatisticsScreen() {
         refinedOvulation,
         lutealLength,
         quality,
+        raw: { cycles, logs, confirmations, userName: profile?.name || "", age, lastStart },
       });
 
       startEntranceAnimation();
@@ -718,6 +727,70 @@ function FertilityStatisticsScreen() {
     setRefreshing(true);
     await loadAllStats();
     setRefreshing(false);
+  };
+
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const report = buildFertilityReport({
+        userName: stats.raw.userName,
+        age: stats.raw.age,
+        cycles: stats.raw.cycles,
+        logs: stats.raw.logs,
+        regularity: stats.regularity,
+        confirmations: stats.raw.confirmations,
+        lutealLength: stats.lutealLength,
+        trying: stats.trying,
+        logSummary: stats.logs,
+      });
+
+      const fileUri = `${FileSystem.documentDirectory}fertility-report-${dayjs().format("YYYY-MM-DD")}.txt`;
+      await FileSystem.writeAsStringAsync(fileUri, report);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri);
+      } else {
+        Alert.alert("შეცდომა", "გაზიარება ამ მოწყობილობაზე შეუძლებელია.");
+      }
+    } catch (error) {
+      console.log("Fertility export error:", error);
+      Alert.alert("შეცდომა", "ანგარიშის შექმნა ვერ მოხერხდა.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // "ორსულად ვარ" — switches to pregnancy mode, carrying the LMP over so the
+  // week count and due date are computed from real data.
+  const handlePregnancySwitch = () => {
+    const transition = buildPregnancyTransition(stats.raw.lastStart);
+
+    if (!transition) {
+      Alert.alert("ჯერ ციკლი დაამატე", "ორსულობის კვირის გამოსათვლელად ბოლო მენსტრუაციის თარიღი გვჭირდება.");
+      return;
+    }
+
+    const dueText = `სავარაუდო მშობიარობა: ${transition.dueDate.format("D MMMM YYYY")}\nამჟამინდელი კვირა: ${transition.currentWeek}`;
+    const body = transition.isPlausible
+      ? `ბოლო მენსტრუაცია: ${transition.lmp.format("D MMMM YYYY")}\n${dueText}\n\nგადავიდეთ ორსულობის რეჟიმზე?`
+      : `ბოლო მენსტრუაცია: ${transition.lmp.format("D MMMM YYYY")}\n${dueText}\n\n⚠️ ეს თარიღი უჩვეულოა ორსულობისთვის — გადაამოწმე, სწორია თუ არა. გსურს მაინც გადასვლა?`;
+
+    Alert.alert("ორსულად ვარ 🤰", body, [
+      { text: "გაუქმება", style: "cancel" },
+      {
+        text: "დიახ, გადავიდეთ",
+        onPress: async () => {
+          try {
+            await enablePregnancyMode(dayjs(stats.raw.lastStart).format("YYYY-MM-DD"));
+            await reloadFertility();
+            Alert.alert("გილოცავ! 🎉", "ორსულობის რეჟიმი ჩაირთო. აპი ახლა შენს კვირებს მიჰყვება.");
+          } catch (error) {
+            console.log("Pregnancy switch error:", error);
+            Alert.alert("შეცდომა", "ორსულობის რეჟიმზე გადასვლა ვერ მოხერხდა.");
+          }
+        },
+      },
+    ]);
   };
 
   if (loading && !refreshing) {
@@ -1103,6 +1176,38 @@ function FertilityStatisticsScreen() {
               ))}
             </LinearGradient>
 
+            {/* Pregnancy switch */}
+            <LinearGradient colors={theme.heroGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
+              <Text style={styles.switchTitle}>დადებითი ტესტი? 🤰</Text>
+              <Text style={styles.switchSub}>
+                ერთი შეხებით გადადი ორსულობის რეჟიმზე — კვირები და სავარაუდო მშობიარობის თარიღი ავტომატურად გამოითვლება შენი მონაცემებიდან.
+              </Text>
+              <TouchableOpacity style={styles.switchBtn} activeOpacity={0.85} onPress={handlePregnancySwitch}>
+                <Text style={styles.switchBtnText}>ორსულად ვარ</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+
+            {/* Doctor report export */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleExport}
+              disabled={exporting}
+              style={[styles.exportBtn, { borderColor: theme.border, backgroundColor: theme.iconBg }]}
+            >
+              {exporting ? (
+                <ActivityIndicator color={theme.accent} />
+              ) : (
+                <>
+                  <Ionicons name="document-text-outline" size={18} color={theme.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.exportTitle, { color: theme.text }]}>ექიმისთვის ანგარიშის გაზიარება</Text>
+                    <Text style={[styles.exportSub, { color: theme.subText }]}>ციკლები, ტესტები, ტემპერატურა და ნიშნები — ერთ ფაილში</Text>
+                  </View>
+                  <Ionicons name="share-outline" size={18} color={theme.subText} />
+                </>
+              )}
+            </TouchableOpacity>
+
             <Text style={[styles.fertNote, { color: theme.subText, textAlign: "center", marginHorizontal: 20 }]}>
               ℹ️ ეს მაჩვენებლები შენს ჩანაწერებზეა დაფუძნებული და არ ცვლის ექიმის კონსულტაციას.
             </Text>
@@ -1153,6 +1258,13 @@ const styles = StyleSheet.create({
   fertTipText: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
   qualityPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1 },
   qualityPillText: { fontSize: 12, fontWeight: "900" },
+  switchTitle: { color: "#FFFFFF", fontSize: 19, fontWeight: "900", marginBottom: 6 },
+  switchSub: { color: "rgba(255,255,255,0.9)", fontSize: 12, lineHeight: 18, fontWeight: "600", marginBottom: 14 },
+  switchBtn: { backgroundColor: "#FFFFFF", borderRadius: 999, paddingVertical: 13, alignItems: "center" },
+  switchBtnText: { color: "#0E9F6E", fontSize: 15, fontWeight: "900" },
+  exportBtn: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 20, borderWidth: 1, paddingVertical: 14, paddingHorizontal: 16, marginTop: 14, minHeight: 62 },
+  exportTitle: { fontSize: 14, fontWeight: "800" },
+  exportSub: { fontSize: 11, fontWeight: "600", marginTop: 2 },
 
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 12 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
