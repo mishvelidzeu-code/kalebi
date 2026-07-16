@@ -17,35 +17,22 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "../../context/ThemeContext";
+import { useFertility } from "../../context/FertilityContext";
 import { runAdminQuery } from "../../services/adminQuery";
 
-function TabIcon({ name, color, focused, isAssistant = false, primary, isDark }) {
-  if (isAssistant) {
-    return (
-      <View
-        style={{
-          width: focused ? 64 : 54,
-          height: focused ? 64 : 54,
-          borderRadius: focused ? 32 : 27,
-          alignItems: "center",
-          justifyContent: "center",
-          marginTop: focused ? -32 : -16,
-          backgroundColor: focused ? primary : isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.78)",
-          shadowColor: focused ? primary : "#000",
-          shadowOpacity: focused ? 0.34 : 0.12,
-          shadowRadius: focused ? 20 : 14,
-          shadowOffset: { width: 0, height: focused ? 12 : 6 },
-          elevation: focused ? 14 : 4,
-          borderWidth: 1,
-          borderColor: focused ? "rgba(255,255,255,0.72)" : isDark ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.82)",
-          transform: [{ translateY: focused ? -3 : -1 }],
-        }}
-      >
-        <Ionicons name={name} size={focused ? 30 : 26} color={focused ? "#FFFFFF" : color} />
-      </View>
-    );
-  }
-  return <Ionicons name={name} size={24} color={color} />;
+// Instagram-style: flat bar, no labels, outline icon when idle and the solid
+// version when active. `name` is the base Ionicons name (e.g. "home") — the
+// outline variant is derived, so callers pass one name.
+function TabIcon({ name, color, focused, isAssistant = false, primary }) {
+  const iconName = focused ? name : `${name}-outline`;
+  const size = isAssistant ? 28 : 26;
+
+  return (
+    <View style={styles.tabIconWrap}>
+      <Ionicons name={iconName} size={size} color={focused ? primary : color} />
+      {focused && <View style={[styles.tabActiveDot, { backgroundColor: primary }]} />}
+    </View>
+  );
 }
 
 // ─── Admin Floating Assistant ────────────────────────────────────────────────
@@ -186,8 +173,11 @@ function AdminAssistant({ colors, isDark, stats }) {
 
 export default function TabLayout() {
   const { colors, isDark, isAdmin } = useTheme();
+  const { fertilityMode } = useFertility();
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 10);
+  // Fertility mode themes the whole app green — the tab bar follows.
+  const tabAccent = fertilityMode ? "#0E9F6E" : colors.primary;
 
   // stats passed from ThemeContext or kept minimal for assistant
   const adminStats = { users: 0, todayUsers: 0, paidPremium: 0, adminPremium: 0, pregnancyPaid: 0, withPhotos: 0 };
@@ -198,20 +188,20 @@ export default function TabLayout() {
         initialRouteName={isAdmin ? "admin" : "index"}
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: isDark ? "#D0B9C2" : "#9A6A79",
+          tabBarShowLabel: false,
+          tabBarActiveTintColor: tabAccent,
+          tabBarInactiveTintColor: isDark ? "rgba(255,255,255,0.55)" : "rgba(60,60,67,0.5)",
           tabBarStyle: {
             backgroundColor: colors.tabBar,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            height: 68 + bottomInset,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
+            height: 58 + bottomInset,
             paddingBottom: bottomInset,
             paddingTop: 8,
+            elevation: 0,
+            shadowOpacity: 0,
           },
-          tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: "800",
-          },
+          tabBarItemStyle: { paddingTop: 2 },
         }}
       >
         <Tabs.Screen
@@ -220,7 +210,7 @@ export default function TabLayout() {
             title: "Dashboard",
             href: isAdmin ? undefined : null,
             tabBarIcon: ({ color, focused }) => (
-              <TabIcon name="grid" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
+              <TabIcon name="grid" color={color} focused={focused} primary={tabAccent} />
             ),
           }}
         />
@@ -231,7 +221,7 @@ export default function TabLayout() {
             href: isAdmin ? null : undefined,
             title: "მთავარი",
             tabBarIcon: ({ color, focused }) => (
-              <TabIcon name="home" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
+              <TabIcon name="home" color={color} focused={focused} primary={tabAccent} />
             ),
           }}
         />
@@ -242,7 +232,7 @@ export default function TabLayout() {
             href: isAdmin ? null : undefined,
             title: "კალენდარი",
             tabBarIcon: ({ color, focused }) => (
-              <TabIcon name="calendar" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
+              <TabIcon name="calendar" color={color} focused={focused} primary={tabAccent} />
             ),
           }}
         />
@@ -253,7 +243,7 @@ export default function TabLayout() {
             href: isAdmin ? null : undefined,
             title: "ასისტენტი",
             tabBarIcon: ({ color, focused }) => (
-              <TabIcon name="chatbubble-ellipses" color={color} focused={focused} primary={colors.primary} isDark={isDark} isAssistant />
+              <TabIcon name="chatbubble-ellipses" color={color} focused={focused} primary={tabAccent} isAssistant />
             ),
           }}
         />
@@ -264,7 +254,7 @@ export default function TabLayout() {
             href: isAdmin ? null : undefined,
             title: "სტატისტიკა",
             tabBarIcon: ({ color, focused }) => (
-              <TabIcon name="stats-chart" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
+              <TabIcon name="stats-chart" color={color} focused={focused} primary={tabAccent} />
             ),
           }}
         />
@@ -274,7 +264,7 @@ export default function TabLayout() {
           options={{
             title: "პროფილი",
             tabBarIcon: ({ color, focused }) => (
-              <TabIcon name="person" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
+              <TabIcon name="person" color={color} focused={focused} primary={tabAccent} />
             ),
           }}
         />
@@ -286,6 +276,10 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  // tab bar
+  tabIconWrap: { alignItems: "center", justifyContent: "center", height: 34 },
+  tabActiveDot: { width: 4, height: 4, borderRadius: 2, marginTop: 4 },
+
   // floating button
   fab: {
     position: "absolute",

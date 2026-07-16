@@ -1314,6 +1314,16 @@ const OVULATION_SYMPTOMS = [
   { id: "energy", label: "ენერგიის მომატება", icon: "⚡" },
 ];
 
+const FERTILITY_GUIDE = [
+  { id: "marks", icon: "🗓️", title: "კალენდრის ფერები", text: "წითელი — მენსტრუაცია, მწვანე — ნაყოფიერი დღეები, ყვითელი — ოვულაცია. მწვანე წერტილი ნიშნავს, რომ იმ დღეს რაღაც უკვე ჩაწერე." },
+  { id: "pick", icon: "👆", title: "აირჩიე დღე", text: "დააჭირე კალენდარში ნებისმიერ დღეს და ქვემოთ გამოჩნდება იმ დღის ჩანაწერები. ჩაწერა შეგიძლია ნებისმიერ დღეზე — არა მხოლოდ დღევანდელზე." },
+  { id: "lh", icon: "🧪", title: "ოვულაციის ტესტი", text: "ოვულაციამდე ~5 დღით ადრე დაიწყე ტესტირება, დღეში ერთხელ. დადებითის შემდეგ ოვულაცია ჩვეულებრივ 24–36 საათში ხდება." },
+  { id: "bbt", icon: "🌡️", title: "ბაზალური ტემპერატურა", text: "გაზომე დილით, ლოგინიდან ადგომამდე, ყოველდღე ერთსა და იმავე დროს. 9+ დღის შემდეგ აპი ტემპერატურის ახტომას ამოიცნობს და ოვულაციას დაადასტურებს." },
+  { id: "mucus", icon: "💧", title: "ლორწო", text: "კვერცხის ცილის მსგავსი ან წყლიანი ლორწო ყველაზე ნაყოფიერი ნიშანია — ოვულაცია ახლოსაა." },
+  { id: "sex", icon: "❤️", title: "ურთიერთობა", text: "ნაყოფიერ ფანჯარაში ყოველ მეორე დღეს ურთიერთობა ოპტიმალურია. აპი ავტომატურად აღნიშნავს, დაემთხვა თუ არა ნაყოფიერ დღეს." },
+  { id: "stats", icon: "📊", title: "სად ვნახო შედეგები", text: "სტატისტიკის გვერდზე ნახავ ოვულაციის დადასტურებას, პროგნოზის ხარისხს, ტესტის სწორ დროს და ექიმისთვის გასაზიარებელ ანგარიშს." },
+];
+
 // A day is fertile if the base cycle marks paint it as fertile (green) or
 // ovulation (yellow). Reuses the marks the user already sees on the calendar.
 function isFertileDayFromMarks(marks, dateStr) {
@@ -1336,6 +1346,7 @@ function FertilityCalendarScreen() {
   const [logsLoading, setLogsLoading] = useState(true);
   const [monthLogDates, setMonthLogDates] = useState({});
   const [bbtInput, setBbtInput] = useState("");
+  const [showGuide, setShowGuide] = useState(false);
 
   const theme = {
     text: isDark ? "#EAFBF4" : "#183A30",
@@ -1360,6 +1371,10 @@ function FertilityCalendarScreen() {
     const subscription = DeviceEventEmitter.addListener("cycleUpdated", () => loadData());
     return () => subscription.remove();
   }, [loadData]);
+
+  // useCycles does not fetch on its own — without this the calendar renders
+  // with empty marks until a pull-to-refresh happens to call loadData().
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const loadDayLogs = useCallback(async (dateStr) => {
     setLogsLoading(true);
@@ -1494,6 +1509,13 @@ function FertilityCalendarScreen() {
               <Text style={[styles.pageTitle, { color: theme.text }]}>ნაყოფიერების ტრეკერი 🌿</Text>
               <Text style={[styles.pageSubtitle, { color: theme.subText }]}>აღრიცხე ტესტები, ტემპერატურა და ნიშნები</Text>
             </View>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setShowGuide(true)}
+              style={[styles.guideBtn, { backgroundColor: theme.chip, borderColor: theme.border }]}
+            >
+              <Text style={[styles.guideBtnText, { color: theme.accent }]}>?</Text>
+            </TouchableOpacity>
           </View>
 
           <LinearGradient
@@ -1696,6 +1718,31 @@ function FertilityCalendarScreen() {
         </View>
       </Modal>
 
+      <Modal visible={showGuide} transparent animationType="slide" onRequestClose={() => setShowGuide(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.guideSheet, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.guideTitle, { color: theme.text }]}>როგორ გამოვიყენო ეს გვერდი 🌿</Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              {FERTILITY_GUIDE.map((item) => (
+                <View key={item.id} style={styles.guideRow}>
+                  <Text style={styles.guideIcon}>{item.icon}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.guideItemTitle, { color: theme.text }]}>{item.title}</Text>
+                    <Text style={[styles.guideItemText, { color: theme.subText }]}>{item.text}</Text>
+                  </View>
+                </View>
+              ))}
+              <Text style={[styles.guideFootnote, { color: theme.subText }]}>
+                ℹ️ რაც მეტ დღეს შეავსებ, მით ზუსტდება ოვულაციის შეფასება. ეს ინფორმაციული ხელსაწყოა და არ ცვლის ექიმის კონსულტაციას.
+              </Text>
+            </ScrollView>
+            <TouchableOpacity style={[styles.guideCloseBtn, { backgroundColor: theme.accent }]} onPress={() => setShowGuide(false)}>
+              <Text style={styles.guideCloseText}>გასაგებია</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.floatingDiaryAvatar}>
         <DiaryAvatar accent={theme.accent} isDark={isDark} size={46} showHint={false} />
       </View>
@@ -1751,6 +1798,17 @@ const styles = StyleSheet.create({
   fertTipIcon: { fontSize: 18, marginTop: 1 },
   fertTipTitle: { fontSize: 13, fontWeight: "800", marginBottom: 2 },
   fertTipText: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
+  guideBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  guideBtnText: { fontSize: 16, fontWeight: "900" },
+  guideSheet: { width: "100%", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, padding: 22, paddingBottom: 30, position: "absolute", bottom: 0 },
+  guideTitle: { fontSize: 19, fontWeight: "900", marginBottom: 16, textAlign: "center" },
+  guideRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
+  guideIcon: { fontSize: 20, marginTop: 1 },
+  guideItemTitle: { fontSize: 14, fontWeight: "800", marginBottom: 3 },
+  guideItemText: { fontSize: 12.5, lineHeight: 18, fontWeight: "600" },
+  guideFootnote: { fontSize: 11.5, lineHeight: 17, fontWeight: "600", marginTop: 4, marginBottom: 6 },
+  guideCloseBtn: { borderRadius: 999, paddingVertical: 14, alignItems: "center", marginTop: 14 },
+  guideCloseText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
 
   // -- Calendar ----------------------------------------------------
   pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingRight: 88, marginBottom: 18 },
