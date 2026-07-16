@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { useFertility } from "../../context/FertilityContext";
+import { TEMP_HIDE_ASSISTANT_HEADER } from "../../constants/tempFlags";
 import {
   askAssistant,
   getAssistantScreenSummary,
@@ -387,22 +388,28 @@ export default function AssistantScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
-        <View style={styles.header}>
-          <View style={styles.headerRow}>
-            <View style={styles.headerCopy}>
-              <Text style={[styles.headerEyebrow, fertilityMode && { color: theme.primary }]}>PERSONAL HEALTH ASSISTANT</Text>
-              <Text style={[styles.headerTitle, { color: theme.text }]}>ასისტენტი</Text>
-              <Text style={[styles.headerSubtitle, { color: theme.subText }]}>
-                {userName
-                  ? `${userName}, მკითხე რაც გაინტერესებს`
-                  : "მკითხე რაც გაინტერესებს"}
-              </Text>
-            </View>
-            <View style={[styles.headerAssistantPortrait, { borderColor: theme.border }]}>
-              <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.headerAssistantImage} resizeMode="cover" />
+        {TEMP_HIDE_ASSISTANT_HEADER ? (
+          // Header is hidden for now — keep the safe-area gap so the chat does
+          // not slide under the status bar. See constants/tempFlags.js.
+          <View style={{ height: insets.top + 12 }} />
+        ) : (
+          <View style={styles.header}>
+            <View style={styles.headerRow}>
+              <View style={styles.headerCopy}>
+                <Text style={[styles.headerEyebrow, fertilityMode && { color: theme.primary }]}>PERSONAL HEALTH ASSISTANT</Text>
+                <Text style={[styles.headerTitle, { color: theme.text }]}>ასისტენტი</Text>
+                <Text style={[styles.headerSubtitle, { color: theme.subText }]}>
+                  {userName
+                    ? `${userName}, მკითხე რაც გაინტერესებს`
+                    : "მკითხე რაც გაინტერესებს"}
+                </Text>
+              </View>
+              <View style={[styles.headerAssistantPortrait, { borderColor: theme.border }]}>
+                <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.headerAssistantImage} resizeMode="cover" />
+              </View>
             </View>
           </View>
-        </View>
+        )}
 
         <ScrollView
           ref={scrollRef}
