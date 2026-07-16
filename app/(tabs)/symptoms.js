@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
+import { useFertility } from "../../context/FertilityContext";
 import {
   askAssistant,
   getAssistantScreenSummary,
@@ -118,6 +119,7 @@ export default function AssistantScreen() {
   const insets = useSafeAreaInsets();
   const { isDark, isPremium, isAdmin } = useTheme();
   const { pregnancyMode, currentWeek, currentTrimester, daysRemaining } = usePregnancy();
+  const { fertilityMode } = useFertility();
   const scrollRef = useRef(null);
 
   const [userName, setUserName] = useState("");
@@ -133,24 +135,44 @@ export default function AssistantScreen() {
   const [assistantUserId, setAssistantUserId] = useState(null);
   const [userAvatarUri, setUserAvatarUri] = useState("");
 
-  const theme = {
-    bg: isDark ? "#211621" : "#FFFDFC",
-    card: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.78)",
-    text: isDark ? "#FFF7FB" : "#2F2026",
-    subText: isDark ? "#E9C7D4" : "#8F6574",
-    primary: "#FF4D88",
-    peach: "#FF9E7D",
-    lavender: "#B8A4FF",
-    input: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.72)",
-    border: isDark ? "rgba(255,209,224,0.16)" : "rgba(255,255,255,0.78)",
-    quickChip: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.62)",
-    userBubble: "#FF8A6B",
-    assistantBubble: isDark ? "rgba(67,49,72,0.82)" : "rgba(255,255,255,0.78)",
-    noticeGradient: pregnancyMode
-      ? isDark ? ["rgba(56,37,46,0.94)", "rgba(24,15,20,0.86)"] : ["rgba(255,255,255,0.92)", "rgba(255,234,241,0.86)"]
-      : isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.96)", "rgba(255,242,232,0.9)", "rgba(246,240,255,0.86)"],
-    composerBg: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.74)",
-  };
+  // Fertility mode carries the same green palette as its calendar/stats screens.
+  const theme = fertilityMode
+    ? {
+        bg: isDark ? "#14231D" : "#F4FFFB",
+        card: isDark ? "rgba(22,51,43,0.9)" : "rgba(255,255,255,0.82)",
+        text: isDark ? "#EAFBF4" : "#183A30",
+        subText: isDark ? "#A7D8C6" : "#5C8A79",
+        primary: "#0E9F6E",
+        peach: "#35C99B",
+        lavender: "#60A5FA",
+        input: isDark ? "rgba(53,201,155,0.10)" : "rgba(255,255,255,0.72)",
+        border: isDark ? "rgba(53,201,155,0.22)" : "rgba(14,159,110,0.18)",
+        quickChip: isDark ? "rgba(53,201,155,0.12)" : "rgba(255,255,255,0.62)",
+        userBubble: "#0E9F6E",
+        assistantBubble: isDark ? "rgba(28,60,50,0.86)" : "rgba(255,255,255,0.82)",
+        noticeGradient: isDark
+          ? ["rgba(22,51,43,0.96)", "rgba(18,35,54,0.94)"]
+          : ["rgba(242,255,251,0.96)", "rgba(231,251,241,0.9)", "rgba(234,244,255,0.86)"],
+        composerBg: isDark ? "rgba(22,51,43,0.9)" : "rgba(255,255,255,0.78)",
+      }
+    : {
+        bg: isDark ? "#211621" : "#FFFDFC",
+        card: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.78)",
+        text: isDark ? "#FFF7FB" : "#2F2026",
+        subText: isDark ? "#E9C7D4" : "#8F6574",
+        primary: "#FF4D88",
+        peach: "#FF9E7D",
+        lavender: "#B8A4FF",
+        input: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.72)",
+        border: isDark ? "rgba(255,209,224,0.16)" : "rgba(255,255,255,0.78)",
+        quickChip: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.62)",
+        userBubble: "#FF8A6B",
+        assistantBubble: isDark ? "rgba(67,49,72,0.82)" : "rgba(255,255,255,0.78)",
+        noticeGradient: pregnancyMode
+          ? isDark ? ["rgba(56,37,46,0.94)", "rgba(24,15,20,0.86)"] : ["rgba(255,255,255,0.92)", "rgba(255,234,241,0.86)"]
+          : isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.96)", "rgba(255,242,232,0.9)", "rgba(246,240,255,0.86)"],
+        composerBg: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.74)",
+      };
 
   const dailyQuestionLimit = isAdmin
     ? 999999
@@ -352,7 +374,9 @@ export default function AssistantScreen() {
 
   return (
     <LinearGradient
-      colors={pregnancyMode
+      colors={fertilityMode
+        ? isDark ? ["#12241D", "#141E20", "#14161D"] : ["#F4FFFB", "#EBF9F2", "#EEF6FF"]
+        : pregnancyMode
         ? isDark ? ["#25151B", "#140E12", "#120C10"] : ["#FFFDFC", "#FFEFF4", "#F8B5C9"]
         : isDark ? ["#2A1B2A", "#211621", "#17151D"] : ["#FFFDFC", "#FFF1EB", "#F6F0FF"]}
       start={{ x: 0.15, y: 0 }}
@@ -366,7 +390,7 @@ export default function AssistantScreen() {
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <View style={styles.headerCopy}>
-              <Text style={styles.headerEyebrow}>PERSONAL HEALTH ASSISTANT</Text>
+              <Text style={[styles.headerEyebrow, fertilityMode && { color: theme.primary }]}>PERSONAL HEALTH ASSISTANT</Text>
               <Text style={[styles.headerTitle, { color: theme.text }]}>ასისტენტი</Text>
               <Text style={[styles.headerSubtitle, { color: theme.subText }]}>
                 {userName
@@ -396,17 +420,23 @@ export default function AssistantScreen() {
             end={{ x: 1, y: 1 }}
             style={[styles.noticeCard, { borderColor: theme.border }]}
           >
-            <View style={styles.noticeGlowPeach} />
-            <View style={styles.noticeGlowLavender} />
+            <View style={[styles.noticeGlowPeach, fertilityMode && { backgroundColor: "rgba(53,201,155,0.20)" }]} />
+            <View style={[styles.noticeGlowLavender, fertilityMode && { backgroundColor: "rgba(96,165,250,0.16)" }]} />
             <View style={styles.noticeHeader}>
               <View>
-                <Text style={styles.noticeEyebrow}>{pregnancyMode ? "MATERNITY OVERVIEW" : "DAILY OVERVIEW"}</Text>
+                <Text style={[styles.noticeEyebrow, fertilityMode && { color: theme.primary }]}>
+                  {pregnancyMode ? "MATERNITY OVERVIEW" : fertilityMode ? "FERTILITY OVERVIEW" : "DAILY OVERVIEW"}
+                </Text>
                 <Text style={[styles.noticeTitle, { color: theme.text }]}>
-                  {pregnancyMode ? "შენი ორსულობა 🤰" : "შენი დღევანდელი სურათი"}
+                  {pregnancyMode ? "შენი ორსულობა 🤰" : fertilityMode ? "შენი ნაყოფიერება 🌿" : "შენი დღევანდელი სურათი"}
                 </Text>
               </View>
               <View style={styles.noticeIcon}>
-                <Ionicons name={pregnancyMode ? "heart-outline" : "analytics-outline"} size={18} color={theme.primary} />
+                <Ionicons
+                  name={pregnancyMode ? "heart-outline" : fertilityMode ? "leaf-outline" : "analytics-outline"}
+                  size={18}
+                  color={theme.primary}
+                />
               </View>
             </View>
 

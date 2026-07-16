@@ -462,21 +462,37 @@ export default function HomeScreen() {
   const [dailyPlan, setDailyPlan] = useState(null);
 
   const theme = {
-    bg: isDark ? "#211621" : "#FFFDFC",
-    card: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.78)",
-    text: isDark ? "#FFF7FB" : "#2F2026",
-    subText: isDark ? "#E9C7D4" : "#8F6574",
-    primary: "#FF4D88",
-    circleBg: isDark ? "#241A2B" : "#fff0f5",
-    softCard: isDark ? "rgba(67,49,72,0.72)" : "rgba(255,255,255,0.72)",
-    border: isDark ? "rgba(255,209,224,0.16)" : "rgba(255,255,255,0.82)",
-    peach: "#FF9E7D",
-    lavender: "#B8A4FF",
-    fertile: "#9AB7FF",
-    glassIcon: isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.58)",
-    pageGradient: isDark ? ["#2A1B2A", "#211621", "#17151D"] : ["#FFFDFC", "#FFF1EB", "#F6F0FF"],
-    heroGradient: isDark ? ["#3A2A44", "#2A2036", "#1B1721"] : ["#FFFFFF", "#FFF2E8", "#F4ECFF"],
-    cardGradient: isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.92)", "rgba(255,240,232,0.84)", "rgba(246,240,255,0.82)"],
+    // Fertility mode dresses the home screen in the same green palette as its
+    // calendar/stats/assistant screens.
+    bg: fertilityMode ? (isDark ? "#14231D" : "#F4FFFB") : isDark ? "#211621" : "#FFFDFC",
+    card: fertilityMode
+      ? (isDark ? "rgba(22,51,43,0.9)" : "rgba(255,255,255,0.82)")
+      : isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.78)",
+    text: fertilityMode ? (isDark ? "#EAFBF4" : "#183A30") : isDark ? "#FFF7FB" : "#2F2026",
+    subText: fertilityMode ? (isDark ? "#A7D8C6" : "#5C8A79") : isDark ? "#E9C7D4" : "#8F6574",
+    primary: fertilityMode ? "#0E9F6E" : "#FF4D88",
+    circleBg: fertilityMode ? (isDark ? "#16332B" : "#EBF9F2") : isDark ? "#241A2B" : "#fff0f5",
+    softCard: fertilityMode
+      ? (isDark ? "rgba(28,60,50,0.72)" : "rgba(255,255,255,0.74)")
+      : isDark ? "rgba(67,49,72,0.72)" : "rgba(255,255,255,0.72)",
+    border: fertilityMode
+      ? (isDark ? "rgba(53,201,155,0.22)" : "rgba(14,159,110,0.18)")
+      : isDark ? "rgba(255,209,224,0.16)" : "rgba(255,255,255,0.82)",
+    peach: fertilityMode ? "#35C99B" : "#FF9E7D",
+    lavender: fertilityMode ? "#60A5FA" : "#B8A4FF",
+    fertile: fertilityMode ? "#35C99B" : "#9AB7FF",
+    glassIcon: fertilityMode
+      ? (isDark ? "rgba(53,201,155,0.12)" : "rgba(255,255,255,0.62)")
+      : isDark ? "rgba(255,209,224,0.10)" : "rgba(255,255,255,0.58)",
+    pageGradient: fertilityMode
+      ? (isDark ? ["#12241D", "#141E20", "#14161D"] : ["#F4FFFB", "#EBF9F2", "#EEF6FF"])
+      : isDark ? ["#2A1B2A", "#211621", "#17151D"] : ["#FFFDFC", "#FFF1EB", "#F6F0FF"],
+    heroGradient: fertilityMode
+      ? (isDark ? ["#1C5343", "#16403C", "#122336"] : ["#FFFFFF", "#E9FBF3", "#EAF4FF"])
+      : isDark ? ["#3A2A44", "#2A2036", "#1B1721"] : ["#FFFFFF", "#FFF2E8", "#F4ECFF"],
+    cardGradient: fertilityMode
+      ? (isDark ? ["rgba(22,51,43,0.96)", "rgba(18,35,54,0.94)"] : ["rgba(255,255,255,0.94)", "rgba(231,251,241,0.86)", "rgba(234,244,255,0.82)"])
+      : isDark ? ["rgba(68,48,70,0.96)", "rgba(35,26,42,0.94)"] : ["rgba(255,255,255,0.92)", "rgba(255,240,232,0.84)", "rgba(246,240,255,0.82)"],
     bannerGradient: isDark ? ["#3A2330", "#241B2C", "#173028"] : ["#FFFFFF", "#FFF0EA", "#EFFBF5"],
     fertilityBannerGradient: isDark ? ["#16332B", "#1C2B33", "#122336"] : ["#F2FFFB", "#E7FBF1", "#EAF4FF"],
   };
@@ -812,8 +828,8 @@ export default function HomeScreen() {
         </View>
 
         <LinearGradient colors={theme.heroGradient} style={[styles.regularHeroCard, { borderColor: theme.border }]}>
-          <View style={styles.heroGlowPeach} />
-          <View style={styles.heroGlowLavender} />
+          <View style={[styles.heroGlowPeach, fertilityMode && { backgroundColor: "rgba(53,201,155,0.20)" }]} />
+          <View style={[styles.heroGlowLavender, fertilityMode && { backgroundColor: "rgba(96,165,250,0.16)" }]} />
           <View style={styles.heroMiniCardsRow}>
             <View style={[styles.heroMiniCard, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
               <View style={[styles.heroMiniIcon, { backgroundColor: `${theme.fertile}22` }]}>
@@ -826,7 +842,7 @@ export default function HomeScreen() {
             </View>
             <View style={[styles.heroMiniCard, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
               <View style={[styles.heroMiniIcon, { backgroundColor: "rgba(255,138,107,0.18)" }]}>
-                <Ionicons name="heart" size={16} color="#FF8A6B" />
+                <Ionicons name="heart" size={16} color={fertilityMode ? theme.peach : "#FF8A6B"} />
               </View>
               <View style={styles.heroMiniCopy}>
                 <Text style={[styles.heroMiniLabel, { color: theme.subText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>დაორსულების შანსი</Text>
@@ -835,7 +851,7 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.circularTracker}>
-            <LinearGradient colors={[theme.peach, "#FF7EA8", theme.lavender, theme.fertile]} style={styles.trackerRing}>
+            <LinearGradient colors={fertilityMode ? [theme.peach, "#2BB6A6", theme.lavender, theme.fertile] : [theme.peach, "#FF7EA8", theme.lavender, theme.fertile]} style={styles.trackerRing}>
               <View style={[styles.trackerInner, { backgroundColor: isDark ? "#1B171E" : "#FFFDFC" }]}>
                 <Text style={[styles.trackerLabel, { color: theme.subText }]}>{heroMainLabel}</Text>
                 <Text style={[styles.trackerNumber, { color: trackerNumberColor, textShadowColor: `${trackerNumberColor}55` }]}>{heroMainNumber}</Text>
@@ -844,7 +860,11 @@ export default function HomeScreen() {
             </LinearGradient>
             <View style={[styles.trackerProgressDot, { backgroundColor: phaseColor, transform: [{ rotate: `${Math.min(progress, 100) * 3.6}deg` }, { translateY: -104 }] }]} />
           </View>
-          <TouchableOpacity style={styles.trackerCta} onPress={logPeriod} activeOpacity={0.86}>
+          <TouchableOpacity
+            style={[styles.trackerCta, fertilityMode && { backgroundColor: theme.primary, shadowColor: theme.primary }]}
+            onPress={logPeriod}
+            activeOpacity={0.86}
+          >
             <Text style={styles.trackerCtaText}>ციკლი დამეწყო დღეს</Text>
           </TouchableOpacity>
         </LinearGradient>
@@ -967,11 +987,11 @@ export default function HomeScreen() {
         >
           <View style={styles.regularStatsHeader}>
             <View>
-              <Text style={styles.regularStatsEyebrow}>DAILY OVERVIEW</Text>
+              <Text style={[styles.regularStatsEyebrow, fertilityMode && { color: theme.primary }]}>DAILY OVERVIEW</Text>
               <Text style={[styles.regularStatsTitle, { color: theme.text }]}>შენი დღიური სურათი</Text>
             </View>
             <View style={[styles.regularStatsIcon, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
-              <Ionicons name="analytics-outline" size={19} color="#FF8A6B" />
+              <Ionicons name="analytics-outline" size={19} color={fertilityMode ? theme.primary : "#FF8A6B"} />
             </View>
           </View>
           <View style={[styles.regularStatsDivider, { backgroundColor: theme.border }]} />
@@ -995,7 +1015,7 @@ export default function HomeScreen() {
               <Text style={styles.smallInsightEmoji}>{phaseKey === "fertile" ? "🌿" : phaseKey === "period" ? "🫶" : "🍵"}</Text>
             </View>
             <View style={styles.adviceTitleWrap}>
-              <Text style={styles.adviceEyebrow}>დღის გზამკვლევი</Text>
+              <Text style={[styles.adviceEyebrow, fertilityMode && { color: theme.primary }]}>დღის გზამკვლევი</Text>
               <Text style={[styles.adviceTitle, { color: theme.text }]}>დღევანდელი რჩევა</Text>
             </View>
           </View>
