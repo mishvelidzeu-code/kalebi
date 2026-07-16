@@ -1347,6 +1347,9 @@ function FertilityCalendarScreen() {
   const [monthLogDates, setMonthLogDates] = useState({});
   const [bbtInput, setBbtInput] = useState("");
   const [showGuide, setShowGuide] = useState(false);
+  const [note, setNote] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [assistantSupport, setAssistantSupport] = useState({ loading: false, text: "", signature: null });
 
   const theme = {
     text: isDark ? "#EAFBF4" : "#183A30",
@@ -1405,9 +1408,53 @@ function FertilityCalendarScreen() {
     setBbtInput(stored != null ? String(stored) : "");
   }, [dayLogs]);
 
+  // The comment lives in the shared `symptoms` table (same place the other
+  // calendars write it), so the assistant sees it in its normal context.
+  const loadDayNote = useCallback(async (dateStr) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("symptoms")
+        .select("note")
+        .eq("user_id", user.id)
+        .eq("date", dateStr)
+        .maybeSingle();
+      setNote(data?.note || "");
+    } catch {
+      setNote("");
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDayNote(selectedDay);
+    setAssistantSupport({ loading: false, text: "", signature: null });
+  }, [selectedDay, loadDayNote]);
+
+  // Fertility advice is not Prime-gated — the pregnancy entitlement covers it,
+  // same as the pregnancy calendar.
+  // `signature` must cover the fertility logs too, not just symptoms/mood/note:
+  // changing only the LH result would otherwise look unchanged and be skipped.
+  const loadFertilityAdvice = useCallback(async (entry, signature, options = {}) => {
+    if (!options.force && assistantSupport.signature === signature && assistantSupport.text) {
+      return;
+    }
+
+    setAssistantSupport({ loading: true, text: "", signature });
+    try {
+      // getAssistantContext already injects fertilityTracking (LH/BBT/mucus),
+      // so the reply reasons about today's logged signals too.
+      const response = await getDiaryAssistantSupport(entry);
+      setAssistantSupport({ loading: false, text: response.text, signature });
+    } catch (error) {
+      console.log("Fertility diary advice error:", error);
+      setAssistantSupport({ loading: false, text: "", signature: null });
+    }
+  }, [assistantSupport.signature, assistantSupport.text]);
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadData(), loadDayLogs(selectedDay), loadMonthLogs(currentDate)]);
+    await Promise.all([loadData(), loadDayLogs(selectedDay), loadMonthLogs(currentDate), loadDayNote(selectedDay)]);
     setRefreshing(false);
   };
 
@@ -1421,6 +1468,38 @@ function FertilityCalendarScreen() {
     });
     await upsertFertilityLog(selectedDay, type, value);
     setMonthLogDates((prev) => ({ ...prev, [selectedDay]: true }));
+    // The assistant context caches for 45s — drop it so the advice below
+    // reasons about the signal that was just logged, not a stale snapshot.
+    invalidateAssistantContextCache();
+  };
+
+  const saveNote = async () => {
+    setNoteSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase.from("symptoms").upsert(
+        { user_id: user.id, date: selectedDay, note, updated_at: new Date().toISOString() },
+        { onConflict: "user_id,date" }
+      );
+      invalidateAssistantContextCache();
+
+      // Advice only makes sense for today — past days are just records.
+      if (selectedDay === todayStr) {
+        loadFertilityAdvice(
+          { symptoms: ovSymptoms, mood: null, note },
+          JSON.stringify({ logs: dayLogs, note: note.trim() }),
+          { force: true }
+        );
+      } else {
+        Alert.alert("შენახულია ✨", "კომენტარი შენახულია.");
+      }
+    } catch {
+      Alert.alert("შეცდომა", "კომენტარის შენახვა ვერ მოხერხდა.");
+    } finally {
+      setNoteSaving(false);
+    }
   };
 
   const changeYear = (amount) => {
@@ -1466,6 +1545,25 @@ function FertilityCalendarScreen() {
         todayLogs: dayLogs,
       })
     : [];
+
+  // Auto-fetch advice once today's marks settle. Only the logs drive this —
+  // keystrokes deliberately do not, or every pause while typing would spend
+  // another call from the daily AI budget. The comment reaches the assistant
+  // when it is saved.
+  const loggedSignalsKey = isTodaySelected ? JSON.stringify(dayLogs) : null;
+
+  useEffect(() => {
+    if (!loggedSignalsKey || loggedSignalsKey === "{}") return undefined;
+
+    const timer = setTimeout(() => {
+      loadFertilityAdvice(
+        { symptoms: ovSymptoms, mood: null, note },
+        JSON.stringify({ logs: dayLogs, note: note.trim() })
+      );
+    }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedSignalsKey]);
 
   const toggleOvSymptom = (id) => {
     const next = ovSymptoms.includes(id) ? ovSymptoms.filter((s) => s !== id) : [...ovSymptoms, id];
@@ -1661,6 +1759,56 @@ function FertilityCalendarScreen() {
                   </View>
                 </View>
 
+                {/* Comment */}
+                <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>📝 კომენტარი</Text>
+                  <TextInput
+                    value={note}
+                    onChangeText={setNote}
+                    placeholder="როგორ ჩაიარა დღემ, რას შეამჩნევდი..."
+                    placeholderTextColor={theme.subText}
+                    multiline
+                    style={[styles.fertNoteInput, { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text }]}
+                  />
+                  <TouchableOpacity
+                    style={[styles.fertNoteBtn, { backgroundColor: theme.accent }]}
+                    onPress={saveNote}
+                    disabled={noteSaving}
+                  >
+                    {noteSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.fertNoteBtnText}>კომენტარის შენახვა</Text>}
+                  </TouchableOpacity>
+                </View>
+
+                {/* AI advice — appears once today's signals/comment are in */}
+                {isTodaySelected && (assistantSupport.loading || assistantSupport.text) && (
+                  <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <View style={styles.fertAdviceHeader}>
+                      <View style={[styles.fertAdviceIcon, { backgroundColor: theme.chip }]}>
+                        <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.fertAdviceImage} resizeMode="cover" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.fertAdviceEyebrow, { color: theme.accent }]}>დღიური AI</Text>
+                        <Text style={[styles.fertBlockTitle, { color: theme.text, marginBottom: 0 }]}>ასისტენტის რჩევა</Text>
+                      </View>
+                    </View>
+                    {assistantSupport.loading ? (
+                      <View style={styles.fertAdviceLoading}>
+                        <ActivityIndicator color={theme.accent} size="small" />
+                        <Text style={[styles.fertTipText, { color: theme.subText, flex: 1 }]}>
+                          ასისტენტი ამზადებს შენზე მორგებულ რჩევას...
+                        </Text>
+                      </View>
+                    ) : (
+                      <>
+                        <Text style={[styles.fertAdviceText, { color: theme.text }]}>{assistantSupport.text}</Text>
+                        <Text style={[styles.fertDisclaimer, { color: theme.subText, marginTop: 10, textAlign: "left" }]}>
+                          ასისტენტი შეიძლება შეცდეს
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                )}
+
                 {recommendations.length > 0 && (
                   <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
                     <Text style={[styles.fertBlockTitle, { color: theme.text }]}>💡 დღევანდელი რეკომენდაციები</Text>
@@ -1809,6 +1957,15 @@ const styles = StyleSheet.create({
   guideFootnote: { fontSize: 11.5, lineHeight: 17, fontWeight: "600", marginTop: 4, marginBottom: 6 },
   guideCloseBtn: { borderRadius: 999, paddingVertical: 14, alignItems: "center", marginTop: 14 },
   guideCloseText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
+  fertNoteInput: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, minHeight: 88, fontSize: 14, fontWeight: "600", textAlignVertical: "top" },
+  fertNoteBtn: { borderRadius: 999, paddingVertical: 13, alignItems: "center", marginTop: 12 },
+  fertNoteBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
+  fertAdviceHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  fertAdviceIcon: { width: 42, height: 42, borderRadius: 14, overflow: "hidden" },
+  fertAdviceImage: { width: "100%", height: "100%" },
+  fertAdviceEyebrow: { fontSize: 9, fontWeight: "900", letterSpacing: 0.9, marginBottom: 3 },
+  fertAdviceLoading: { flexDirection: "row", alignItems: "center", gap: 10 },
+  fertAdviceText: { fontSize: 13.5, lineHeight: 20, fontWeight: "600" },
 
   // -- Calendar ----------------------------------------------------
   pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingRight: 88, marginBottom: 18 },
