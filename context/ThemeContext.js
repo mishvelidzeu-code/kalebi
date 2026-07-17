@@ -39,6 +39,10 @@ const StandardTheme = {
 
 const ThemeContext = createContext();
 const THEME_PREFERENCE_KEY = "cycle_app_use_premium_theme";
+// Test accounts only: lets the tester flip Prime on/off to check both tiers.
+// Local (AsyncStorage) on purpose — a database flag would be overwritten by the
+// RevenueCat sync, and it must never affect real users.
+const TEST_PRIME_KEY = "cycle_app_test_prime_enabled";
 const DEFAULT_THEME_IS_DARK = false;
 
 export const ThemeProvider = ({ children }) => {
@@ -47,6 +51,7 @@ export const ThemeProvider = ({ children }) => {
   // Paid modes are free for test accounts; everything else stays normal, so
   // Prime is deliberately NOT granted here the way it is for admins.
   const [isTestAccount, setIsTestAccount] = useState(false);
+  const [testPrimeEnabled, setTestPrimeEnabledState] = useState(false);
   const [usePremiumTheme, setUsePremiumThemeState] = useState(DEFAULT_THEME_IS_DARK);
 
   const checkPremiumStatus = useCallback(async () => {
@@ -62,12 +67,23 @@ export const ThemeProvider = ({ children }) => {
         return;
       }
 
-      setIsTestAccount(isTestAccountEmail(user.email || ""));
+      const testAccount = isTestAccountEmail(user.email || "");
+      setIsTestAccount(testAccount);
 
       const adminAccess = isAdminEmail(user.email || "");
       setIsAdmin(adminAccess);
       if (adminAccess) {
         setIsPremium(true);
+        return;
+      }
+
+      // Test accounts follow their own Prime switch instead of the store, so
+      // both the free and the Prime experience can be checked on demand.
+      if (testAccount) {
+        const savedTestPrime = await AsyncStorage.getItem(TEST_PRIME_KEY);
+        const enabled = savedTestPrime === "true";
+        setTestPrimeEnabledState(enabled);
+        setIsPremium(enabled);
         return;
       }
 
@@ -165,6 +181,25 @@ export const ThemeProvider = ({ children }) => {
     }
   }, [usePremiumTheme]);
 
+  // Test-only Prime switch. No-op for everyone else, so a stray call can never
+  // hand a real user a free subscription.
+  const setTestPrimeEnabled = useCallback(async (nextValue) => {
+    if (!isTestAccount) return;
+
+    const resolved = Boolean(
+      typeof nextValue === "function" ? nextValue(testPrimeEnabled) : nextValue
+    );
+
+    setTestPrimeEnabledState(resolved);
+    setIsPremium(resolved);
+
+    try {
+      await AsyncStorage.setItem(TEST_PRIME_KEY, String(resolved));
+    } catch (error) {
+      console.log("Test prime save error:", error);
+    }
+  }, [isTestAccount, testPrimeEnabled]);
+
   const isDark = usePremiumTheme;
   const currentTheme = isDark ? PremiumTheme : StandardTheme;
 
@@ -172,6 +207,8 @@ export const ThemeProvider = ({ children }) => {
     isPremium,
     isAdmin,
     isTestAccount,
+    testPrimeEnabled,
+    setTestPrimeEnabled,
     usePremiumTheme,
     setUsePremiumTheme,
     isDark,

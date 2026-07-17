@@ -77,7 +77,7 @@ const getFileExtension = (asset) => {
 export default function ProfileScreen() {
   const router = useRouter();
   const { openFertility } = useLocalSearchParams();
-  const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin, isTestAccount } = useTheme();
+  const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin, isTestAccount, testPrimeEnabled, setTestPrimeEnabled } = useTheme();
   const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, updatePregnancyStartDate, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
   // Fertility mode reuses the "pregnancy" RevenueCat entitlement — selecting the
   // goal is free, but the tailored AI/advice content stays locked until paid.
@@ -1009,6 +1009,30 @@ export default function ProfileScreen() {
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
           <SettingRow icon="📤" bgColor={isDark ? "#2a1e3d" : "#F5F0FF"} title="მონაცემების ექსპორტი" subtitle="გაუზიარე ექიმს" onPress={exportUserData} showArrow isDarkTheme={isDark} />
         </View>
+
+        {isTestAccount && (
+          <>
+            <Text style={[styles.sectionHeader, { color: theme.subText }]}>ტესტირება</Text>
+            <View style={[styles.settingsBlock, glassBlockStyle]}>
+              <SettingRow
+                icon="🧪"
+                bgColor={isDark ? "#2a233d" : "#F5F0FF"}
+                title="Prime (სატესტო)"
+                subtitle={testPrimeEnabled ? "ჩართულია — Prime რეჟიმი" : "გამორთულია — Free რეჟიმი"}
+                isDarkTheme={isDark}
+                rightElement={
+                  <Switch
+                    value={testPrimeEnabled}
+                    onValueChange={setTestPrimeEnabled}
+                    trackColor={{ true: theme.primary, false: theme.switchTrackOff }}
+                    thumbColor={testPrimeEnabled ? theme.switchThumbOn : theme.switchThumbOff}
+                    ios_backgroundColor={theme.switchTrackOff}
+                  />
+                }
+              />
+            </View>
+          </>
+        )}
 
         {isAdmin && (
           <>
