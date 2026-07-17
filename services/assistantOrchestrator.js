@@ -777,7 +777,23 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
   const context = await getAssistantContext();
   const todayOverride = buildTodayOverride({ symptoms, mood, note });
 
-  if (!todayOverride.todayEntry.exists) {
+  const isPregnancy = Boolean(context.pregnancy_mode);
+  const fertility = context.fertilityTracking || null;
+  // In fertility mode a logged signal is content in itself — without this,
+  // ticking only a test would produce an empty card. This must accept ANY log
+  // the calendar can write, because the calendar triggers advice on any of
+  // them; a narrower rule here would flash a loader and then show nothing.
+  const hasFertilitySignals = Boolean(
+    fertility &&
+      (fertility.today?.lh_test ||
+        fertility.today?.bbt_celsius != null ||
+        fertility.today?.cervical_mucus ||
+        fertility.today?.intercourse_logged ||
+        fertility.today?.ovulation_symptoms?.length ||
+        fertility.today?.supplements_taken?.length)
+  );
+
+  if (!todayOverride.todayEntry.exists && !hasFertilitySignals) {
     return {
       text: "",
       context: {
@@ -787,7 +803,15 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
     };
   }
 
-  const isPregnancy = Boolean(context.pregnancy_mode);
+  const fertilityPrompt = [
+    "The user is tracking to conceive and has just updated today's fertility entry.",
+    "Interpret what today's logged signals (LH test, basal temperature, cervical mucus) suggest about where she is in her fertile window.",
+    "Be warm and encouraging, and acknowledge her note if there is one.",
+    "Give one concrete, useful next step for today (for example testing again, timing intimacy, or measuring temperature tomorrow).",
+    "A positive LH test means ovulation typically follows within 24-36 hours.",
+    "Never promise conception, never diagnose, and hedge when the signals are unclear.",
+    "Keep it concise for a mobile card.",
+  ].join(" ");
 
   const prompt = isPregnancy
     ? [
@@ -799,6 +823,8 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
         "If she logged baby movement, respond with warmth about that milestone.",
         "Keep it concise and encouraging for a mobile card.",
       ].join(" ")
+    : fertility
+    ? fertilityPrompt
     : [
         "The user has just saved today's diary entry.",
         "Give a short, warm psychological support message tailored to today's mood, symptoms, and note.",
@@ -827,6 +853,16 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
         symptoms: todayOverride.symptoms,
         mood: todayOverride.mood,
         note: todayOverride.todayEntry.note,
+        // Fertility advice is useless without the signals it is meant to read.
+        ...(fertility
+          ? {
+              fertility_today: fertility.today,
+              days_to_ovulation: fertility.days_to_ovulation,
+              best_ovulation_estimate: fertility.best_ovulation_estimate,
+              confirmed_ovulation: fertility.confirmed_ovulation,
+              cycle_regularity: fertility.cycle_regularity,
+            }
+          : {}),
       };
 
   const response = await generateAiResponse({

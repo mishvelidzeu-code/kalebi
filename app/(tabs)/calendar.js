@@ -1350,6 +1350,8 @@ function FertilityCalendarScreen() {
   const [note, setNote] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [assistantSupport, setAssistantSupport] = useState({ loading: false, text: "", signature: null });
+  // Advice is fetched for user edits only, never for a plain page load.
+  const hasUserEditedRef = useRef(false);
 
   const theme = {
     text: isDark ? "#EAFBF4" : "#183A30",
@@ -1429,6 +1431,8 @@ function FertilityCalendarScreen() {
   useEffect(() => {
     loadDayNote(selectedDay);
     setAssistantSupport({ loading: false, text: "", signature: null });
+    // Switching days is not an edit — don't let the incoming logs trigger a fetch.
+    hasUserEditedRef.current = false;
   }, [selectedDay, loadDayNote]);
 
   // Fertility advice is not Prime-gated — the pregnancy entitlement covers it,
@@ -1459,6 +1463,7 @@ function FertilityCalendarScreen() {
   };
 
   const saveLog = async (type, value) => {
+    hasUserEditedRef.current = true;
     // Optimistic update so the UI responds instantly.
     setDayLogs((prev) => {
       const next = { ...prev };
@@ -1546,14 +1551,17 @@ function FertilityCalendarScreen() {
       })
     : [];
 
-  // Auto-fetch advice once today's marks settle. Only the logs drive this —
-  // keystrokes deliberately do not, or every pause while typing would spend
-  // another call from the daily AI budget. The comment reaches the assistant
-  // when it is saved.
+  // Auto-fetch advice once today's marks settle. Two deliberate limits, both
+  // about not burning the daily AI budget:
+  //  - only an actual user edit triggers it (hasUserEditedRef). Otherwise
+  //    merely opening the calendar on a day that already has logs would spend
+  //    a call, every visit.
+  //  - keystrokes do not trigger it; the comment is sent when saved.
   const loggedSignalsKey = isTodaySelected ? JSON.stringify(dayLogs) : null;
 
   useEffect(() => {
     if (!loggedSignalsKey || loggedSignalsKey === "{}") return undefined;
+    if (!hasUserEditedRef.current) return undefined;
 
     const timer = setTimeout(() => {
       loadFertilityAdvice(
