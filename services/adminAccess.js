@@ -1,15 +1,19 @@
-// App-side admin list. This is what unlocks paid modes for testing
-// (fertilityUnlocked / isPremium), because it cannot be overwritten by the
-// RevenueCat sync the way a database flag can.
+export const ADMIN_EMAILS = ["mishvelidze.u@gmail.com"];
+
+// Test accounts: the paid modes (fertility / pregnancy) are free for them, and
+// nothing else changes — the app looks and behaves exactly as it does for a
+// normal user. Deliberately NOT admins: isAdmin hides the home, calendar,
+// assistant and statistics tabs and boots into the dashboard, which would make
+// testing those very modes impossible.
 //
-// Note: the DB's admin RLS policies and the ai-assistant edge function keep
-// their own separate lists, deliberately not widened here — a test account has
-// no business reading every user's data.
-export const ADMIN_EMAILS = [
-  "mishvelidze.u@gmail.com",
-  "u@gmail.com", // test account
-];
+// This lives in code rather than in the database because on iOS RevenueCat is
+// the source of truth and its sync overwrites profile subscription flags.
+export const TEST_ACCOUNT_EMAILS = ["u@gmail.com"];
 
 export function isAdminEmail(email = "") {
   return ADMIN_EMAILS.includes(email.trim().toLowerCase());
+}
+
+export function isTestAccountEmail(email = "") {
+  return TEST_ACCOUNT_EMAILS.includes(email.trim().toLowerCase());
 }

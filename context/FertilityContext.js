@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { AppState } from "react-native";
 
 import { supabase } from "../services/supabase";
-import { isAdminEmail } from "../services/adminAccess";
+import { isAdminEmail, isTestAccountEmail } from "../services/adminAccess";
 import { resolvePregnancyAccessFromProfile } from "../services/purchases";
 
 const FertilityContext = createContext(null);
@@ -35,7 +35,7 @@ export function FertilityProvider({ children }) {
 
       if (data) {
         const paidAccess = resolvePregnancyAccessFromProfile(data);
-        const access = isAdminEmail(user.email) || paidAccess;
+        const access = isAdminEmail(user.email) || isTestAccountEmail(user.email) || paidAccess;
         const isPregnant = Boolean(data.pregnancy_mode);
         const wantsFertility = data.goal === FERTILITY_GOAL;
 

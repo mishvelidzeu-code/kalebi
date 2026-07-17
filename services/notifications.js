@@ -4,7 +4,7 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-import { isAdminEmail } from "./adminAccess";
+import { isAdminEmail, isTestAccountEmail } from "./adminAccess";
 import { resolvePregnancyAccessFromProfile } from "./purchases";
 import { supabase } from "./supabase";
 
@@ -528,7 +528,9 @@ export async function syncCycleRemindersForUser() {
     // Fertility mode: same access rule as FertilityContext (admin or the
     // shared pregnancy entitlement), swapping in conception-focused nudges.
     const fertilityAccess =
-      isAdminEmail(user.email) || resolvePregnancyAccessFromProfile(profile);
+      isAdminEmail(user.email)
+      || isTestAccountEmail(user.email)
+      || resolvePregnancyAccessFromProfile(profile);
     if (profile?.goal === "დაორსულება" && fertilityAccess) {
       return scheduleFertilityReminders(lastPeriodDate, cycleLength);
     }

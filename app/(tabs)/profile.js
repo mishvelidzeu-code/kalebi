@@ -77,11 +77,13 @@ const getFileExtension = (asset) => {
 export default function ProfileScreen() {
   const router = useRouter();
   const { openFertility } = useLocalSearchParams();
-  const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin } = useTheme();
+  const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin, isTestAccount } = useTheme();
   const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, updatePregnancyStartDate, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
   // Fertility mode reuses the "pregnancy" RevenueCat entitlement — selecting the
   // goal is free, but the tailored AI/advice content stays locked until paid.
-  const fertilityUnlocked = isAdmin || hasSubscription;
+  // Test accounts get it without paying; see services/adminAccess.js.
+  const freeModeAccess = isAdmin || isTestAccount;
+  const fertilityUnlocked = freeModeAccess || hasSubscription;
 
   const [userId, setUserId] = useState("");
   const [email, setEmail] = useState("");
@@ -560,11 +562,11 @@ export default function ProfileScreen() {
       const fallbackDate = selectedPregnancyDate instanceof Date ? selectedPregnancyDate : new Date();
       const dateStr = overrideStartDate || dayjs(fallbackDate).format("YYYY-MM-DD");
 
-      if (isAdmin) {
+      if (freeModeAccess) {
         await enablePregnancyMode(dateStr);
         setShowPregnancyModal(false);
         setSelectedPregnancyDate(null);
-        Alert.alert("ადმინ წვდომა აქტიურია ✨", "ორსულობის რეჟიმი ჩაირთო შეზღუდვების გარეშე.");
+        Alert.alert("ორსულობის რეჟიმი ჩაირთო ✨", "წვდომა გააქტიურდა შეზღუდვების გარეშე.");
         return;
       }
 
@@ -693,7 +695,7 @@ export default function ProfileScreen() {
   };
 
   const handlePregnancyEntryPress = async () => {
-    if (isAdmin || hasSubscription) {
+    if (freeModeAccess || hasSubscription) {
       setSelectedPregnancyDate(pregnancyStartDate ? dayjs(pregnancyStartDate).toDate() : new Date());
       setPregnancyModalMode("enable");
       setShowPregnancyModal(true);
@@ -739,10 +741,10 @@ export default function ProfileScreen() {
 
     setFertilitySaving(true);
     try {
-      if (isAdmin) {
+      if (freeModeAccess) {
         await updateGoalMode("დაორსულება");
         setShowFertilityModal(false);
-        Alert.alert("ადმინ წვდომა აქტიურია ✨", `"${FERTILITY_MODE_LABEL}" ჩაირთო შეზღუდვების გარეშე.`);
+        Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო ✨`, "წვდომა გააქტიურდა შეზღუდვების გარეშე.");
         return;
       }
 

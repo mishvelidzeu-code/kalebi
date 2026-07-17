@@ -438,7 +438,7 @@ function PregnancyHomeScreen({ isDark }) {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { isDark, isPremium, isAdmin } = useTheme();
+  const { isDark, isPremium, isAdmin, isTestAccount } = useTheme();
   const { pregnancyMode } = usePregnancy();
   const { fertilityMode } = useFertility();
   const lastAdviceKeyRef = useRef("");
@@ -605,7 +605,7 @@ export default function HomeScreen() {
       const rawGoal = profile?.goal || DEFAULT_GOAL;
       // Fertility goal is free to pick, but the tailored advice pool is locked
       // behind the same "pregnancy" entitlement until the user pays for it.
-      const fertilityUnlocked = isAdmin || Boolean(profile?.has_pregnancy_subscription);
+      const fertilityUnlocked = isAdmin || isTestAccount || Boolean(profile?.has_pregnancy_subscription);
       const currentGoal = rawGoal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL : rawGoal;
 
       setUserName(profile?.name || user.email?.split("@")[0] || "ანი");
@@ -703,7 +703,7 @@ export default function HomeScreen() {
         hasLoadedOnceRef.current = true;
       }
     }
-  }, [getPhaseAndChance, isPremium, isAdmin, fertilityMode, refreshHomeAdvice]);
+  }, [getPhaseAndChance, isPremium, isAdmin, isTestAccount, fertilityMode, refreshHomeAdvice]);
 
   useFocusEffect(
     useCallback(() => {

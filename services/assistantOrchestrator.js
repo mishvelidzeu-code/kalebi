@@ -15,7 +15,7 @@ import {
   getPersonalizedLutealLength,
   refineOvulationEstimate,
 } from "../utils/ovulationDetection";
-import { isAdminEmail } from "./adminAccess";
+import { isAdminEmail, isTestAccountEmail } from "./adminAccess";
 import { generateAiResponse } from "./ai";
 import { getFertilityLogsForDay, getFertilityLogsRange } from "./fertilityLogs";
 import { supabase } from "./supabase";
@@ -345,6 +345,7 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
   // picking it as a goal is free, but the tailored AI content stays locked until paid.
   const fertilityUnlocked =
     isAdminEmail(user.email)
+    || isTestAccountEmail(user.email)
     || Boolean(profile.has_pregnancy_subscription);
   const effectiveGoal = profile.goal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL_LABEL : profile.goal;
 

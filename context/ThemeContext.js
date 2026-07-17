@@ -2,7 +2,7 @@ import { DefaultTheme } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { isAdminEmail } from "../services/adminAccess";
+import { isAdminEmail, isTestAccountEmail } from "../services/adminAccess";
 import {
   resolvePremiumAccessFromProfile,
   syncPremiumStatusFromPurchases,
@@ -44,6 +44,9 @@ const DEFAULT_THEME_IS_DARK = false;
 export const ThemeProvider = ({ children }) => {
   const [isPremium, setIsPremium] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  // Paid modes are free for test accounts; everything else stays normal, so
+  // Prime is deliberately NOT granted here the way it is for admins.
+  const [isTestAccount, setIsTestAccount] = useState(false);
   const [usePremiumTheme, setUsePremiumThemeState] = useState(DEFAULT_THEME_IS_DARK);
 
   const checkPremiumStatus = useCallback(async () => {
@@ -55,8 +58,11 @@ export const ThemeProvider = ({ children }) => {
       if (!user) {
         setIsPremium(false);
         setIsAdmin(false);
+        setIsTestAccount(false);
         return;
       }
+
+      setIsTestAccount(isTestAccountEmail(user.email || ""));
 
       const adminAccess = isAdminEmail(user.email || "");
       setIsAdmin(adminAccess);
@@ -165,6 +171,7 @@ export const ThemeProvider = ({ children }) => {
   const themeContextValue = {
     isPremium,
     isAdmin,
+    isTestAccount,
     usePremiumTheme,
     setUsePremiumTheme,
     isDark,
