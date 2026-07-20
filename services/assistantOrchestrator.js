@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 import { calculateCycleState, getPregnancyChanceKey } from "../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../utils/cyclePrediction";
 import { buildFertilityAiContext } from "../utils/fertilityInsights";
+import { buildPregnancyMemory } from "../utils/pregnancyMemory";
 import {
   analyzeCycleRegularity,
   buildFertileWindows,
@@ -92,6 +93,13 @@ CRITICAL RULE: You must communicate with the user EXCLUSIVELY in natural, modern
 - EDUCATIONAL: Share relevant weekly development milestones and what the user can expect.
 - TONE: Warm, motherly, reassuring, non-judgmental, and scientifically accurate. Use emojis to keep it friendly. 💗
 - Never diagnose. If symptoms are severe (bleeding, severe pain, fever), always advise consulting a doctor immediately.
+
+# LONG-TERM MEMORY (only when context.pregnancyMemory exists)
+This holds a factual summary of her whole pregnancy so far, NOT past chat transcripts. Use it to feel continuous and attentive.
+- symptom_history: which symptoms she logged, how many times, and the pregnancy-week range. Reference it naturally ("გულისრევა I ტრიმესტრში გქონდა — ახლა უკეთ ხარ?"). Recall as PAST unless she says it is happening now; never present an old symptom as today's.
+- notable_notes: things she wrote in her own words, with the week. You may gently follow up on them.
+- recent_questions: topics she has been asking about lately — use them to stay on theme, do not quote them back verbatim.
+- This is memory for warmth and continuity, NOT a medical chart. Do NOT analyse trends as if monitoring her health ("your blood-pressure history concerns me" is forbidden), do NOT draw diagnostic conclusions from the history, and if the pattern looks worrying, simply suggest she mention it to her doctor.
 
 # SAFETY & BOUNDARIES (STRICT)
 - You are an AI assistant, NOT a certified doctor or midwife.
@@ -331,6 +339,39 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
   const recentEntries = symptoms.filter((entry) => entry.date !== today).slice(0, 3);
 
   const pregnancyStartDate = profile.pregnancy_start_date || null;
+
+  // Pregnancy long-term memory: pull the whole pregnancy's symptom log and the
+  // recent chat topics, then compress them to facts (not transcripts). Only in
+  // pregnancy mode, and best-effort — it must never break the base context.
+  let pregnancyMemory = null;
+  if (profile.pregnancy_mode && pregnancyStartDate) {
+    try {
+      const [fullSymptomsResponse, historyResponse] = await Promise.all([
+        supabase
+          .from("symptoms")
+          .select("date, symptoms, note")
+          .eq("user_id", user.id)
+          .gte("date", pregnancyStartDate)
+          .order("date", { ascending: false })
+          .limit(300),
+        supabase
+          .from("assistant_chat_history")
+          .select("question")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(15),
+      ]);
+
+      pregnancyMemory = buildPregnancyMemory({
+        symptomRows: fullSymptomsResponse.data || [],
+        historyRows: historyResponse.data || [],
+        lmpDate: pregnancyStartDate,
+      });
+    } catch (error) {
+      console.log("Pregnancy memory skipped:", error);
+    }
+  }
+
   const pregnancyWeek = pregnancyStartDate
     ? Math.min(Math.floor(dayjs().diff(dayjs(pregnancyStartDate), "day") / 7) + 1, 40)
     : null;
@@ -434,6 +475,7 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
       top_symptoms: summarizeSymptoms(symptoms),
     },
     ...(fertilityTracking ? { fertilityTracking } : {}),
+    ...(pregnancyMemory ? { pregnancyMemory } : {}),
   };
 
   assistantContextCache = {
