@@ -15,6 +15,7 @@ import { ActivityIndicator, Alert, AppState, Modal, Platform, Pressable, Refresh
 
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
+import { useFertility } from "../../context/FertilityContext";
 import { TEMP_FERTILITY_COMING_SOON } from "../../constants/tempFlags";
 import { invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { disableCycleReminders, getNotificationsEnabled, setNotificationsEnabled, syncCycleRemindersForUser } from "../../services/notifications";
@@ -79,6 +80,7 @@ export default function ProfileScreen() {
   const { openFertility } = useLocalSearchParams();
   const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin, isTestAccount, testPrimeEnabled, setTestPrimeEnabled } = useTheme();
   const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, updatePregnancyStartDate, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
+  const { reload: reloadFertility } = useFertility();
   // Fertility mode reuses the "pregnancy" RevenueCat entitlement — selecting the
   // goal is free, but the tailored AI/advice content stays locked until paid.
   // Test accounts get it without paying; see services/adminAccess.js.
@@ -171,6 +173,7 @@ export default function ProfileScreen() {
 
         if (pendingCheckout.type === "pregnancy") {
           await enablePregnancyMode(pendingCheckout.dateStr);
+          await reloadFertility();
           setShowPregnancyModal(false);
           setSelectedPregnancyDate(null);
           Alert.alert("ორსულობის რეჟიმი ჩაირთო", "გადახდა დადასტურდა და ორსულობის რეჟიმი ჩაირთო.");
@@ -554,6 +557,9 @@ export default function ProfileScreen() {
 
     setGoal(nextGoal);
     invalidateAssistantContextCache();
+    // FertilityContext only re-reads the profile on mount and on foreground, so
+    // without this the mode would not switch until the app was restarted.
+    await reloadFertility();
   };
 
   const handlePregnancyEnable = async (overrideStartDate = null) => {
@@ -616,6 +622,9 @@ export default function ProfileScreen() {
         }
       }
 
+      // Pregnancy outranks fertility, so refresh it here too — otherwise the
+      // fertility screens would linger until the app restarted.
+      await reloadFertility();
       setShowPregnancyModal(false);
       setSelectedPregnancyDate(null);
       Alert.alert("ორსულობის რეჟიმი ჩაირთო ✨", "აპლიკაცია ახლა მორგებულია შენი ორსულობისთვის.");
@@ -675,6 +684,9 @@ export default function ProfileScreen() {
           style: "destructive",
           onPress: async () => {
             await disablePregnancyMode();
+            // Leaving pregnancy can hand control back to fertility if that goal
+            // is still set, so let it re-evaluate now rather than on restart.
+            await reloadFertility();
             Alert.alert("დაბრუნდი ✨", "ჩვეულებრივი ციკლის რეჟიმი ჩაირთო.");
           },
         },
