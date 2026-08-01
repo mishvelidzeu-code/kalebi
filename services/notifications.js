@@ -510,8 +510,16 @@ export async function syncCycleRemindersForUser() {
     const latestCycle = latestCycleResponse.data?.[0];
     const profile = profileResponse.data;
 
+    // One access rule for the shared "pregnancy" entitlement, matching
+    // PregnancyContext and FertilityContext: admin/test account or a live
+    // subscription. A lapsed one falls back to plain cycle reminders.
+    const pregnancyAccess =
+      isAdminEmail(user.email)
+      || isTestAccountEmail(user.email)
+      || resolvePregnancyAccessFromProfile(profile);
+
     // Pregnancy mode: schedule pregnancy-specific notifications
-    if (profile?.pregnancy_mode && profile?.last_period) {
+    if (profile?.pregnancy_mode && pregnancyAccess && profile?.last_period) {
       return schedulePregnancyNotifications(profile.last_period);
     }
 
@@ -525,13 +533,8 @@ export async function syncCycleRemindersForUser() {
       return [];
     }
 
-    // Fertility mode: same access rule as FertilityContext (admin or the
-    // shared pregnancy entitlement), swapping in conception-focused nudges.
-    const fertilityAccess =
-      isAdminEmail(user.email)
-      || isTestAccountEmail(user.email)
-      || resolvePregnancyAccessFromProfile(profile);
-    if (profile?.goal === "დაორსულება" && fertilityAccess) {
+    // Fertility mode swaps in conception-focused nudges.
+    if (profile?.goal === "დაორსულება" && pregnancyAccess) {
       return scheduleFertilityReminders(lastPeriodDate, cycleLength);
     }
 

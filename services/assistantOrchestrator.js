@@ -19,6 +19,7 @@ import {
 import { isAdminEmail, isTestAccountEmail } from "./adminAccess";
 import { generateAiResponse } from "./ai";
 import { getFertilityLogsForDay, getFertilityLogsRange } from "./fertilityLogs";
+import { resolvePregnancyAccessFromProfile } from "./purchases";
 import { supabase } from "./supabase";
 
 const DEFAULT_GOAL_LABEL = "ციკლის კონტროლი";
@@ -325,7 +326,7 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
 
   const today = dayjs().format("YYYY-MM-DD");
   const [profileResponse, cyclesResponse, symptomsResponse, todaySymptomsResponse] = await Promise.all([
-    supabase.from("profiles").select("name, goal, cycle_length, period_length, last_period, pregnancy_mode, pregnancy_start_date, has_pregnancy_subscription, birth_date").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("name, goal, cycle_length, period_length, last_period, pregnancy_mode, pregnancy_start_date, has_pregnancy_subscription, pregnancy_until, birth_date").eq("id", user.id).maybeSingle(),
     supabase.from("cycles").select("start_date, cycle_length, period_length").eq("user_id", user.id).order("start_date", { ascending: false }).limit(6),
     supabase.from("symptoms").select("date, symptoms, mood, note").eq("user_id", user.id).order("date", { ascending: false }).limit(10),
     supabase.from("symptoms").select("date, symptoms, mood, note").eq("user_id", user.id).eq("date", today).maybeSingle(),
@@ -340,11 +341,21 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
 
   const pregnancyStartDate = profile.pregnancy_start_date || null;
 
+  // One access rule for the shared "pregnancy" entitlement — it unlocks both the
+  // pregnancy mode and the fertility ("დაორსულება") content. Expiry counts, so a
+  // cancelled subscription cannot keep the paid persona alive. Mirrors
+  // PregnancyContext, which gates the screens the same way.
+  const pregnancyAccess =
+    isAdminEmail(user.email)
+    || isTestAccountEmail(user.email)
+    || resolvePregnancyAccessFromProfile(profile);
+  const pregnancyModeActive = Boolean(profile.pregnancy_mode) && pregnancyAccess;
+
   // Pregnancy long-term memory: pull the whole pregnancy's symptom log and the
   // recent chat topics, then compress them to facts (not transcripts). Only in
   // pregnancy mode, and best-effort — it must never break the base context.
   let pregnancyMemory = null;
-  if (profile.pregnancy_mode && pregnancyStartDate) {
+  if (pregnancyModeActive && pregnancyStartDate) {
     try {
       const [fullSymptomsResponse, historyResponse] = await Promise.all([
         supabase
@@ -384,15 +395,11 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
 
   // Fertility ("დაორსულება") is a paid tier of the same "pregnancy" entitlement —
   // picking it as a goal is free, but the tailored AI content stays locked until paid.
-  const fertilityUnlocked =
-    isAdminEmail(user.email)
-    || isTestAccountEmail(user.email)
-    || Boolean(profile.has_pregnancy_subscription);
-  const effectiveGoal = profile.goal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL_LABEL : profile.goal;
+  const effectiveGoal = profile.goal === "დაორსულება" && !pregnancyAccess ? DEFAULT_GOAL_LABEL : profile.goal;
 
   // Fertility mode injects the tracked signals (LH / BBT / mucus) so answers
   // can reason about what the user actually logged, not just the calendar.
-  const isFertilityMode = effectiveGoal === "დაორსულება" && !profile.pregnancy_mode;
+  const isFertilityMode = effectiveGoal === "დაორსულება" && !pregnancyModeActive;
   let fertilityTracking = null;
 
   if (isFertilityMode) {
@@ -442,7 +449,7 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
     user_name: profile.name || user.email?.split("@")[0] || "მომხმარებელი",
     user_goal: mapGoalToAssistantGoal(effectiveGoal),
     user_goal_label: String(effectiveGoal || DEFAULT_GOAL_LABEL).trim() || DEFAULT_GOAL_LABEL,
-    pregnancy_mode: profile.pregnancy_mode ?? false,
+    pregnancy_mode: pregnancyModeActive,
     pregnancy_week: pregnancyWeek,
     pregnancy_trimester: pregnancyTrimester,
     days_remaining: daysRemaining,

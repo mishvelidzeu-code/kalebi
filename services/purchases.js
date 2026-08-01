@@ -95,14 +95,15 @@ function getPregnancyEntitlementInfo(customerInfo) {
   );
 }
 
+// Only ever the entitlement's own expiry. `customerInfo.latestExpirationDate` is
+// the latest date across ALL products, so using it as a fallback would write the
+// Prime expiry into pregnancy_until (and vice versa) and hand out free access.
 function getPrimeExpirationDate(customerInfo) {
-  const entitlementInfo = getPrimeEntitlementInfo(customerInfo);
-  return entitlementInfo?.expirationDate || customerInfo?.latestExpirationDate || null;
+  return getPrimeEntitlementInfo(customerInfo)?.expirationDate || null;
 }
 
 function getPregnancyExpirationDate(customerInfo) {
-  const entitlementInfo = getPregnancyEntitlementInfo(customerInfo);
-  return entitlementInfo?.expirationDate || customerInfo?.latestExpirationDate || null;
+  return getPregnancyEntitlementInfo(customerInfo)?.expirationDate || null;
 }
 
 function getPaymentTimestamp(entitlementInfo) {
@@ -438,6 +439,26 @@ function hasActivePregnancyEntitlement(customerInfo) {
 }
 
 async function writePregnancyStatusToProfile(user, hasSub, pregnancyUntil = null, metadata = {}) {
+  // Granting access is always allowed; taking it away is not. RevenueCat only
+  // knows about purchases made through its own SDK — access bought via the
+  // Android web checkout, or granted before that flow existed, is invisible to
+  // it. For those rows "no entitlement" means "unknown", not "cancelled", so
+  // revoking would lock out people who really did pay. Rows that RevenueCat
+  // itself created are still revoked normally, which is what closes the hole.
+  if (!hasSub) {
+    const { data: current } = await supabase
+      .from("profiles")
+      .select("has_pregnancy_subscription, pregnancy_source")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const grantedByStore = String(current?.pregnancy_source || "").startsWith("revenuecat");
+
+    if (Boolean(current?.has_pregnancy_subscription) && !grantedByStore) {
+      return;
+    }
+  }
+
   const payload = {
     id: user.id,
     email: user.email,

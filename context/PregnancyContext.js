@@ -1,10 +1,14 @@
 import dayjs from "dayjs";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 
+import { isAdminEmail, isTestAccountEmail } from "../services/adminAccess";
 import { supabase } from "../services/supabase";
 import { schedulePregnancyNotifications, syncCycleRemindersForUser } from "../services/notifications";
-import { resolvePregnancyAccessFromProfile } from "../services/purchases";
+import {
+  checkPregnancySubscriptionStatus,
+  resolvePregnancyAccessFromProfile,
+} from "../services/purchases";
 
 const PregnancyContext = createContext(null);
 
@@ -17,7 +21,26 @@ export function PregnancyProvider({ children }) {
   const loadPregnancyData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setPregnancyMode(false);
+        setPregnancyStartDate(null);
+        setHasSubscription(false);
+        return;
+      }
+
+      // iOS: ask the store first, so pregnancy_until reflects renewals and
+      // cancellations before we read it. Without this the profile keeps the
+      // expiry of the very first billing period forever — a renewing subscriber
+      // would lose access after a month and a cancelled one would keep it.
+      // Android's source of truth is the profile row itself, so it is skipped.
+      if (Platform.OS === "ios") {
+        try {
+          await checkPregnancySubscriptionStatus();
+        } catch (error) {
+          // Offline or a store hiccup — fall back to the stored profile values.
+          console.log("Pregnancy subscription refresh skipped:", error);
+        }
+      }
 
       const { data } = await supabase
         .from("profiles")
@@ -26,28 +49,20 @@ export function PregnancyProvider({ children }) {
         .single();
 
       if (data) {
-        const hasPaidAccess = resolvePregnancyAccessFromProfile(data);
-        const nextPregnancyMode = data.pregnancy_mode ?? false;
-        const nextStartDate = data.pregnancy_start_date ?? null;
-        const nextHasSubscription = Boolean(hasPaidAccess || nextPregnancyMode);
+        // Access comes from the store (or a free-mode account) and never from
+        // pregnancy_mode itself. Treating the mode flag as proof of payment is
+        // what used to keep cancelled subscriptions alive forever.
+        const access =
+          isAdminEmail(user.email)
+          || isTestAccountEmail(user.email)
+          || resolvePregnancyAccessFromProfile(data);
 
-        if (nextHasSubscription && !data.has_pregnancy_subscription) {
-          await supabase
-            .from("profiles")
-            .update({ has_pregnancy_subscription: true })
-            .eq("id", user.id);
-        }
-
-        if (!hasPaidAccess && data.has_pregnancy_subscription) {
-          await supabase
-            .from("profiles")
-            .update({ has_pregnancy_subscription: false })
-            .eq("id", user.id);
-        }
-
-        setPregnancyMode(nextPregnancyMode);
-        setPregnancyStartDate(nextStartDate);
-        setHasSubscription(nextHasSubscription);
+        setHasSubscription(access);
+        // The pregnancy_mode column stays untouched, so the whole experience
+        // (and its data) comes straight back on renewal — access only gates
+        // what the app shows right now.
+        setPregnancyMode(Boolean(data.pregnancy_mode) && access);
+        setPregnancyStartDate(data.pregnancy_start_date ?? null);
       }
     } catch (error) {
       console.error("PregnancyContext load error:", error);
@@ -74,14 +89,18 @@ export function PregnancyProvider({ children }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // has_pregnancy_subscription is owned by services/purchases.js — the store
+    // is the only thing allowed to grant access. Turning the mode on must never
+    // write it, otherwise the mode itself becomes a free, never-expiring pass.
     await supabase.from("profiles").update({
       pregnancy_mode: true,
       pregnancy_start_date: startDate,
-      has_pregnancy_subscription: true,
     }).eq("id", user.id);
 
     setPregnancyMode(true);
     setPregnancyStartDate(startDate);
+    // Every caller verifies access before reaching this point (paid, restored,
+    // or a free-mode account), so mirror it now instead of waiting for a reload.
     setHasSubscription(true);
 
     // Defer notification scheduling so UI re-render completes first
@@ -109,15 +128,11 @@ export function PregnancyProvider({ children }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const updatePayload = {
-      pregnancy_mode: false,
-    };
-
-    if (hasSubscription) {
-      updatePayload.has_pregnancy_subscription = true;
-    }
-
-    await supabase.from("profiles").update(updatePayload).eq("id", user.id);
+    // Only the mode is switched off. The subscription is deliberately left
+    // alone — it lives in the store and is cancelled from App Store →
+    // Subscriptions, and re-asserting the flag here would resurrect access that
+    // the store has already taken away.
+    await supabase.from("profiles").update({ pregnancy_mode: false }).eq("id", user.id);
 
     setPregnancyMode(false);
 
@@ -125,7 +140,7 @@ export function PregnancyProvider({ children }) {
     setTimeout(() => {
       syncCycleRemindersForUser().catch(() => {});
     }, 500);
-  }, [hasSubscription]);
+  }, []);
 
   const currentWeek = pregnancyStartDate
     ? Math.min(Math.floor(dayjs().diff(dayjs(pregnancyStartDate), "day") / 7) + 1, 40)

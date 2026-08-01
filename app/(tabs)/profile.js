@@ -602,8 +602,11 @@ export default function ProfileScreen() {
       const { configured, availablePackage } = await getPregnancyOfferings();
 
       if (!configured) {
-        // RevenueCat not set up (dev/simulator) — enable directly for testing
-        await enablePregnancyMode(dateStr);
+        // Offerings failed to load (no key, network, store outage). Enabling
+        // here would hand out the paid mode for free, so fail honestly instead.
+        // Testing goes through an admin or test account (freeModeAccess above).
+        Alert.alert("დროებით მიუწვდომელია", "გამოწერა ამჟამად ვერ ჩაიტვირთა. სცადე ცოტა ხანში.");
+        return;
       } else {
         const status = await checkPregnancySubscriptionStatus();
         if (status.hasSubscription) {
