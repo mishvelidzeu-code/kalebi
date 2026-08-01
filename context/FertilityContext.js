@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { supabase } from "../services/supabase";
@@ -17,15 +17,21 @@ export function FertilityProvider({ children }) {
   const [fertilityMode, setFertilityMode] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Whose data is currently in state — see PregnancyContext for why this is
+  // compared instead of clearing on every auth event.
+  const loadedUserIdRef = useRef(null);
 
   const loadFertilityData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
+        loadedUserIdRef.current = null;
         setFertilityMode(false);
         setHasAccess(false);
         return;
       }
+
+      loadedUserIdRef.current = user.id;
 
       const { data } = await supabase
         .from("profiles")
@@ -60,6 +66,29 @@ export function FertilityProvider({ children }) {
       }
     });
     return () => subscription.remove();
+  }, [loadFertilityData]);
+
+  // Sign-out and account switches must not leave the previous user's fertility
+  // state on screen; token refreshes are ignored by comparing the user id.
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextUserId = session?.user?.id ?? null;
+      if (nextUserId === loadedUserIdRef.current) {
+        return;
+      }
+
+      loadedUserIdRef.current = nextUserId;
+      setFertilityMode(false);
+      setHasAccess(false);
+
+      if (nextUserId) {
+        loadFertilityData();
+      }
+    });
+
+    return () => subscription?.unsubscribe?.();
   }, [loadFertilityData]);
 
   return (

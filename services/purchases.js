@@ -283,21 +283,26 @@ function hasActiveEntitlement(customerInfo) {
 }
 
 async function writePremiumStatusToProfile(user, isPremium, premiumUntil = null, metadata = {}) {
+  const payload = {
+    id: user.id,
+    email: user.email,
+    is_premium: isPremium,
+    premium_until: premiumUntil,
+  };
+
+  // Billing history is only ever written, never cleared. It used to be blanked
+  // on every "not premium" refresh, which erased what the user bought and when —
+  // exactly what is needed to answer "but I paid for this".
+  const source = metadata.source || (isPremium ? getPurchaseSource() : null);
+
+  if (metadata.plan) payload.premium_plan = metadata.plan;
+  if (source) payload.premium_source = source;
+  if (metadata.lastPaymentAt) payload.premium_last_payment_at = metadata.lastPaymentAt;
+  if (metadata.orderId) payload.premium_order_id = metadata.orderId;
+
   const { error } = await supabase
     .from("profiles")
-    .upsert(
-      {
-        id: user.id,
-        email: user.email,
-        is_premium: isPremium,
-        premium_until: premiumUntil,
-        premium_plan: metadata.plan || null,
-        premium_source: metadata.source || (isPremium ? getPurchaseSource() : null),
-        premium_last_payment_at: metadata.lastPaymentAt || null,
-        premium_order_id: metadata.orderId || null,
-      },
-      { onConflict: "id" }
-    );
+    .upsert(payload, { onConflict: "id" });
 
   if (error) {
     throw error;
@@ -482,11 +487,17 @@ async function writePregnancyStatusToProfile(user, hasSub, pregnancyUntil = null
     email: user.email,
     has_pregnancy_subscription: hasSub,
     pregnancy_until: pregnancyUntil,
-    pregnancy_plan: metadata.plan || null,
-    pregnancy_source: metadata.source || (hasSub ? getPurchaseSource() : null),
-    pregnancy_last_payment_at: metadata.lastPaymentAt || null,
-    pregnancy_order_id: metadata.orderId || null,
   };
+
+  // Billing history is only ever written, never cleared — see the Prime writer
+  // above. Keeping pregnancy_source also makes the guard above sharper: it stays
+  // a permanent record that this user's access once came from RevenueCat.
+  const source = metadata.source || (hasSub ? getPurchaseSource() : null);
+
+  if (metadata.plan) payload.pregnancy_plan = metadata.plan;
+  if (source) payload.pregnancy_source = source;
+  if (metadata.lastPaymentAt) payload.pregnancy_last_payment_at = metadata.lastPaymentAt;
+  if (metadata.orderId) payload.pregnancy_order_id = metadata.orderId;
 
   // Analytics-only marker for which screen drove the purchase. Only written when
   // explicitly provided, so status-refresh calls (which pass no context) never

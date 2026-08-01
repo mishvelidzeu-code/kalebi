@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
 
 import { isAdminEmail, isTestAccountEmail } from "../services/adminAccess";
@@ -21,17 +21,23 @@ export function PregnancyProvider({ children }) {
   // normal mode instead of silently changing under her.
   const [accessLapsed, setAccessLapsed] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Whose data is currently in state. Used to tell a real account switch apart
+  // from a routine token refresh, so the screens are not reset for no reason.
+  const loadedUserIdRef = useRef(null);
 
   const loadPregnancyData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
+        loadedUserIdRef.current = null;
         setPregnancyMode(false);
         setPregnancyStartDate(null);
         setHasSubscription(false);
         setAccessLapsed(false);
         return;
       }
+
+      loadedUserIdRef.current = user.id;
 
       // iOS: ask the store first, so pregnancy_until reflects renewals and
       // cancellations before we read it. Without this the profile keeps the
@@ -89,6 +95,32 @@ export function PregnancyProvider({ children }) {
     });
 
     return () => subscription.remove();
+  }, [loadPregnancyData]);
+
+  // Sign-out and account switches must not leave the previous user's pregnancy
+  // state on screen. Token refreshes fire here too, so compare the user id
+  // first — clearing on every refresh would remount the pregnancy screens.
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextUserId = session?.user?.id ?? null;
+      if (nextUserId === loadedUserIdRef.current) {
+        return;
+      }
+
+      loadedUserIdRef.current = nextUserId;
+      setPregnancyMode(false);
+      setPregnancyStartDate(null);
+      setHasSubscription(false);
+      setAccessLapsed(false);
+
+      if (nextUserId) {
+        loadPregnancyData();
+      }
+    });
+
+    return () => subscription?.unsubscribe?.();
   }, [loadPregnancyData]);
 
   const enablePregnancyMode = useCallback(async (startDate) => {
