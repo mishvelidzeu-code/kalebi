@@ -8,6 +8,17 @@ const DEFAULT_ENTITLEMENT_ID = "prime";
 const DEFAULT_OFFERING_ID = "default";
 const PREGNANCY_ENTITLEMENT_ID = "pregnancy";
 const PREGNANCY_OFFERING_ID = "pregnancy";
+// Pregnancy access granted by hand rather than bought. Written straight into
+// profiles.pregnancy_source, e.g. for a giveaway or to make up for a botched
+// purchase. The store knows nothing about these, so the status refresh must not
+// treat "no entitlement" as a cancellation and take them away:
+//
+//   update profiles
+//   set has_pregnancy_subscription = true,
+//       pregnancy_source = 'admin_grant',
+//       pregnancy_until = '2026-12-31'   -- or null for open-ended
+//   where email = '...';
+const MANUAL_PREGNANCY_GRANT_SOURCES = ["admin_grant"];
 const ANDROID_PRIME_PAYMENT_URL = process.env.EXPO_PUBLIC_ANDROID_PRIME_PAYMENT_URL || "";
 const ANDROID_PREGNANCY_PAYMENT_URL = process.env.EXPO_PUBLIC_ANDROID_PREGNANCY_PAYMENT_URL || "";
 
@@ -462,12 +473,13 @@ function hasActivePregnancyEntitlement(customerInfo) {
 }
 
 async function writePregnancyStatusToProfile(user, hasSub, pregnancyUntil = null, metadata = {}) {
-  // Granting access is always allowed; taking it away is not. RevenueCat only
-  // knows about purchases made through its own SDK — access bought via the
-  // Android web checkout, or granted before that flow existed, is invisible to
-  // it. For those rows "no entitlement" means "unknown", not "cancelled", so
-  // revoking would lock out people who really did pay. Rows that RevenueCat
-  // itself created are still revoked normally, which is what closes the hole.
+  // Granting access is always allowed. Revoking it is too, with one exception:
+  // access handed out by hand, which the store has no way of knowing about.
+  //
+  // The exception is deliberately narrow. Anything else — including a row with
+  // no source at all — is revoked, because users can write their own profile
+  // row (see the RLS policy on profiles), so "flag set, nothing to back it up"
+  // is as likely to be self-granted as it is to be legitimate.
   if (!hasSub) {
     const { data: current } = await supabase
       .from("profiles")
@@ -475,9 +487,9 @@ async function writePregnancyStatusToProfile(user, hasSub, pregnancyUntil = null
       .eq("id", user.id)
       .maybeSingle();
 
-    const grantedByStore = String(current?.pregnancy_source || "").startsWith("revenuecat");
+    const isManualGrant = MANUAL_PREGNANCY_GRANT_SOURCES.includes(current?.pregnancy_source);
 
-    if (Boolean(current?.has_pregnancy_subscription) && !grantedByStore) {
+    if (Boolean(current?.has_pregnancy_subscription) && isManualGrant) {
       return;
     }
   }
