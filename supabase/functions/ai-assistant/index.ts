@@ -71,6 +71,26 @@ function isPremiumProfile(
   return Number.isNaN(timestamp) ? false : timestamp > Date.now();
 }
 
+// Mirrors resolvePregnancyAccessFromProfile in services/purchases.js.
+function hasPregnancyAccess(
+  profile: {
+    has_pregnancy_subscription?: boolean | null;
+    pregnancy_until?: string | null;
+  } | null
+) {
+  if (!profile?.has_pregnancy_subscription) {
+    return false;
+  }
+
+  if (!profile?.pregnancy_until) {
+    // Legacy / open-ended rows predate expiry tracking.
+    return true;
+  }
+
+  const timestamp = Date.parse(profile.pregnancy_until);
+  return Number.isNaN(timestamp) ? false : timestamp > Date.now();
+}
+
 function buildInput(prompt: string, context: unknown) {
   if (context == null || context === "") {
     return prompt;
@@ -208,7 +228,9 @@ Deno.serve(async (request) => {
       if (isChatFeature) {
         const { data: profile, error: profileError } = await supabaseAdmin
           .from("profiles")
-          .select("is_premium, premium_override, premium_until, pregnancy_mode")
+          .select(
+            "is_premium, premium_override, premium_until, pregnancy_mode, has_pregnancy_subscription, pregnancy_until"
+          )
           .eq("id", user.id)
           .maybeSingle();
 
@@ -216,9 +238,14 @@ Deno.serve(async (request) => {
           // Fail open: never block a real user because of a transient profile read error.
           console.log("Assistant profile read error:", profileError.message);
         } else {
+          // The pregnancy allowance follows the subscription, not the mode flag.
+          // pregnancy_mode alone used to be enough, so a lapsed subscriber — or
+          // anyone who set the flag on their own row — kept the larger budget.
+          const pregnancyActive = Boolean(profile?.pregnancy_mode) && hasPregnancyAccess(profile);
+
           dailyLimit = isPremiumProfile(profile)
             ? CHAT_PRIME_DAILY_LIMIT
-            : profile?.pregnancy_mode
+            : pregnancyActive
             ? CHAT_PREGNANCY_DAILY_LIMIT
             : CHAT_FREE_DAILY_LIMIT;
           limitResolved = true;
