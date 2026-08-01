@@ -439,7 +439,7 @@ function PregnancyHomeScreen({ isDark }) {
 export default function HomeScreen() {
   const router = useRouter();
   const { isDark, isPremium, isAdmin, isTestAccount } = useTheme();
-  const { pregnancyMode } = usePregnancy();
+  const { pregnancyMode, accessLapsed } = usePregnancy();
   const { fertilityMode } = useFertility();
   const lastAdviceKeyRef = useRef("");
   const adviceRequestKeyRef = useRef("");
@@ -1036,7 +1036,37 @@ export default function HomeScreen() {
           )}
         </LinearGradient>
 
-      {!isPremium && !pregnancyMode && (
+      {/* The pregnancy mode was switched off because the subscription behind it
+          ended. Explain it and make renewing one tap away — the data is still
+          there, so this must not read like the mode is gone for good. */}
+      {accessLapsed && (
+        <TouchableOpacity
+          activeOpacity={0.82}
+          style={[
+            styles.pregnancyBanner,
+            styles.lapsedBanner,
+            isDark && { backgroundColor: "#2C1D14", borderColor: "rgba(232,164,106,0.28)" },
+          ]}
+          onPress={() => router.push("/pregnancy-premium")}
+        >
+          <View style={styles.lapsedBannerInner}>
+            <View style={styles.lapsedBannerIcon}>
+              <Ionicons name="alert-circle-outline" size={22} color={isDark ? "#F0A868" : "#B4541F"} />
+            </View>
+            <View style={styles.lapsedBannerCopy}>
+              <Text style={[styles.lapsedBannerTitle, isDark && { color: "#FFD9B8" }]}>
+                ორსულობის გამოწერა დასრულდა
+              </Text>
+              <Text style={[styles.lapsedBannerSub, isDark && { color: "#D8B49A" }]}>
+                აპი დროებით ჩვეულებრივ რეჟიმშია. შენი ჩანაწერები დაცულია და გამოწერის განახლებისთანავე ყველაფერი დაბრუნდება.
+              </Text>
+              <Text style={[styles.lapsedBannerCta, isDark && { color: "#F0A868" }]}>განახლება →</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {!isPremium && !pregnancyMode && !accessLapsed && (
         <TouchableOpacity
           activeOpacity={0.82}
           style={styles.pregnancyBanner}
@@ -1438,6 +1468,24 @@ const styles = StyleSheet.create({
   insightLoadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   insightHint: { fontSize: 12, fontWeight: "600" },
   insightText: { fontSize: 14, lineHeight: 22, fontWeight: "700" },
+  lapsedBanner: {
+    borderColor: "rgba(214,138,74,0.42)",
+    backgroundColor: "#FFF4EA",
+    shadowColor: "#D98976",
+  },
+  lapsedBannerInner: { flexDirection: "row", alignItems: "flex-start", padding: 18, gap: 12 },
+  lapsedBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(214,138,74,0.16)",
+  },
+  lapsedBannerCopy: { flex: 1 },
+  lapsedBannerTitle: { fontSize: 15, fontWeight: "800", color: "#7A3A12", marginBottom: 4 },
+  lapsedBannerSub: { fontSize: 12.5, lineHeight: 18, color: "#8A5A38" },
+  lapsedBannerCta: { fontSize: 13, fontWeight: "800", color: "#B4541F", marginTop: 8 },
   pregnancyBanner: {
     marginTop: 14,
     borderRadius: 28,

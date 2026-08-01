@@ -27,6 +27,8 @@ import {
   purchasePregnancyPackage,
   checkPregnancySubscriptionStatus,
   recordPregnancyPurchaseContext,
+  canOpenManageSubscriptions,
+  openManageSubscriptions,
 } from "../../services/purchases";
 import { supabase } from "../../services/supabase";
 
@@ -117,6 +119,14 @@ export default function ProfileScreen() {
   // Display-only rename — the stored goal value stays "დაორსულება" so existing
   // comparisons/DB rows and the AI's internal goal mapping keep working.
   const FERTILITY_MODE_LABEL = "მინდა დაორსულება";
+
+  // Turning a mode off is not a cancellation — the subscription lives in the
+  // store and keeps billing. Both paid modes share one subscription, so
+  // cancelling closes both; say so before the user assumes otherwise.
+  const CANCEL_HINT = canOpenManageSubscriptions()
+    ? "გასაუქმებლად: პროფილი → გამოწერების მართვა (ან App Store → გამოწერები)."
+    : "გამოწერა იმ საიტიდან უქმდება, სადაც გადაიხადე.";
+  const SHARED_SUBSCRIPTION_HINT = `ერთი გამოწერა ორივე რეჟიმს ხსნის — ორსულობასაც და "${FERTILITY_MODE_LABEL}"-საც. გაუქმება ორივეს დახურავს.`;
   const getGoalLabel = (value) => (value === "დაორსულება" ? FERTILITY_MODE_LABEL : value);
 
   // TEMP: fertility mode is blocked while it is being finished — every entry
@@ -679,7 +689,7 @@ export default function ProfileScreen() {
   const handlePregnancyDisable = () => {
     Alert.alert(
       "ორსულობის რეჟიმის გამორთვა",
-      "ნამდვილად გსურს ჩვეულებრივ რეჟიმზე დაბრუნება? ორსულობის მონაცემები შეინახება.\n\nგამოწერის გასაუქმებლად გადადი App Store → გამოწერები.",
+      `ნამდვილად გსურს ჩვეულებრივ რეჟიმზე დაბრუნება? ორსულობის მონაცემები შეინახება.\n\n⚠️ რეჟიმის გამორთვა გამოწერას არ აუქმებს — გადახდა გაგრძელდება. ${CANCEL_HINT}\n\n${SHARED_SUBSCRIPTION_HINT}`,
       [
         { text: "გაუქმება", style: "cancel" },
         {
@@ -821,7 +831,7 @@ export default function ProfileScreen() {
   const handleFertilityDisable = () => {
     Alert.alert(
       `"${FERTILITY_MODE_LABEL}" გამორთვა`,
-      `ნამდვილად გსურს "${FERTILITY_MODE_LABEL}" გამორთვა და ჩვეულებრივ რეჟიმზე დაბრუნება?`,
+      `ნამდვილად გსურს "${FERTILITY_MODE_LABEL}" გამორთვა და ჩვეულებრივ რეჟიმზე დაბრუნება? ჩანაწერები შეინახება.\n\n⚠️ რეჟიმის გამორთვა გამოწერას არ აუქმებს — გადახდა გაგრძელდება. ${CANCEL_HINT}\n\n${SHARED_SUBSCRIPTION_HINT}`,
       [
         { text: "გაუქმება", style: "cancel" },
         {
@@ -838,6 +848,18 @@ export default function ProfileScreen() {
         },
       ]
     );
+  };
+
+  const handleManageSubscription = async () => {
+    try {
+      await openManageSubscriptions();
+    } catch (error) {
+      console.log("Manage subscriptions error:", error);
+      Alert.alert(
+        "ვერ გაიხსნა",
+        "გამოწერების გვერდი ვერ გაიხსნა. ხელით: App Store → შენი პროფილი → გამოწერები."
+      );
+    }
   };
 
   const handleLogout = () => {
@@ -1021,6 +1043,12 @@ export default function ProfileScreen() {
           <SettingRow icon="🔒" bgColor={isDark ? "#1e3d2a" : "#E6FFF0"} title="კონფიდენციალურობა" onPress={() => router.push("/privacy")} showArrow isDarkTheme={isDark} />
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
           <SettingRow icon="✨" bgColor={isDark ? "#3d1e2a" : "#FFF0F5"} title="Prime" subtitle="გამოწერის და უპირატესობების ნახვა" onPress={() => router.push("/premium")} showArrow isDarkTheme={isDark} />
+          {canOpenManageSubscriptions() && (
+            <>
+              <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+              <SettingRow icon="🧾" bgColor={isDark ? "#1e2a3d" : "#EEF4FF"} title="გამოწერების მართვა" subtitle="გაუქმება ან გეგმის შეცვლა App Store-ში" onPress={handleManageSubscription} showArrow isDarkTheme={isDark} />
+            </>
+          )}
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
           <SettingRow icon="📤" bgColor={isDark ? "#2a1e3d" : "#F5F0FF"} title="მონაცემების ექსპორტი" subtitle="გაუზიარე ექიმს" onPress={exportUserData} showArrow isDarkTheme={isDark} />
         </View>

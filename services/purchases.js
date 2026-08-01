@@ -126,6 +126,24 @@ function getPurchaseSource() {
   return Platform.OS === "ios" ? "revenuecat_ios" : "revenuecat";
 }
 
+// Apple requires a way to reach the subscription settings from inside the app
+// (App Store Review Guideline 3.1.2). This opens the account's subscription
+// list, where the user can cancel or change the plan.
+//
+// iOS only on purpose: Android purchases go through the external web checkout,
+// not Play Billing, so the Play subscriptions page would show nothing.
+export function canOpenManageSubscriptions() {
+  return Platform.OS === "ios";
+}
+
+export async function openManageSubscriptions() {
+  if (!canOpenManageSubscriptions()) {
+    throw new Error("manage-subscriptions-unsupported");
+  }
+
+  await Linking.openURL("https://apps.apple.com/account/subscriptions");
+}
+
 export async function getCurrentSupabaseUser() {
   const {
     data: { user },

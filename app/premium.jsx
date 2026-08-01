@@ -18,9 +18,11 @@ import {
 
 import { useTheme } from "../context/ThemeContext";
 import {
+  canOpenManageSubscriptions,
   getPremiumOfferings,
   hasAndroidPrimeCheckoutConfigured,
   openAndroidPrimeCheckout,
+  openManageSubscriptions,
   purchasePrimePackage,
   restorePrimePurchases,
 } from "../services/purchases";
@@ -169,6 +171,18 @@ export default function PremiumScreen() {
     }
   };
 
+  const handleManageSubscription = async () => {
+    try {
+      await openManageSubscriptions();
+    } catch (error) {
+      console.log("Manage subscriptions error:", error);
+      Alert.alert(
+        "ვერ გაიხსნა",
+        "გამოწერების გვერდი ვერ გაიხსნა. ხელით: App Store → შენი პროფილი → გამოწერები."
+      );
+    }
+  };
+
   const handleRestore = async () => {
     setRestoring(true);
 
@@ -312,6 +326,12 @@ export default function PremiumScreen() {
               ) : (
                 <Text style={styles.restoreButtonText}>Restore Purchases</Text>
               )}
+            </TouchableOpacity>
+          )}
+
+          {canOpenManageSubscriptions() && (
+            <TouchableOpacity style={styles.manageButton} onPress={handleManageSubscription}>
+              <Text style={styles.manageButtonText}>გამოწერის მართვა / გაუქმება</Text>
             </TouchableOpacity>
           )}
 
@@ -471,6 +491,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.04)",
   },
   restoreButtonText: { color: "#E94560", fontSize: 15, fontWeight: "800" },
+  manageButton: { width: "100%", paddingVertical: 14, alignItems: "center", marginTop: 10 },
+  manageButtonText: {
+    color: "#9A8F94",
+    fontSize: 14,
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
   linksRow: { flexDirection: "row", marginTop: 18 },
   linkText: {
     color: "#888",

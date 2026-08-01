@@ -16,6 +16,10 @@ export function PregnancyProvider({ children }) {
   const [pregnancyMode, setPregnancyMode] = useState(false);
   const [pregnancyStartDate, setPregnancyStartDate] = useState(null);
   const [hasSubscription, setHasSubscription] = useState(false);
+  // True when the user is still marked as pregnant in the database but the
+  // subscription behind it is gone. Lets the UI explain the switch back to the
+  // normal mode instead of silently changing under her.
+  const [accessLapsed, setAccessLapsed] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadPregnancyData = useCallback(async () => {
@@ -25,6 +29,7 @@ export function PregnancyProvider({ children }) {
         setPregnancyMode(false);
         setPregnancyStartDate(null);
         setHasSubscription(false);
+        setAccessLapsed(false);
         return;
       }
 
@@ -62,6 +67,7 @@ export function PregnancyProvider({ children }) {
         // (and its data) comes straight back on renewal — access only gates
         // what the app shows right now.
         setPregnancyMode(Boolean(data.pregnancy_mode) && access);
+        setAccessLapsed(Boolean(data.pregnancy_mode) && !access);
         setPregnancyStartDate(data.pregnancy_start_date ?? null);
       }
     } catch (error) {
@@ -159,6 +165,7 @@ export function PregnancyProvider({ children }) {
       pregnancyMode,
       pregnancyStartDate,
       hasSubscription,
+      accessLapsed,
       loading,
       currentWeek,
       currentTrimester,

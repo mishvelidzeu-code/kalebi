@@ -18,8 +18,10 @@ import {
 
 import { usePregnancy } from "../context/PregnancyContext";
 import {
+  canOpenManageSubscriptions,
   checkPregnancySubscriptionStatus,
   getPregnancyOfferings,
+  openManageSubscriptions,
   purchasePregnancyPackage,
   restorePregnancyPurchases,
 } from "../services/purchases";
@@ -132,6 +134,18 @@ export default function PregnancyPremiumScreen() {
       Alert.alert("შეცდომა", "შეძენა ვერ დასრულდა. სცადე თავიდან.");
     } finally {
       setPurchasing(false);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    try {
+      await openManageSubscriptions();
+    } catch (error) {
+      console.log("Manage subscriptions error:", error);
+      Alert.alert(
+        "ვერ გაიხსნა",
+        "გამოწერების გვერდი ვერ გაიხსნა. ხელით: App Store → შენი პროფილი → გამოწერები."
+      );
     }
   };
 
@@ -302,6 +316,12 @@ export default function PregnancyPremiumScreen() {
             )}
           </TouchableOpacity>
 
+          {canOpenManageSubscriptions() && (
+            <TouchableOpacity style={styles.manageButton} onPress={handleManageSubscription}>
+              <Text style={styles.manageButtonText}>გამოწერის მართვა / გაუქმება</Text>
+            </TouchableOpacity>
+          )}
+
           <View style={styles.linksRow}>
             <TouchableOpacity
               onPress={() =>
@@ -466,6 +486,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.04)",
   },
   restoreButtonText: { color: ACCENT, fontSize: 15, fontWeight: "800" },
+  manageButton: { width: "100%", paddingVertical: 14, alignItems: "center", marginTop: 10 },
+  manageButtonText: {
+    color: "#9A8F94",
+    fontSize: 14,
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
   linksRow: { flexDirection: "row", marginTop: 18 },
   linkText: {
     color: "#888",
