@@ -14,6 +14,11 @@ Backend: Supabase (Auth, DB, Edge Functions). AI: OpenAI-ს იძახებ�
 
 > ეს სექცია ყოველთვის უნდა აჩვენებდეს ყველაზე ახალ მდგომარეობას — ახალი სესიის დაწყებისას აქედან დაიწყე, `git log`/`git status`-ის თავიდან აწარმოების ნაცვლად. საჭიროებისამებრ განაახლე.
 
+**🧾 გადახდის ისტორია + ანგარიშის გამოცვლა (2026-08-01 — committed `286bb16`, pushed, ⚠️ OTA ჯერ არ გასულა)**: აუდიტის "ეტაპები 3-4", ორივე პატარა.
+- **`purchases.js`** — `writePremiumStatusToProfile`/`writePregnancyStatusToProfile` ადრე **ყოველ** "წვდომა არ აქვს" refresh-ზე `*_plan`/`*_source`/`*_last_payment_at`/`*_order_id`-ს **null-ავდა** → ვადის გასვლისთანავე იკარგებოდა, რა და როდის იყიდა. ახლა ეს 4 ველი **მხოლოდ იწერება, არასდროს იშლება** (იგივე pattern, რაც `pregnancy_purchase_context`-ს უკვე ჰქონდა). 💡 **ბონუსი**: შენარჩუნებული `pregnancy_source` ეტაპი 1-ის guard-საც აძლიერებს — მუდმივი კვალია, რომ ამ user-ის წვდომა RevenueCat-იდან მოვიდა.
+- **`PregnancyContext` + `FertilityContext`** — ორივეს დაემატა `supabase.auth.onAuthStateChange` (`ThemeContext`-ს ეს ჰქონდა, ამ ორს — არა): გასვლაზე state ნულდება, შესვლაზე იტვირთება. ⚠️ **კრიტიკული დეტალი**: listener ჯერ **user id-ს ადარებს** (`loadedUserIdRef`) — `TOKEN_REFRESHED`/`INITIAL_SESSION` იმავე event-ზე მოდის და ყოველ refresh-ზე გასუფთავება **ორსულობის ეკრანებს remount-ს გაუკეთებდა** (`pregnancyMode` წყვეტს რომელი ეკრანი დაიხატოს).
+- ✅ **ტესტირებული**: 18/18 pass — ისტორია lapse-ზე რჩება, renewal-ზე ახლდება, უფასო user-ს ცრუ ისტორია არ უჩნდება; listener token refresh-ზე **არაფერს** აკეთებს, გასვლაზე ასუფთავებს, ანგარიშის გამოცვლაზე თავიდან ტვირთავს. + ეტაპი 1-ის 18 ტესტი რეგრესიაზე — გავიდა.
+
 **🧾 გამოწერის მართვა + გაუქმების ახსნა (2026-08-01 — committed `ac11be0`, pushed, ⚠️ OTA ჯერ არ გასულა)**: გადახდების აუდიტის "ეტაპი 2". აპში **არსად** არ იყო გამოწერამდე მისასვლელი გზა (Apple-ის 3.1.2 ითხოვს), რეჟიმის გამორთვა კი გაუქმებად აღიქმებოდა, თუმცა ფული ჩამოდიოდა.
 - **`purchases.js`** — ახალი `openManageSubscriptions()` (`https://apps.apple.com/account/subscriptions`) + `canOpenManageSubscriptions()`. ⚠️ **მხოლოდ iOS**: Android გარე web-checkout-ზეა, ე.ი. Play-ის გამოწერების გვერდი ცარიელი იქნებოდა და მოატყუებდა.
 - **`premium.jsx` / `pregnancy-premium.jsx`** — "გამოწერის მართვა / გაუქმება" ღილაკი restore-ის ქვემოთ (`manageButton` style). **`profile.js`** — "აპლიკაცია" ბლოკში 🧾 row (Prime-ის შემდეგ).
