@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 
 import { corsHeaders } from "../_shared/cors.ts";
 
-const DEFAULT_MODEL = "gpt-5.4-mini";
+const DEFAULT_MODEL = "gpt-5.6-luna";
 const DEFAULT_SYSTEM_PROMPT = [
   "You are a supportive assistant inside a women's health app.",
   "Be clear, warm, and concise.",
@@ -295,6 +295,11 @@ Deno.serve(async (request) => {
         instructions,
         input: buildInput(prompt, payload?.context),
         max_output_tokens: clampMaxTokens(payload?.maxOutputTokens),
+        // GPT-5.6 is a reasoning model and defaults to "medium" effort. Reasoning
+        // tokens count against max_output_tokens, so on the small budgets used
+        // here (220 for cards, 500 for chat) the default would leave little or
+        // no room for the visible answer.
+        reasoning: { effort: "none" },
         metadata:
           payload?.metadata && typeof payload.metadata === "object"
             ? payload.metadata

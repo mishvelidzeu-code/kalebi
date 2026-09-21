@@ -14,6 +14,12 @@ Backend: Supabase (Auth, DB, Edge Functions). AI: OpenAI-ს იძახებ�
 
 > ეს სექცია ყოველთვის უნდა აჩვენებდეს ყველაზე ახალ მდგომარეობას — ახალი სესიის დაწყებისას აქედან დაიწყე, `git log`/`git status`-ის თავიდან აწარმოების ნაცვლად. საჭიროებისამებრ განაახლე.
 
+**🤖 AI მოდელი `gpt-5.4-mini` → `gpt-5.6-luna` (2026-09-15 — ⚠️ uncommitted, **edge function deployed ✅**)**: user-ის გადაწყვეტილება ფასის გამო — Luna $0.20/$1.20 vs mini $0.75/$4.50 (1M ტოკენზე), ე.ი. **~3.75× იაფი** ყველა ფუნქციაზე (ჩატი + ბარათები). ⚠️ **OTA არ სჭირდება** — მხოლოდ სერვერია.
+- **`ai-assistant/index.ts`**: `DEFAULT_MODEL = "gpt-5.6-luna"` + OpenAI request-ს დაემატა **`reasoning: { effort: "none" }`**. მიზეზი: 5.6 reasoning მოდელია, default effort `medium`, reasoning ტოკენები კი `max_output_tokens`-ში ითვლება — 220-ტოკენიან ბარათებზე default-ი პასუხს ადგილს არ დაუტოვებდა (ცარიელი text → კლიენტზე "AI response was empty", quota დაწვილი).
+- **მიზეზი, რატომ დაიწყო**: user-მა აჩვენა რეალური პასუხი mini-სგან — გამოგონილი ქართული სიტყვები („ლაქვა", „წკიპ-ტკივილი"), Markdown ნედლად (`**`, `###` — `symptoms.js` უბრალო `<Text>`-ითაა), და მოჭრილი პასუხი 500 ტოკენზე. ⚠️ **Luna-ს ქართული არ არის გატესტული** — მე Terra-ს ვურჩევდი ჩატისთვის, user-მა ფასის გამო Luna აირჩია ორივეზე. თუ ქართული არ გამოსწორდა, შემდეგი ნაბიჯი: ჩატზე `model: "gpt-5.6-terra"` ($2/$12) `askAssistant`-ში.
+- ✅ **deployed** `ewogfcyhkoevnxmstdin`-ზე. ⚠️ პირველად CLI login football/webandapp ორგანიზაციაზე იყო და "women" სიაში არ ჩანდა — user-მა `npx supabase login` სწორი ანგარიშით გაუშვა, მერე deploy გავიდა. ამ ანგარიშში "women"-ის გვერდით მეორე პროექტიც არის — **"Женский календарь"** (`woufznatbalcjbwnojih`) — ის **არ არის** ამ აპის backend, ნუ აურევ.
+- **დარჩა (არ გამიკეთებია, user-ს არ სთხოვია)**: `maxOutputTokens` 500→1000 ჩატზე, prompt-ში "plain text, no markdown", `status: "incomplete"`-ზე refund.
+
 **🔐 AI ბიუჯეტი გამოწერას მიჰყვება + `premium_override` დაიბლოკა (2026-08-01 — committed `f7d06fc`, pushed, **migration + edge function deployed ✅**)**: აუდიტის ბოლო ორი ხვრელი. ⚠️ **OTA არ სჭირდება** — ორივე სერვერზეა.
 - **`ai-assistant/index.ts`** (**deployed ✅**): chat-ის ლიმიტი ადრე მხოლოდ `pregnancy_mode`-ს უყურებდა → ვადაგასულ გამომწერელს (ან ვინც დროშას თვითონ ჩაიწერდა) **10 კითხვა რჩებოდა 1-ის ნაცვლად** = რეალური OpenAI-ს ხარჯი. ახალი `hasPregnancyAccess()` (`resolvePregnancyAccessFromProfile`-ის სარკე) + `pregnancyActive = pregnancy_mode && hasPregnancyAccess(profile)`. select-ს დაემატა `has_pregnancy_subscription, pregnancy_until`. fail-open ქცევა profile-ის წაკითხვის შეცდომაზე **შენარჩუნებულია**.
 - **migration `20260801_lock_premium_override.sql`** (**remote ✅**): 🛡️ trigger `guard_premium_override` on `profiles` (BEFORE INSERT OR UPDATE, SECURITY DEFINER). მიზეზი: RLS **სვეტს ვერ ზღუდავს**, `premium_override`-ს კი `ThemeContext` **არასდროს ამოწმებს** RevenueCat-თან (ადრევე ჩერდება) → user-ს საკუთარ row-ში ჩაწერით **სამუდამო Prime** შეეძლო. ახლა: `auth.uid() is null` (service_role/migration/SQL editor) → გაატარებს; admin-ის JWT email → გაატარებს; სხვა შემთხვევაში UPDATE-ზე **`raise exception` (42501)**, INSERT-ზე `false`-ზე აიძულებს.
@@ -250,7 +256,7 @@ npx supabase db push --linked
 Migrations (`supabase/migrations/`, ქრონოლოგიურად): phone_number → premium reset → premium_override → assistant_chat_history → profile email/created_at + admin RLS → premium billing fields → `billing_entitlements` (გენერალიზებული entitlement ledger prime/pregnancy) → `assistant_ai_usage` + rate-limit RPC-ები.
 
 Edge Functions (`supabase/functions/`):
-- **`ai-assistant/index.ts`** — auth ვალიდაცია, premium/pregnancy სტატუსის სერვერ-საიდ resolve, დღიური ლიმიტები (chat: free 1/day, pregnancy 10/day, prime 20/day; feature-calls — daily-advice/diary-support/pregnancy-weekly — 30/day თითოეული; admin unlimited). OpenAI Responses API (`gpt-5.4-mini` default, `OPENAI_MODEL` secret). წარუმატებლობაზე `refund_assistant_ai_usage` RPC-ით აბრუნებს quota-ს.
+- **`ai-assistant/index.ts`** — auth ვალიდაცია, premium/pregnancy სტატუსის სერვერ-საიდ resolve, დღიური ლიმიტები (chat: free 1/day, pregnancy 10/day, prime 20/day; feature-calls — daily-advice/diary-support/pregnancy-weekly — 30/day თითოეული; admin unlimited). OpenAI Responses API (`gpt-5.6-luna` default, `OPENAI_MODEL` secret, `reasoning.effort: "none"`). წარუმატებლობაზე `refund_assistant_ai_usage` RPC-ით აბრუნებს quota-ს.
 - **`send-push-notification/index.ts`** — server-side push sender.
 - **`_shared/cors.ts`** — CORS headers helper.
 
@@ -268,7 +274,7 @@ Edge Functions (`supabase/functions/`):
 
 ## მნიშვნელოვანი დეტალები
 
-- **AI Edge Function**: `supabase/functions/ai-assistant/index.ts` — `OPENAI_API_KEY` მხოლოდ Supabase secret-ში. მოდელი `gpt-5.4-mini` default.
+- **AI Edge Function**: `supabase/functions/ai-assistant/index.ts` — `OPENAI_API_KEY` მხოლოდ Supabase secret-ში. მოდელი `gpt-5.6-luna` default (reasoning effort `none`).
 - **Android premium**: RevenueCat/Play Billing-ის ნაცვლად web checkout-ზეა გადამისამართებული (`services/purchases.js`), `profiles` table-ია წყარო, არა RevenueCat SDK პასუხი.
 - **admin email hardcoded** `services/adminAccess.js`-ში — ახალი admin-ის დამატება ამ ფაილში ხდება.
 - **`supabase/.temp/`** git-ში ტრექინგშია (უჩვეულოა) — ნუ წაშლი, user-თან შეთანხმების გარეშე.
