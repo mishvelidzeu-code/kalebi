@@ -87,6 +87,12 @@ const moodOptions = [
   { emoji: "😫", value: "საშინელი", key: "terrible" },
 ];
 
+// Stored mood value → translated label (falls back to the raw value).
+const moodLabel = (t, value) => {
+  const option = moodOptions.find((m) => m.value === value);
+  return option ? t(`calendar.moods.${option.key}`) : value;
+};
+
 const hasDiaryContent = ({ symptoms = [], mood = null, note = "" } = {}) =>
   Boolean((symptoms || []).length || mood || note?.trim());
 
@@ -1006,7 +1012,7 @@ function RegularCalendarScreen() {
                 {dayDetails.mood && (
                   <View style={styles.statusRow}>
                     <Text style={[styles.statusLabel, { color: theme.subText }]}>{t("calendar.moodLabel")}</Text>
-                    <Text style={[styles.statusValue, { color: theme.text }]}>{dayDetails.mood}</Text>
+                    <Text style={[styles.statusValue, { color: theme.text }]}>{moodLabel(t, dayDetails.mood)}</Text>
                   </View>
                 )}
 
