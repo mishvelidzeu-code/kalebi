@@ -1,5 +1,7 @@
 import dayjs from "dayjs";
 
+import { t } from "../services/i18n";
+
 // Symptothermal ovulation detection for fertility mode.
 //
 // Scope note: this NEVER rewrites the shared cycleEngine prediction (which the
@@ -212,21 +214,21 @@ export function buildPredictionQuality({ regularity, confirmations = [], lutealL
   if (regularity?.isRegular && (highConfirmations >= 1 || confirmedCount >= 2)) level = "high";
   else if (regularity?.isRegular || confirmedCount >= 1) level = "medium";
 
-  const label = level === "high" ? "მაღალი" : level === "medium" ? "საშუალო" : "დაბალი";
+  const label = t(`fertility.quality.${level}`);
 
   // What the user can do to make it better.
   const suggestions = [];
   if (!regularity?.sampleSize || regularity.sampleSize < 3) {
-    suggestions.push("დაამატე მეტი ციკლი — რაც მეტია, მით ზუსტდება პროგნოზი.");
+    suggestions.push(t("fertility.suggestions.moreCycles"));
   }
   if (confirmedCount === 0) {
-    suggestions.push("გაზომე ბაზალური ტემპერატურა და გააკეთე ოვულაციის ტესტები — ეს ადასტურებს ოვულაციას.");
+    suggestions.push(t("fertility.suggestions.confirmOvulation"));
   }
   if (regularity?.isRegular === false) {
-    suggestions.push("არარეგულარულ ციკლზე კალენდარი ნაკლებად სანდოა — ტესტი, ტემპერატურა და ლორწო უფრო ზუსტია.");
+    suggestions.push(t("fertility.suggestions.irregular"));
   }
   if (!lutealLength) {
-    suggestions.push("დადასტურებული ოვულაციები ლუტეალური ფაზის შენს ხანგრძლივობასაც გამოთვლის.");
+    suggestions.push(t("fertility.suggestions.luteal"));
   }
 
   return { level, label, confirmedCount, highConfirmations, suggestions };

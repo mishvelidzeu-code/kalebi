@@ -1,31 +1,35 @@
 import dayjs from "dayjs";
 
+import { t } from "../services/i18n";
+
 // Contextual recommendations, doctor-visit signals and partner/lifestyle
 // content for fertility ("მინდა დაორსულება") mode. Pure functions.
 //
 // Deliberately conservative: these are informational nudges, never diagnoses,
 // and nothing here promises a conception outcome.
 
-export const MUCUS_HINTS = {
-  dry: "მშრალი ლორწო ჩვეულებრივ ნაკლებად ნაყოფიერ დღეს ახასიათებს.",
-  sticky: "წებოვანი ლორწო — ნაყოფიერება ჯერ დაბალია, მაგრამ იზრდება.",
-  creamy: "კრემისებრი ლორწო — ნაყოფიერი ფანჯარა უახლოვდება.",
-  watery: "წყლიანი ლორწო — ნაყოფიერება მაღალია, ოვულაცია ახლოსაა.",
-  eggwhite: "კვერცხის ცილის მსგავსი ლორწო ყველაზე ნაყოფიერი ნიშანია — ოვულაცია სავარაუდოდ ძალიან ახლოსაა.",
-};
+// All copy lives in locales/*.fertility.{mucusHints,partnerTips,lifestyleTips}.
+// Getters (not constants) so the text follows the language chosen at runtime.
+const MUCUS_KEYS = ["dry", "sticky", "creamy", "watery", "eggwhite"];
+export const getMucusHint = (mucus) => (MUCUS_KEYS.includes(mucus) ? t(`fertility.mucusHints.${mucus}`) : null);
 
-export const PARTNER_TIPS = [
-  { id: "together", icon: "🤝", title: "ერთად ხართ ამ გზაზე", text: "მცდელობა ორივესთვის ემოციურად დამღლელია. ისაუბრეთ ღიად და ნუ აქცევთ ინტიმს მხოლოდ „დავალებად“." },
-  { id: "pressure", icon: "💗", title: "ნაკლები წნეხი", text: "მკაცრი გრაფიკი სტრესს მატებს. ნაყოფიერ ფანჯარაში ყოველ მეორე დღეს ურთიერთობა სავსებით საკმარისია." },
-  { id: "checkup", icon: "🩺", title: "შემოწმება ორივეს ეხება", text: "შემთხვევათა დაახლოებით ნახევარში მიზეზი პარტნიორის მხარესაცაა. ერთობლივი გამოკვლევა ნორმალური ნაბიჯია." },
-];
+const PARTNER_TIP_ICONS = { together: "🤝", pressure: "💗", checkup: "🩺" };
+export const getPartnerTips = () =>
+  Object.entries(PARTNER_TIP_ICONS).map(([id, icon]) => ({
+    id,
+    icon,
+    title: t(`fertility.partnerTips.${id}.title`),
+    text: t(`fertility.partnerTips.${id}.text`),
+  }));
 
-export const LIFESTYLE_TIPS = [
-  { id: "smoking", icon: "🚭", title: "მოწევა და ალკოჰოლი", text: "მოწევა და ალკოჰოლი ორივე პარტნიორის ნაყოფიერებაზე უარყოფითად მოქმედებს — შემცირება ან შეწყვეტა ეხმარება." },
-  { id: "sleep", icon: "😴", title: "ძილი", text: "7–9 საათი რეგულარული ძილი ჰორმონულ ბალანსს უწყობს ხელს." },
-  { id: "food", icon: "🥗", title: "კვება", text: "მრავალფეროვანი კვება, საკმარისი ცილა და ფოლიუმის მჟავა — ორსულობამდე რამდენიმე თვით ადრეც მნიშვნელოვანია." },
-  { id: "activity", icon: "🏃‍♀️", title: "ფიზიკური აქტივობა", text: "ზომიერი აქტივობა სასარგებლოა; გადამეტებული დატვირთვა კი ციკლს არღვევს." },
-];
+const LIFESTYLE_TIP_ICONS = { smoking: "🚭", sleep: "😴", food: "🥗", activity: "🏃‍♀️" };
+export const getLifestyleTips = () =>
+  Object.entries(LIFESTYLE_TIP_ICONS).map(([id, icon]) => ({
+    id,
+    icon,
+    title: t(`fertility.lifestyleTips.${id}.title`),
+    text: t(`fertility.lifestyleTips.${id}.text`),
+  }));
 
 // Age matters for when specialists suggest seeking help.
 export function getAgeFromBirthDate(birthDate) {
@@ -58,40 +62,41 @@ export function buildFertilityRecommendations({ forecast, todayLogs = {}, refere
     tips.push({
       id: "lh_positive",
       icon: "🔥",
-      title: "დადებითი ოვულაციის ტესტი",
-      text: "ოვულაცია ჩვეულებრივ დადებითი ტესტიდან 24–36 საათში ხდება. ეს და მომდევნო დღე ყველაზე ნაყოფიერია.",
+      title: t("fertility.tips.lhPositiveTitle"),
+      text: t("fertility.tips.lhPositive"),
     });
   } else if (lhResult === "weak") {
     tips.push({
       id: "lh_weak",
       icon: "🌗",
-      title: "სუსტი დადებითი",
-      text: "LH იზრდება — განაგრძე ტესტირება ყოველდღე, სანამ მკაფიოდ დადებითს არ დაიჭერ.",
+      title: t("fertility.tips.lhWeakTitle"),
+      text: t("fertility.tips.lhWeak"),
     });
   } else if (lhResult === "negative" && daysToOvulation != null && daysToOvulation <= 5 && daysToOvulation >= 0) {
     tips.push({
       id: "lh_negative",
       icon: "🧪",
-      title: "ჯერ უარყოფითია",
-      text: "ეს ნორმალურია — ტესტირების ფანჯარაში ხარ. გააგრძელე ყოველდღიური ტესტი, პიკი ჯერ არ დამდგარა.",
+      title: t("fertility.tips.lhNegativeTitle"),
+      text: t("fertility.tips.lhNegative"),
     });
   }
 
   // 2. Cervical mucus.
-  if (mucus && MUCUS_HINTS[mucus]) {
-    tips.push({ id: `mucus_${mucus}`, icon: "💧", title: "ლორწოს ნიშანი", text: MUCUS_HINTS[mucus] });
+  const mucusHint = getMucusHint(mucus);
+  if (mucusHint) {
+    tips.push({ id: `mucus_${mucus}`, icon: "💧", title: t("fertility.tips.mucusTitle"), text: mucusHint });
   }
 
   // 3. Cycle-phase framing when there is no stronger signal today.
   if (!lhResult && !mucus && phaseKey) {
     if (phaseKey === "period") {
-      tips.push({ id: "phase_period", icon: "🫶", title: "მენსტრუაციის ფაზა", text: "დაისვენე და აღიდგინე ძალები. ახალი ციკლი — ახალი შანსი." });
+      tips.push({ id: "phase_period", icon: "🫶", title: t("fertility.tips.periodTitle"), text: t("fertility.tips.period") });
     } else if (phaseKey === "follicular") {
-      tips.push({ id: "phase_follicular", icon: "🌱", title: "ფოლიკულური ფაზა", text: "ენერგია იზრდება. კარგი დროა ვიტამინების რეგულარულად მიღებისა და ძილის რეჟიმის დასალაგებლად." });
+      tips.push({ id: "phase_follicular", icon: "🌱", title: t("fertility.tips.follicularTitle"), text: t("fertility.tips.follicular") });
     } else if (phaseKey === "fertile") {
-      tips.push({ id: "phase_fertile", icon: "🌿", title: "ნაყოფიერი ფანჯარა", text: "ყოველ მეორე დღეს ურთიერთობა ამ ფანჯარაში ოპტიმალურად ზრდის შანსს." });
+      tips.push({ id: "phase_fertile", icon: "🌿", title: t("fertility.tips.fertileTitle"), text: t("fertility.tips.fertile") });
     } else if (phaseKey === "luteal") {
-      tips.push({ id: "phase_luteal", icon: "🍵", title: "ლუტეალური ფაზა", text: "ლოდინის პერიოდია. ადრეული ტესტი ხშირად ცრუ-უარყოფითია — მოითმინე სანდო დღემდე." });
+      tips.push({ id: "phase_luteal", icon: "🍵", title: t("fertility.tips.lutealTitle"), text: t("fertility.tips.luteal") });
     }
   }
 
@@ -100,8 +105,8 @@ export function buildFertilityRecommendations({ forecast, todayLogs = {}, refere
     tips.push({
       id: "bbt_missing",
       icon: "🌡️",
-      title: "ტემპერატურა ჯერ არ გაქვს",
-      text: "ბაზალური ტემპერატურა დროთა განმავლობაში ოვულაციის დადასტურებაში გვეხმარება — დილით, ადგომამდე გაზომე.",
+      title: t("fertility.tips.bbtMissingTitle"),
+      text: t("fertility.tips.bbtMissing"),
     });
   }
 
@@ -118,10 +123,10 @@ export function evaluateDoctorVisitSignals({ regularity, trying, logSummary, age
     signals.push({
       id: "duration",
       icon: "⏳",
-      title: `${trying.monthsTrying} თვეა ცდილობ`,
+      title: t("fertility.doctor.durationTitle", { months: trying.monthsTrying }),
       text: age != null && age >= 35
-        ? "35+ ასაკში 6 თვის შემდეგ სპეციალისტთან კონსულტაცია ჩვეულებრივი რეკომენდაციაა."
-        : "12 თვის შემდეგ სპეციალისტთან კონსულტაცია ჩვეულებრივი რეკომენდაციაა — ეს არ ნიშნავს, რომ პრობლემაა.",
+        ? t("fertility.doctor.duration35")
+        : t("fertility.doctor.duration12"),
     });
   }
 
@@ -129,8 +134,8 @@ export function evaluateDoctorVisitSignals({ regularity, trying, logSummary, age
     signals.push({
       id: "irregular",
       icon: "🔄",
-      title: "ციკლი არარეგულარულია",
-      text: `ციკლები ${regularity.shortest}–${regularity.longest} დღეს შორის მერყეობს. ღირს ექიმთან ახსენო — ეს ოვულაციის დაჭერასაც ართულებს.`,
+      title: t("fertility.doctor.irregularTitle"),
+      text: t("fertility.doctor.irregular", { shortest: regularity.shortest, longest: regularity.longest }),
     });
   }
 
@@ -139,8 +144,8 @@ export function evaluateDoctorVisitSignals({ regularity, trying, logSummary, age
       signals.push({
         id: "cycle_length",
         icon: "📏",
-        title: "ციკლის ხანგრძლივობა",
-        text: `შენი საშუალო ციკლი ${regularity.avgCycle} დღეა. 21–35 დღის მიღმა ციკლი ღირს ექიმთან განიხილო.`,
+        title: t("fertility.doctor.cycleLengthTitle"),
+        text: t("fertility.doctor.cycleLength", { avg: regularity.avgCycle }),
       });
     }
   }
@@ -150,8 +155,8 @@ export function evaluateDoctorVisitSignals({ regularity, trying, logSummary, age
     signals.push({
       id: "no_lh_surge",
       icon: "🧪",
-      title: "ოვულაციის პიკი ვერ დაფიქსირდა",
-      text: "მრავალი ტესტის მიუხედავად დადებითი ჯერ არ ყოფილა. შესაძლოა ტესტის დროა ასაცილებელი, ან ღირს ექიმთან შემოწმება.",
+      title: t("fertility.doctor.noSurgeTitle"),
+      text: t("fertility.doctor.noSurge"),
     });
   }
 

@@ -24,8 +24,8 @@ import {
   summarizeFertilityLogs,
 } from "../../utils/fertilityStats";
 import {
-  LIFESTYLE_TIPS,
-  PARTNER_TIPS,
+  getLifestyleTips,
+  getPartnerTips,
   evaluateDoctorVisitSignals,
   getAgeFromBirthDate,
 } from "../../utils/fertilityInsights";
@@ -1113,7 +1113,7 @@ function FertilityStatisticsScreen() {
                   <Ionicons name="people-outline" size={17} color={theme.accent} />
                 </View>
               </View>
-              {PARTNER_TIPS.map((tip) => (
+              {getPartnerTips().map((tip) => (
                 <View key={tip.id} style={styles.fertTipRow}>
                   <Text style={styles.fertTipIcon}>{tip.icon}</Text>
                   <View style={{ flex: 1 }}>
@@ -1132,7 +1132,7 @@ function FertilityStatisticsScreen() {
                   <Ionicons name="heart-outline" size={17} color={theme.accent} />
                 </View>
               </View>
-              {LIFESTYLE_TIPS.map((tip) => (
+              {getLifestyleTips().map((tip) => (
                 <View key={tip.id} style={styles.fertTipRow}>
                   <Text style={styles.fertTipIcon}>{tip.icon}</Text>
                   <View style={{ flex: 1 }}>

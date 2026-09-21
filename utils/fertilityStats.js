@@ -1,5 +1,7 @@
 import dayjs from "dayjs";
 
+import { t } from "../services/i18n";
+
 import { getCycleWindowDates } from "./cycleEngine";
 
 // Pure stats helpers for fertility ("მინდა დაორსულება") mode.
@@ -33,7 +35,7 @@ export function analyzeCycleRegularity(cycles = [], fallbackCycleLength = 28) {
       spread: null,
       isRegular: null,
       accuracyKey: "unknown",
-      accuracyLabel: "ჯერ ცოტა მონაცემია",
+      accuracyLabel: t("fertility.accuracy.unknown"),
       sampleSize: 0,
     };
   }
@@ -50,8 +52,7 @@ export function analyzeCycleRegularity(cycles = [], fallbackCycleLength = 28) {
   if (gaps.length >= 3 && spread <= 3) accuracyKey = "high";
   else if (gaps.length >= 2 && spread <= 7) accuracyKey = "medium";
 
-  const accuracyLabel =
-    accuracyKey === "high" ? "მაღალი" : accuracyKey === "medium" ? "საშუალო" : "დაბალი";
+  const accuracyLabel = t(`fertility.accuracy.${accuracyKey}`);
 
   return { avgCycle, shortest, longest, spread, isRegular, accuracyKey, accuracyLabel, sampleSize: gaps.length };
 }

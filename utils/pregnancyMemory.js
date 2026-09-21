@@ -1,28 +1,17 @@
 import dayjs from "dayjs";
 
+import { t } from "../services/i18n";
+
 // Long-running memory for the pregnancy assistant. Rather than replay the whole
 // 9-month chat, it summarises the FACTS the app already stores: which symptoms
 // appeared in which pregnancy weeks, and what the user has been asking about.
 //
 // Pure functions — the orchestrator fetches the rows and passes them in.
 
-const SYMPTOM_LABELS = {
-  headache: "თავის ტკივილი",
-  cramps: "მუცლის ტკივილი",
-  fatigue: "დაღლილობა",
-  bloating: "შეშუპება",
-  backache: "ზურგის ტკივილი",
-  irritable: "გაღიზიანება",
-  sad: "სევდა",
-  anxious: "შფოთვა",
-  happy: "ბედნიერება",
-  nausea: "გულისრევა",
-  heartburn: "გულძმარვა",
-  movement: "ბავშვის მოძრაობა",
-  urination: "ხშირი შარდვა",
-};
+// Labels live in locales/*.pregnancyMemory.symptoms.<id>
+const SYMPTOM_IDS = new Set(["headache", "cramps", "fatigue", "bloating", "backache", "irritable", "sad", "anxious", "happy", "nausea", "heartburn", "movement", "urination"]);
 
-const label = (id) => SYMPTOM_LABELS[id] || id;
+const label = (id) => (SYMPTOM_IDS.has(id) ? t(`pregnancyMemory.symptoms.${id}`) : id);
 
 // Which pregnancy week a date falls in (1-40).
 function weekForDate(dateStr, lmpDate) {
@@ -57,8 +46,8 @@ export function summarizePregnancySymptomHistory(symptomRows = [], lmpDate) {
       symptom: label(rec.id),
       times: rec.count,
       week_range: rec.firstWeek === rec.lastWeek
-        ? `კვირა ${rec.firstWeek}`
-        : `კვირა ${rec.firstWeek}-${rec.lastWeek}`,
+        ? t("pregnancyMemory.week", { week: rec.firstWeek })
+        : t("pregnancyMemory.weekRange", { from: rec.firstWeek, to: rec.lastWeek }),
     }));
 }
 

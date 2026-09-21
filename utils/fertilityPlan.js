@@ -1,15 +1,18 @@
 import dayjs from "dayjs";
 
+import { t } from "../services/i18n";
+
 // Builds today's personal plan for fertility ("მინდა დაორსულება") mode.
 // Pure: takes the cycle forecast + today's logs, returns display-ready items.
 
+// Labels live in locales/*.fertility.supplements.<id>; screens translate by id.
 export const SUPPLEMENT_OPTIONS = [
-  { id: "folic", label: "ფოლიუმის მჟავა", icon: "🌿" },
-  { id: "vitamin_d", label: "ვიტამინი D", icon: "☀️" },
-  { id: "omega3", label: "ომეგა 3", icon: "🐟" },
-  { id: "iron", label: "რკინა", icon: "🩸" },
-  { id: "iodine", label: "იოდი", icon: "🧂" },
-  { id: "other", label: "სხვა დამატება", icon: "💊" },
+  { id: "folic", icon: "🌿" },
+  { id: "vitamin_d", icon: "☀️" },
+  { id: "omega3", icon: "🐟" },
+  { id: "iron", icon: "🩸" },
+  { id: "iodine", icon: "🧂" },
+  { id: "other", icon: "💊" },
 ];
 
 // LH tests are worth doing in the run-up to ovulation, not all month.
@@ -49,10 +52,10 @@ export function buildDailyPlan({ forecast, todayLogs = {}, referenceDate = dayjs
     items.push({
       id: "lh_test",
       icon: "🧪",
-      title: "გაიკეთე ოვულაციის ტესტი",
+      title: t("fertility.plan.lhTitle"),
       subtitle: isPeakDay
-        ? "პიკის დღეებია — ტესტი დღეს განსაკუთრებით მნიშვნელოვანია"
-        : "ტესტირების ფანჯარაშია — დღეში ერთხელ საკმარისია",
+        ? t("fertility.plan.lhPeak")
+        : t("fertility.plan.lhWindow"),
       done: Boolean(todayLogs.lh_test),
       priority: isPeakDay ? 1 : 2,
     });
@@ -63,10 +66,10 @@ export function buildDailyPlan({ forecast, todayLogs = {}, referenceDate = dayjs
     items.push({
       id: "intercourse",
       icon: "❤️",
-      title: isPeakDay ? "დღეს საუკეთესო დღეა ურთიერთობისთვის" : "ნაყოფიერი ფანჯარაა",
+      title: isPeakDay ? t("fertility.plan.intercoursePeakTitle") : t("fertility.plan.intercourseTitle"),
       subtitle: isPeakDay
-        ? "ჩასახვის შანსი მაქსიმალურია"
-        : "ყოველ მეორე დღეს ურთიერთობა ზრდის შანსს",
+        ? t("fertility.plan.intercoursePeak")
+        : t("fertility.plan.intercourseWindow"),
       done: Boolean(todayLogs.intercourse),
       priority: isPeakDay ? 1 : 3,
     });
@@ -76,8 +79,8 @@ export function buildDailyPlan({ forecast, todayLogs = {}, referenceDate = dayjs
   items.push({
     id: "bbt",
     icon: "🌡️",
-    title: "გაზომე ბაზალური ტემპერატურა",
-    subtitle: "დილით, ადგომამდე, ერთსა და იმავე დროს",
+    title: t("fertility.plan.bbtTitle"),
+    subtitle: t("fertility.plan.bbtSubtitle"),
     done: Boolean(todayLogs.bbt),
     priority: 4,
   });
@@ -86,10 +89,10 @@ export function buildDailyPlan({ forecast, todayLogs = {}, referenceDate = dayjs
   items.push({
     id: "supplement",
     icon: "💊",
-    title: "მიიღე ვიტამინები",
+    title: t("fertility.plan.supplementsTitle"),
     subtitle: (todayLogs.supplement?.taken?.length)
-      ? `დღეს მიღებული: ${todayLogs.supplement.taken.length}`
-      : "ფოლიუმის მჟავა ყოველდღიურად რეკომენდებულია",
+      ? t("fertility.plan.supplementsTaken", { count: todayLogs.supplement.taken.length })
+      : t("fertility.plan.supplementsHint"),
     done: Boolean(todayLogs.supplement?.taken?.length),
     priority: 5,
   });
@@ -98,8 +101,8 @@ export function buildDailyPlan({ forecast, todayLogs = {}, referenceDate = dayjs
   items.push({
     id: "ovulation_symptom",
     icon: "🌸",
-    title: "შეავსე დღევანდელი ნიშნები",
-    subtitle: "ლორწო და სიმპტომები აზუსტებს ოვულაციის შეფასებას",
+    title: t("fertility.plan.signsTitle"),
+    subtitle: t("fertility.plan.signsSubtitle"),
     done: Boolean(todayLogs.ovulation_symptom || todayLogs.cervical_mucus),
     priority: 6,
   });
