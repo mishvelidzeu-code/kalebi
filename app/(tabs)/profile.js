@@ -1,5 +1,3 @@
-import dayjs from "dayjs";
-import "dayjs/locale/ka";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,10 +11,11 @@ import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, AppState, Modal, Platform, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 
+import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { useFertility } from "../../context/FertilityContext";
-import { TEMP_FERTILITY_COMING_SOON } from "../../constants/tempFlags";
+import { TEMP_FERTILITY_COMING_SOON, TEMP_LANGUAGE_PICKER_ENABLED } from "../../constants/tempFlags";
 import { invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { disableCycleReminders, getNotificationsEnabled, setNotificationsEnabled, syncCycleRemindersForUser } from "../../services/notifications";
 import {
@@ -31,8 +30,7 @@ import {
   openManageSubscriptions,
 } from "../../services/purchases";
 import { supabase } from "../../services/supabase";
-
-dayjs.locale("ka");
+import dayjs from "../../utils/dayjs";
 
 const getAvatarStorageKey = (userId) => `@cycle-care/avatar/${userId}`;
 const AVATAR_BUCKET = "avatars";
@@ -97,6 +95,7 @@ export default function ProfileScreen() {
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [cycleLength, setCycleLength] = useState("28");
   const [periodLength, setPeriodLength] = useState("5");
+  const { t, language, languages, setLanguage } = useLanguage();
   const [goal, setGoal] = useState("ციკლის კონტროლი");
   const [notifications, setNotifications] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -115,24 +114,27 @@ export default function ProfileScreen() {
   const [tempName, setTempName] = useState("");
   const [tempPhoneNumber, setTempPhoneNumber] = useState("");
 
+  // Stored goal values stay Georgian (DB rows, AI goal map and every
+  // comparison depend on them); only the displayed label is translated.
   const goalOptions = ["ციკლის კონტროლი", "დაორსულება", "ჯანმრთელობის მონიტორინგი"];
-  // Display-only rename — the stored goal value stays "დაორსულება" so existing
-  // comparisons/DB rows and the AI's internal goal mapping keep working.
-  const FERTILITY_MODE_LABEL = "მინდა დაორსულება";
+  const GOAL_LABEL_KEYS = {
+    "ციკლის კონტროლი": "goals.cycleControl",
+    "დაორსულება": "goals.fertility",
+    "ჯანმრთელობის მონიტორინგი": "goals.healthMonitoring",
+  };
+  const FERTILITY_MODE_LABEL = t("goals.fertility");
 
   // Turning a mode off is not a cancellation — the subscription lives in the
   // store and keeps billing. Both paid modes share one subscription, so
   // cancelling closes both; say so before the user assumes otherwise.
-  const CANCEL_HINT = canOpenManageSubscriptions()
-    ? "გასაუქმებლად: პროფილი → გამოწერების მართვა (ან App Store → გამოწერები)."
-    : "გამოწერა იმ საიტიდან უქმდება, სადაც გადაიხადე.";
-  const SHARED_SUBSCRIPTION_HINT = `ერთი გამოწერა ორივე რეჟიმს ხსნის — ორსულობასაც და "${FERTILITY_MODE_LABEL}"-საც. გაუქმება ორივეს დახურავს.`;
-  const getGoalLabel = (value) => (value === "დაორსულება" ? FERTILITY_MODE_LABEL : value);
+  const CANCEL_HINT = canOpenManageSubscriptions() ? t("profile.cancelHintIos") : t("profile.cancelHintWeb");
+  const SHARED_SUBSCRIPTION_HINT = t("profile.sharedSubscriptionHint", { mode: FERTILITY_MODE_LABEL });
+  const getGoalLabel = (value) => (GOAL_LABEL_KEYS[value] ? t(GOAL_LABEL_KEYS[value]) : value);
 
   // TEMP: fertility mode is blocked while it is being finished — every entry
   // point shows this alert instead of the paywall (see constants/tempFlags.js).
   const showFertilityComingSoon = () => {
-    Alert.alert("მალე დაემატება 🌿", `"${FERTILITY_MODE_LABEL}" რეჟიმი მალე გაეშვება — ცოტაც მოითმინე.`);
+    Alert.alert(t("profile.fertilityComingSoonTitle"), t("profile.fertilityComingSoonBody", { mode: FERTILITY_MODE_LABEL }));
   };
 
   const openFertilityFlow = () => {
@@ -186,16 +188,16 @@ export default function ProfileScreen() {
           await reloadFertility();
           setShowPregnancyModal(false);
           setSelectedPregnancyDate(null);
-          Alert.alert("ორსულობის რეჟიმი ჩაირთო", "გადახდა დადასტურდა და ორსულობის რეჟიმი ჩაირთო.");
+          Alert.alert(t("profile.pregnancyEnabledTitle"), t("profile.pregnancyPaidBody"));
           return;
         }
 
         await updateGoalMode("დაორსულება");
         setShowFertilityModal(false);
-        Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო`, "გადახდა დადასტურდა და დაგეგმვის რეჟიმი ჩაირთო.");
+        Alert.alert(t("profile.fertilityEnabledTitle", { mode: FERTILITY_MODE_LABEL }), t("profile.fertilityPaidBody"));
       } catch (error) {
         console.log("Android pregnancy checkout refresh error:", error);
-        Alert.alert("შეცდომა", "გადახდის სტატუსის განახლება ვერ მოხერხდა. სცადე ხელახლა.");
+        Alert.alert(t("common.error"), t("profile.paymentRefreshFailed"));
       }
     });
 
@@ -315,7 +317,7 @@ export default function ProfileScreen() {
 
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("წვდომა საჭიროა", "გთხოვთ, ფოტოების წვდომა ჩართოთ რომ პროფილის სურათი აირჩიოთ.");
+        Alert.alert(t("profile.photoPermissionTitle"), t("profile.photoPermissionBody"));
         return;
       }
 
@@ -362,13 +364,13 @@ export default function ProfileScreen() {
       console.log('Avatar save error:', error);
       const message = String(error?.message || error?.error_description || error || '');
       if (message.includes('ExponentImagePicker')) {
-        Alert.alert('build საჯიროა', 'პროფილის სურათის არჩევისთვის iOS dev build გცირდება.');
+        Alert.alert(t("profile.devBuildTitle"), t("profile.devBuildBody"));
       } else if (message.toLowerCase().includes('bucket')) {
-        Alert.alert('Storage Bucket', 'avatars bucket არ არსებობს — Supabase → Storage → New Bucket → avatars.');
+        Alert.alert('Storage Bucket', t("profile.bucketMissing"));
       } else if (message.includes('row-level') || message.includes('policy') || message.includes('403') || message.includes('permission')) {
         Alert.alert('Storage Policy', 'Supabase → Storage → avatars → Policies → INSERT for authenticated users.');
       } else {
-        Alert.alert('შეცდომა', message || 'სურათის ატვირთვა ვერ მოხდა.');
+        Alert.alert(t("common.error"), message || t("profile.uploadFailed"));
       }
     } finally {
       setAvatarSaving(false);
@@ -393,7 +395,7 @@ export default function ProfileScreen() {
 
       if (finalStatus !== "granted") {
         await setNotificationsEnabled(false);
-        Alert.alert("წვდომა უარყოფილია", "გთხოვთ, ჩართოთ შეტყობინებები ტელეფონის პარამეტრებიდან.");
+        Alert.alert(t("profile.notifDeniedTitle"), t("profile.notifDeniedBody"));
         setNotifications(false);
         return;
       }
@@ -407,8 +409,8 @@ export default function ProfileScreen() {
 
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: "შეტყობინებები აქტიურია! ✨",
-            body: "თქვენ მიიღებთ შეხსენებებს ციკლის მოახლოების შესახებ.",
+            title: t("profile.notifActiveTitle"),
+            body: t("profile.notifActiveBody"),
           },
           trigger: { seconds: 2 },
         });
@@ -418,7 +420,7 @@ export default function ProfileScreen() {
       */
     } catch (e) {
       console.log("Notification Logic Error:", e);
-      Alert.alert("შეცდომა", "სისტემური ხარვეზი შეტყობინებების ჩართვისას.");
+      Alert.alert(t("common.error"), t("profile.notifEnableError"));
       setNotifications(false);
     }
   };
@@ -448,11 +450,11 @@ export default function ProfileScreen() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri);
       } else {
-        Alert.alert("შეცდომა", "გაზიარება შეუძლებელია ამ მოწყობილობაზე");
+        Alert.alert(t("common.error"), t("profile.shareUnavailable"));
       }
     } catch (error) {
       console.error(error);
-      Alert.alert("შეცდომა", "ექსპორტი ვერ განხორციელდა");
+      Alert.alert(t("common.error"), t("profile.exportFailed"));
     } finally {
       setSaving(false);
     }
@@ -494,7 +496,7 @@ export default function ProfileScreen() {
     const finalPhoneNumber = tempPhoneNumber.trim();
 
     if (!finalPhoneNumber) {
-      Alert.alert("შეავსე ნომერი", "ტელეფონის ნომერი სავალდებულოა.");
+      Alert.alert(t("common.phoneRequiredTitle"), t("common.phoneRequiredBody"));
       return;
     }
 
@@ -535,9 +537,9 @@ export default function ProfileScreen() {
       setUserName(finalName);
       setPhoneNumber(finalPhoneNumber);
       if (hideModalCallback) hideModalCallback();
-      Alert.alert("წარმატება ✨", "მონაცემები განახლდა");
+      Alert.alert(t("common.success"), t("profile.dataUpdated"));
     } catch {
-      Alert.alert("შეცდომა", "მონაცემების შენახვა ვერ მოხერხდა");
+      Alert.alert(t("common.error"), t("profile.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -582,7 +584,7 @@ export default function ProfileScreen() {
         await enablePregnancyMode(dateStr);
         setShowPregnancyModal(false);
         setSelectedPregnancyDate(null);
-        Alert.alert("ორსულობის რეჟიმი ჩაირთო ✨", "წვდომა გააქტიურდა შეზღუდვების გარეშე.");
+        Alert.alert(t("profile.pregnancyEnabledStarTitle"), t("profile.accessUnlimited"));
         return;
       }
 
@@ -590,7 +592,7 @@ export default function ProfileScreen() {
         await enablePregnancyMode(dateStr);
         setShowPregnancyModal(false);
         setSelectedPregnancyDate(null);
-        Alert.alert("ორსულობის რეჟიმი ჩაირთო ✨", "აპლიკაცია ახლა მორგებულია შენი ორსულობისთვის.");
+        Alert.alert(t("profile.pregnancyEnabledStarTitle"), t("profile.pregnancyTailored"));
         return;
       }
 
@@ -600,12 +602,12 @@ export default function ProfileScreen() {
           await enablePregnancyMode(dateStr);
           setShowPregnancyModal(false);
           setSelectedPregnancyDate(null);
-          Alert.alert("ორსულობის რეჟიმი ჩაირთო", "ანგარიშზე უკვე გაქვს აქტიური წვდომა და რეჟიმი ჩაირთო.");
+          Alert.alert(t("profile.pregnancyEnabledTitle"), t("profile.pregnancyAlreadyAccess"));
           return;
         }
 
         await startAndroidPregnancyCheckout({ type: "pregnancy", dateStr });
-        Alert.alert("გადახდა გაიხსნა", "გააგრძელე გადახდა ვებსაიტზე. აპში დაბრუნების შემდეგ სტატუსი ავტომატურად განახლდება.");
+        Alert.alert(t("profile.checkoutOpenedTitle"), t("profile.checkoutOpenedBody"));
         return;
       }
 
@@ -615,7 +617,7 @@ export default function ProfileScreen() {
         // Offerings failed to load (no key, network, store outage). Enabling
         // here would hand out the paid mode for free, so fail honestly instead.
         // Testing goes through an admin or test account (freeModeAccess above).
-        Alert.alert("დროებით მიუწვდომელია", "გამოწერა ამჟამად ვერ ჩაიტვირთა. სცადე ცოტა ხანში.");
+        Alert.alert(t("profile.unavailableTitle"), t("profile.unavailableBody"));
         return;
       } else {
         const status = await checkPregnancySubscriptionStatus();
@@ -626,11 +628,11 @@ export default function ProfileScreen() {
           if (result.hasSubscription) {
             await enablePregnancyMode(dateStr);
           } else {
-            Alert.alert("შეცდომა", "გადახდა ვერ მოხდა. სცადეთ თავიდან.");
+            Alert.alert(t("common.error"), t("profile.purchaseFailed"));
             return;
           }
         } else {
-          Alert.alert("შეცდომა", "გამოწერა ვერ მოიძებნა. სცადეთ მოგვიანებით.");
+          Alert.alert(t("common.error"), t("profile.offeringMissing"));
           return;
         }
       }
@@ -640,12 +642,12 @@ export default function ProfileScreen() {
       await reloadFertility();
       setShowPregnancyModal(false);
       setSelectedPregnancyDate(null);
-      Alert.alert("ორსულობის რეჟიმი ჩაირთო ✨", "აპლიკაცია ახლა მორგებულია შენი ორსულობისთვის.");
+      Alert.alert(t("profile.pregnancyEnabledStarTitle"), t("profile.pregnancyTailored"));
     } catch (error) {
       if (error?.userCancelled || error?.code === "1") {
         // user tapped Cancel on the App Store sheet — silent
       } else {
-        Alert.alert("შეცდომა", "ვერ ჩაირთო ორსულობის რეჟიმი.");
+        Alert.alert(t("common.error"), t("profile.pregnancyEnableFailed"));
       }
     } finally {
       setPregnancySaving(false);
@@ -662,10 +664,10 @@ export default function ProfileScreen() {
       await updatePregnancyStartDate(dateStr);
       invalidateAssistantContextCache();
       setShowPregnancyModal(false);
-      Alert.alert("თარიღი განახლდა ✨", "ორსულობის კვირა და კალენდარი ახალი თარიღით გადაითვლება.");
+      Alert.alert(t("profile.dateUpdatedTitle"), t("profile.dateUpdatedBody"));
     } catch (error) {
       console.log("Pregnancy date update error:", error);
-      Alert.alert("შეცდომა", "ორსულობის თარიღის შეცვლა ვერ მოხერხდა.");
+      Alert.alert(t("common.error"), t("profile.dateUpdateFailed"));
     } finally {
       setPregnancySaving(false);
     }
@@ -688,19 +690,19 @@ export default function ProfileScreen() {
 
   const handlePregnancyDisable = () => {
     Alert.alert(
-      "ორსულობის რეჟიმის გამორთვა",
-      `ნამდვილად გსურს ჩვეულებრივ რეჟიმზე დაბრუნება? ორსულობის მონაცემები შეინახება.\n\n⚠️ რეჟიმის გამორთვა გამოწერას არ აუქმებს — გადახდა გაგრძელდება. ${CANCEL_HINT}\n\n${SHARED_SUBSCRIPTION_HINT}`,
+      t("profile.pregnancyDisableTitle"),
+      t("profile.pregnancyDisableBody", { cancelHint: CANCEL_HINT, sharedHint: SHARED_SUBSCRIPTION_HINT }),
       [
-        { text: "გაუქმება", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "გამორთვა",
+          text: t("common.disable"),
           style: "destructive",
           onPress: async () => {
             await disablePregnancyMode();
             // Leaving pregnancy can hand control back to fertility if that goal
             // is still set, so let it re-evaluate now rather than on restart.
             await reloadFertility();
-            Alert.alert("დაბრუნდი ✨", "ჩვეულებრივი ციკლის რეჟიმი ჩაირთო.");
+            Alert.alert(t("profile.backTitle"), t("profile.backBody"));
           },
         },
       ]
@@ -709,12 +711,12 @@ export default function ProfileScreen() {
 
   const handlePregnancyActivePress = () => {
     Alert.alert(
-      "ორსულობის რეჟიმი",
-      "შეგიძლია შეცვალო ბოლო მენსტრუაციის თარიღი ან გამორთო ორსულობის რეჟიმი.",
+      t("profile.pregnancyMode"),
+      t("profile.pregnancyActiveBody"),
       [
-        { text: "გაუქმება", style: "cancel" },
-        { text: "თარიღის შეცვლა", onPress: openPregnancyDateEditor },
-        { text: "გამორთვა", style: "destructive", onPress: handlePregnancyDisable },
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("profile.changeDate"), onPress: openPregnancyDateEditor },
+        { text: t("common.disable"), style: "destructive", onPress: handlePregnancyDisable },
       ]
     );
   };
@@ -769,7 +771,7 @@ export default function ProfileScreen() {
       if (freeModeAccess) {
         await updateGoalMode("დაორსულება");
         setShowFertilityModal(false);
-        Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო ✨`, "წვდომა გააქტიურდა შეზღუდვების გარეშე.");
+        Alert.alert(t("profile.fertilityEnabledStarTitle", { mode: FERTILITY_MODE_LABEL }), t("profile.accessUnlimited"));
         return;
       }
 
@@ -779,12 +781,12 @@ export default function ProfileScreen() {
           await updateGoalMode("დაორსულება");
           await reloadPregnancy();
           setShowFertilityModal(false);
-          Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო`, "ანგარიშზე უკვე გაქვს აქტიური წვდომა.");
+          Alert.alert(t("profile.fertilityEnabledTitle", { mode: FERTILITY_MODE_LABEL }), t("profile.fertilityAlreadyAccess"));
           return;
         }
 
         await startAndroidPregnancyCheckout({ type: "fertility" });
-        Alert.alert("გადახდა გაიხსნა", "გააგრძელე გადახდა ვებსაიტზე. აპში დაბრუნების შემდეგ სტატუსი ავტომატურად განახლდება.");
+        Alert.alert(t("profile.checkoutOpenedTitle"), t("profile.checkoutOpenedBody"));
         return;
       }
 
@@ -794,7 +796,7 @@ export default function ProfileScreen() {
         // Without offerings we cannot grant access (fertilityUnlocked needs the
         // entitlement), so claiming success here would lock the user out behind
         // a "ჩაირთო ✨" message. Fail honestly instead.
-        Alert.alert("დროებით მიუწვდომელია", "გამოწერა ამჟამად ვერ ჩაიტვირთა. სცადე ცოტა ხანში.");
+        Alert.alert(t("profile.unavailableTitle"), t("profile.unavailableBody"));
         return;
       } else {
         const status = await checkPregnancySubscriptionStatus();
@@ -805,23 +807,23 @@ export default function ProfileScreen() {
           if (result.hasSubscription) {
             await updateGoalMode("დაორსულება");
           } else {
-            Alert.alert("შეცდომა", "გადახდა ვერ მოხდა. სცადეთ თავიდან.");
+            Alert.alert(t("common.error"), t("profile.purchaseFailed"));
             return;
           }
         } else {
-          Alert.alert("შეცდომა", "გამოწერა ვერ მოიძებნა. სცადეთ მოგვიანებით.");
+          Alert.alert(t("common.error"), t("profile.offeringMissing"));
           return;
         }
       }
 
       await reloadPregnancy();
       setShowFertilityModal(false);
-      Alert.alert(`"${FERTILITY_MODE_LABEL}" ჩაირთო ✨`, "აპი ახლა მორგებულია ოვულაციის, ნაყოფიერი ფანჯრის და ჩასახვის დაგეგმვისთვის.");
+      Alert.alert(t("profile.fertilityEnabledStarTitle", { mode: FERTILITY_MODE_LABEL }), t("profile.fertilityTailored"));
     } catch (error) {
       if (error?.userCancelled || error?.code === "1") {
         // silent cancel
       } else {
-        Alert.alert("შეცდომა", `ვერ ჩაირთო "${FERTILITY_MODE_LABEL}".`);
+        Alert.alert(t("common.error"), t("profile.fertilityEnableFailed", { mode: FERTILITY_MODE_LABEL }));
       }
     } finally {
       setFertilitySaving(false);
@@ -830,19 +832,19 @@ export default function ProfileScreen() {
 
   const handleFertilityDisable = () => {
     Alert.alert(
-      `"${FERTILITY_MODE_LABEL}" გამორთვა`,
-      `ნამდვილად გსურს "${FERTILITY_MODE_LABEL}" გამორთვა და ჩვეულებრივ რეჟიმზე დაბრუნება? ჩანაწერები შეინახება.\n\n⚠️ რეჟიმის გამორთვა გამოწერას არ აუქმებს — გადახდა გაგრძელდება. ${CANCEL_HINT}\n\n${SHARED_SUBSCRIPTION_HINT}`,
+      t("profile.fertilityDisableTitle", { mode: FERTILITY_MODE_LABEL }),
+      t("profile.fertilityDisableBody", { mode: FERTILITY_MODE_LABEL, cancelHint: CANCEL_HINT, sharedHint: SHARED_SUBSCRIPTION_HINT }),
       [
-        { text: "გაუქმება", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "გამორთვა",
+          text: t("common.disable"),
           style: "destructive",
           onPress: async () => {
             try {
               await updateGoalMode("ციკლის კონტროლი");
-              Alert.alert("დაბრუნდი ✨", "ჩვეულებრივი ციკლის რეჟიმი ჩაირთო.");
+              Alert.alert(t("profile.backTitle"), t("profile.backBody"));
             } catch {
-              Alert.alert("შეცდომა", `ვერ გამოირთო "${FERTILITY_MODE_LABEL}".`);
+              Alert.alert(t("common.error"), t("profile.fertilityDisableFailed", { mode: FERTILITY_MODE_LABEL }));
             }
           },
         },
@@ -856,17 +858,32 @@ export default function ProfileScreen() {
     } catch (error) {
       console.log("Manage subscriptions error:", error);
       Alert.alert(
-        "ვერ გაიხსნა",
-        "გამოწერების გვერდი ვერ გაიხსნა. ხელით: App Store → შენი პროფილი → გამოწერები."
+        t("profile.manageFailedTitle"),
+        t("profile.manageFailedBody")
       );
     }
   };
 
+  const handleLanguagePress = () => {
+    Alert.alert(t("language.title"), t("language.subtitle"), [
+      ...languages.map((item) => ({
+        text: `${item.flag} ${item.label}`,
+        onPress: async () => {
+          if (item.code === language) return;
+          await setLanguage(item.code);
+          // Scheduled reminders carry their text, so rebuild them in the new language.
+          syncCycleRemindersForUser().catch(() => {});
+        },
+      })),
+      { text: t("common.cancel"), style: "cancel" },
+    ]);
+  };
+
   const handleLogout = () => {
-    Alert.alert("გასვლა", "ნამდვილად გსურთ ანგარიშიდან გასვლა?", [
-      { text: "გაუქმება", style: "cancel" },
+    Alert.alert(t("common.logout"), t("profile.logoutBody"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "გასვლა",
+        text: t("common.logout"),
         style: "destructive",
         onPress: async () => {
           await resetPurchasesIdentity();
@@ -908,11 +925,11 @@ export default function ProfileScreen() {
                 )}
               </View>
               <View style={styles.photoFrameCopy}>
-                <Text style={[styles.photoFrameTitle, { color: theme.text }]}>პროფილის ფოტო</Text>
-                <Text style={[styles.photoFrameSubtitle, { color: theme.subText }]}>შეეხე ფოტოს შესაცვლელად</Text>
+                <Text style={[styles.photoFrameTitle, { color: theme.text }]}>{t("profile.photoTitle")}</Text>
+                <Text style={[styles.photoFrameSubtitle, { color: theme.subText }]}>{t("profile.photoSubtitle")}</Text>
                 <View style={[styles.photoFrameChip, { backgroundColor: theme.primary }]}>
                   <Ionicons name="camera-outline" size={13} color="#FFFFFF" />
-                  <Text style={styles.photoFrameChipText}>ატვირთვა</Text>
+                  <Text style={styles.photoFrameChipText}>{t("profile.upload")}</Text>
                 </View>
               </View>
             </View>
@@ -921,17 +938,17 @@ export default function ProfileScreen() {
           <Text style={[styles.emailText, { color: theme.subText }]}>{email}</Text>
           {!!phoneNumber && <Text style={[styles.emailText, { color: theme.subText }]}>{phoneNumber}</Text>}
           <TouchableOpacity style={[styles.inlineEditButton, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]} onPress={openProfileEditModal} activeOpacity={0.85}>
-            <Text style={[styles.inlineEditButtonText, { color: theme.primary }]}>პროფილის რედაქტირება</Text>
+            <Text style={[styles.inlineEditButtonText, { color: theme.primary }]}>{t("profile.editProfile")}</Text>
           </TouchableOpacity>
         </LinearGradient>
 
-        <Text style={[styles.sectionHeader, { color: theme.subText }]}>იერსახე</Text>
+        <Text style={[styles.sectionHeader, { color: theme.subText }]}>{t("profile.sectionAppearance")}</Text>
         <View style={[styles.settingsBlock, glassBlockStyle]}>
           <SettingRow
             icon="🎨"
             bgColor={isDark ? "#2c1a4d" : "#F0F4FF"}
-            title="მუქი თემა"
-            subtitle="ჩართე აპის მუქი ვიზუალი"
+            title={t("profile.darkTheme")}
+            subtitle={t("profile.darkThemeSubtitle")}
             isDarkTheme={isDark}
             rightElement={
               <Switch
@@ -945,14 +962,14 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <Text style={[styles.sectionHeader, { color: theme.subText }]}>პირადი მონაცემები</Text>
+        <Text style={[styles.sectionHeader, { color: theme.subText }]}>{t("profile.sectionPersonal")}</Text>
         <View style={[styles.settingsBlock, glassBlockStyle]}>
-          <SettingRow icon="📆" bgColor={isDark ? "#3d1e2a" : "#FFF0F5"} title="ციკლი და პერიოდი" value={`${cycleLength} / ${periodLength} დღე`} onPress={() => setShowCycleModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
+          <SettingRow icon="📆" bgColor={isDark ? "#3d1e2a" : "#FFF0F5"} title={t("profile.cycleAndPeriod")} value={t("profile.cycleAndPeriodValue", { cycle: cycleLength, period: periodLength })} onPress={() => setShowCycleModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
-          <SettingRow icon="🎯" bgColor={isDark ? "#1a2a3d" : "#F0F4FF"} title="ჩემი მიზანი" value={getGoalLabel(goal)} onPress={() => setShowGoalModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
+          <SettingRow icon="🎯" bgColor={isDark ? "#1a2a3d" : "#F0F4FF"} title={t("profile.myGoal")} value={getGoalLabel(goal)} onPress={() => setShowGoalModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
         </View>
 
-        <Text style={[styles.sectionHeader, { color: theme.subText }]}>ორსულობა</Text>
+        <Text style={[styles.sectionHeader, { color: theme.subText }]}>{t("profile.sectionPregnancy")}</Text>
         <View style={[styles.settingsBlock, glassBlockStyle]}>
           {goal === "დაორსულება" && fertilityUnlocked ? (
             <>
@@ -960,8 +977,8 @@ export default function ProfileScreen() {
                 icon="🌿"
                 bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
                 title={FERTILITY_MODE_LABEL}
-                value="$2.99/თვე"
-                subtitle="დაჭერით გამოსართავად"
+                value={t("profile.pricePerMonth")}
+                subtitle={t("profile.tapToDisable")}
                 onPress={handleFertilityDisable}
                 isDarkTheme={isDark}
                 primaryColor={theme.primary}
@@ -974,7 +991,7 @@ export default function ProfileScreen() {
                 icon="🔒"
                 bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
                 title={FERTILITY_MODE_LABEL}
-                subtitle="მიზნად არჩეულია — გახსენი ოვულაციის/ნაყოფიერი ფანჯრის AI რჩევები $2.99/თვე-ად"
+                subtitle={t("profile.fertilityLockedSubtitle")}
                 onPress={openFertilityFlow}
                 showArrow
                 isDarkTheme={isDark}
@@ -988,7 +1005,7 @@ export default function ProfileScreen() {
                 icon="🌿"
                 bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
                 title={FERTILITY_MODE_LABEL}
-                subtitle="ოვულაციისა და ნაყოფიერი ფანჯრის ფოკუსირებული რეჟიმი"
+                subtitle={t("profile.fertilityIntroSubtitle")}
                 onPress={openFertilityFlow}
                 showArrow
                 isDarkTheme={isDark}
@@ -1001,9 +1018,9 @@ export default function ProfileScreen() {
             <SettingRow
               icon="🤰"
               bgColor={isDark ? "#3d1e2a" : "#FFF0F5"}
-              title="ორსულობის რეჟიმი"
-              value={`კვირა ${currentWeek}`}
-              subtitle={pregnancyStartDate ? `ბოლო მენსტრუაცია: ${dayjs(pregnancyStartDate).format("D MMMM YYYY")} · შეცვლა` : "თარიღის შეცვლა"}
+              title={t("profile.pregnancyMode")}
+              value={t("profile.weekValue", { week: currentWeek })}
+              subtitle={pregnancyStartDate ? t("profile.lmpSubtitle", { date: dayjs(pregnancyStartDate).format("D MMMM YYYY") }) : t("profile.changeDate")}
               onPress={handlePregnancyActivePress}
               isDarkTheme={isDark}
               primaryColor={theme.primary}
@@ -1012,8 +1029,8 @@ export default function ProfileScreen() {
             <SettingRow
               icon="🤰"
               bgColor={isDark ? "#3d1e2a" : "#FFF0F5"}
-              title="ორსულობის რეჟიმი"
-              subtitle="მორგე აპი შენი ორსულობისთვის"
+              title={t("profile.pregnancyMode")}
+              subtitle={t("profile.pregnancyIntroSubtitle")}
               onPress={handlePregnancyEntryPress}
               showArrow
               isDarkTheme={isDark}
@@ -1021,13 +1038,28 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        <Text style={[styles.sectionHeader, { color: theme.subText }]}>აპლიკაცია</Text>
+        <Text style={[styles.sectionHeader, { color: theme.subText }]}>{t("profile.sectionApp")}</Text>
         <View style={[styles.settingsBlock, glassBlockStyle]}>
+          {TEMP_LANGUAGE_PICKER_ENABLED && (
+            <>
+              <SettingRow
+                icon="🌐"
+                bgColor={isDark ? "#1e2a3d" : "#EEF4FF"}
+                title={t("profile.language")}
+                subtitle={t("profile.languageSubtitle")}
+                value={languages.find((item) => item.code === language)?.label}
+                onPress={handleLanguagePress}
+                isDarkTheme={isDark}
+                primaryColor={theme.primary}
+              />
+              <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+            </>
+          )}
           <SettingRow
             icon="🔔"
             bgColor={isDark ? "#3d351a" : "#FFF9E6"}
-            title="შეტყობინებები"
-            subtitle="შეგახსენებთ პერიოდის დაწყებას"
+            title={t("profile.notifications")}
+            subtitle={t("profile.notificationsSubtitle")}
             isDarkTheme={isDark}
             rightElement={
               <Switch
@@ -1040,28 +1072,28 @@ export default function ProfileScreen() {
             }
           />
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
-          <SettingRow icon="🔒" bgColor={isDark ? "#1e3d2a" : "#E6FFF0"} title="კონფიდენციალურობა" onPress={() => router.push("/privacy")} showArrow isDarkTheme={isDark} />
+          <SettingRow icon="🔒" bgColor={isDark ? "#1e3d2a" : "#E6FFF0"} title={t("profile.privacy")} onPress={() => router.push("/privacy")} showArrow isDarkTheme={isDark} />
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
-          <SettingRow icon="✨" bgColor={isDark ? "#3d1e2a" : "#FFF0F5"} title="Prime" subtitle="გამოწერის და უპირატესობების ნახვა" onPress={() => router.push("/premium")} showArrow isDarkTheme={isDark} />
+          <SettingRow icon="✨" bgColor={isDark ? "#3d1e2a" : "#FFF0F5"} title="Prime" subtitle={t("profile.primeSubtitle")} onPress={() => router.push("/premium")} showArrow isDarkTheme={isDark} />
           {canOpenManageSubscriptions() && (
             <>
               <View style={[styles.divider, { backgroundColor: theme.divider }]} />
-              <SettingRow icon="🧾" bgColor={isDark ? "#1e2a3d" : "#EEF4FF"} title="გამოწერების მართვა" subtitle="გაუქმება ან გეგმის შეცვლა App Store-ში" onPress={handleManageSubscription} showArrow isDarkTheme={isDark} />
+              <SettingRow icon="🧾" bgColor={isDark ? "#1e2a3d" : "#EEF4FF"} title={t("profile.manageSubscriptions")} subtitle={t("profile.manageSubscriptionsSubtitle")} onPress={handleManageSubscription} showArrow isDarkTheme={isDark} />
             </>
           )}
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
-          <SettingRow icon="📤" bgColor={isDark ? "#2a1e3d" : "#F5F0FF"} title="მონაცემების ექსპორტი" subtitle="გაუზიარე ექიმს" onPress={exportUserData} showArrow isDarkTheme={isDark} />
+          <SettingRow icon="📤" bgColor={isDark ? "#2a1e3d" : "#F5F0FF"} title={t("profile.exportData")} subtitle={t("profile.exportSubtitle")} onPress={exportUserData} showArrow isDarkTheme={isDark} />
         </View>
 
         {isTestAccount && (
           <>
-            <Text style={[styles.sectionHeader, { color: theme.subText }]}>ტესტირება</Text>
+            <Text style={[styles.sectionHeader, { color: theme.subText }]}>{t("profile.sectionTesting")}</Text>
             <View style={[styles.settingsBlock, glassBlockStyle]}>
               <SettingRow
                 icon="🧪"
                 bgColor={isDark ? "#2a233d" : "#F5F0FF"}
-                title="Prime (სატესტო)"
-                subtitle={testPrimeEnabled ? "ჩართულია — Prime რეჟიმი" : "გამორთულია — Free რეჟიმი"}
+                title={t("profile.testPrime")}
+                subtitle={testPrimeEnabled ? t("profile.testPrimeOn") : t("profile.testPrimeOff")}
                 isDarkTheme={isDark}
                 rightElement={
                   <Switch
@@ -1079,13 +1111,13 @@ export default function ProfileScreen() {
 
         {isAdmin && (
           <>
-            <Text style={[styles.sectionHeader, { color: theme.subText }]}>ადმინი</Text>
+            <Text style={[styles.sectionHeader, { color: theme.subText }]}>{t("profile.sectionAdmin")}</Text>
             <View style={[styles.settingsBlock, glassBlockStyle]}>
               <SettingRow
                 icon="🛠️"
                 bgColor={isDark ? "#2a233d" : "#F5F0FF"}
-                title="ადმინ პანელი"
-                subtitle="მომხმარებლები და Prime წვდომა"
+                title={t("profile.adminPanel")}
+                subtitle={t("profile.adminPanelSubtitle")}
                 onPress={() => router.push("/(tabs)/admin")}
                 showArrow
                 isDarkTheme={isDark}
@@ -1095,7 +1127,7 @@ export default function ProfileScreen() {
         )}
 
         <TouchableOpacity style={[styles.logoutBtn, { backgroundColor: theme.logoutBg }]} onPress={handleLogout}>
-          <Text style={styles.logoutBtnText}>ანგარიშიდან გასვლა</Text>
+          <Text style={styles.logoutBtnText}>{t("profile.logoutButton")}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 160 }} />
@@ -1105,13 +1137,13 @@ export default function ProfileScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowPregnancyModal(false)}>
           <Pressable style={[styles.bottomSheet, { backgroundColor: theme.card }]}>
             <View style={styles.sheetHandle} />
-            <Text style={[styles.modalTitle, { color: theme.text }]}>{pregnancyModalMode === "edit" ? "თარიღის შეცვლა 🤰" : "ორსულობის რეჟიმი 🤰"}</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{pregnancyModalMode === "edit" ? t("profile.editDateTitle") : t("profile.pregnancyModalTitle")}</Text>
             <Text style={{ color: theme.subText, textAlign: "center", marginBottom: 25, lineHeight: 22 }}>
               {pregnancyModalMode === "edit"
-                ? "აირჩიე ბოლო მენსტრუაციის სწორი თარიღი, რომ კვირა, კალენდარი და შეტყობინებები თავიდან გადაითვალოს."
-                : "კვირეული განვითარება, ორსულობის კალენდარი, AI ასისტენტი და სიმპტომების ტრეკინგი — ყველაფერი მორგებული შენზე."}
+                ? t("profile.editDateBody")
+                : t("profile.pregnancyModalBody")}
             </Text>
-            <Text style={[styles.inputLabel, { color: theme.subText }]}>ბოლო მენსტრუაციის თარიღი</Text>
+            <Text style={[styles.inputLabel, { color: theme.subText }]}>{t("profile.lmpLabel")}</Text>
             <View style={[styles.pickerCard, { backgroundColor: theme.pickerBg, borderColor: theme.pickerBorder }]}>
               {showPregnancyModal && (
                 <DateTimePicker
@@ -1129,10 +1161,10 @@ export default function ProfileScreen() {
               )}
             </View>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handlePregnancyModalSubmit}>
-              {pregnancySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{pregnancyModalMode === "edit" ? "თარიღის შენახვა" : "ჩართვა — $2.99/თვე"}</Text>}
+              {pregnancySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{pregnancyModalMode === "edit" ? t("profile.saveDate") : t("profile.enableForPrice")}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowPregnancyModal(false)}>
-              <Text style={styles.cancelBtnText}>გაუქმება</Text>
+              <Text style={styles.cancelBtnText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -1143,20 +1175,18 @@ export default function ProfileScreen() {
           <Pressable style={[styles.bottomSheet, { backgroundColor: theme.card }]}>
             <View style={styles.sheetHandle} />
             <Text style={[styles.modalTitle, { color: theme.text }]}>{FERTILITY_MODE_LABEL} 🌿</Text>
-            <Text style={{ color: theme.subText, textAlign: "center", marginBottom: 25, lineHeight: 22 }}>
-              ოვულაციის ფანჯარა, ნაყოფიერი დღეები, მიზანზე მორგებული AI რჩევები და უფრო ფოკუსირებული მხარდაჭერა დაორსულების დაგეგმვისთვის.
-            </Text>
+            <Text style={{ color: theme.subText, textAlign: "center", marginBottom: 25, lineHeight: 22 }}>{t("profile.fertilityModalBody")}</Text>
             <View style={[styles.modalCard, { backgroundColor: theme.input, borderColor: theme.border, borderWidth: 1 }]}>
-              <Text style={[styles.modalLabel, { color: theme.subText, marginBottom: 10 }]}>რას მიიღებ</Text>
-              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>• ნაყოფიერი ფანჯრის მკაფიო ფოკუსი</Text>
-              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>• დაორსულების მიზანზე მორგებული რჩევები</Text>
-              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>• ერთი გამოწერა ორივე რეჟიმს ხსნის (ორსულობის ჩათვლით) — $2.99/თვე</Text>
+              <Text style={[styles.modalLabel, { color: theme.subText, marginBottom: 10 }]}>{t("profile.whatYouGet")}</Text>
+              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>{t("profile.fertilityBenefit1")}</Text>
+              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>{t("profile.fertilityBenefit2")}</Text>
+              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>{t("profile.fertilityBenefit3")}</Text>
             </View>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handleFertilityEnable}>
-              {fertilitySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>ჩართვა — $2.99/თვე</Text>}
+              {fertilitySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{t("profile.enableForPrice")}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowFertilityModal(false)}>
-              <Text style={styles.cancelBtnText}>გაუქმება</Text>
+              <Text style={styles.cancelBtnText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -1167,7 +1197,7 @@ export default function ProfileScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowGoalModal(false)}>
           <View style={[styles.bottomSheet, { backgroundColor: theme.card }]}>
             <View style={styles.sheetHandle} />
-            <Text style={[styles.modalTitle, { color: theme.text }]}>რა არის შენი მიზანი?</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{t("profile.goalModalTitle")}</Text>
             {goalOptions.map((option) => (
               <TouchableOpacity
                 key={option}
@@ -1182,7 +1212,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             ))}
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowGoalModal(false)}>
-              <Text style={styles.cancelBtnText}>გაუქმება</Text>
+              <Text style={styles.cancelBtnText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -1192,20 +1222,20 @@ export default function ProfileScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowCycleModal(false)}>
           <View style={[styles.bottomSheet, { backgroundColor: theme.card }]}>
             <View style={styles.sheetHandle} />
-            <Text style={[styles.modalTitle, { color: theme.text }]}>ციკლის პარამეტრები</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{t("profile.cycleSettings")}</Text>
             <View style={[styles.modalCard, { backgroundColor: theme.input, borderColor: theme.border, borderWidth: 1 }]}>
-              <Text style={[styles.modalLabel, { color: theme.subText }]}>ციკლის ხანგრძლივობა</Text>
+              <Text style={[styles.modalLabel, { color: theme.subText }]}>{t("profile.cycleLength")}</Text>
               <NumberSelector value={cycleLength} setValue={setCycleLength} min={21} max={45} primary={theme.primary} isDark={isDark} />
             </View>
             <View style={[styles.modalCard, { backgroundColor: theme.input, borderColor: theme.border, borderWidth: 1 }]}>
-              <Text style={[styles.modalLabel, { color: theme.subText }]}>პერიოდის ხანგრძლივობა</Text>
+              <Text style={[styles.modalLabel, { color: theme.subText }]}>{t("profile.periodLength")}</Text>
               <NumberSelector value={periodLength} setValue={setPeriodLength} min={2} max={10} primary={theme.primary} isDark={isDark} />
             </View>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={() => saveSettings(() => setShowCycleModal(false))}>
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>შენახვა</Text>}
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{t("common.save")}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCycleModal(false)}>
-              <Text style={styles.cancelBtnText}>გაუქმება</Text>
+              <Text style={styles.cancelBtnText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -1214,15 +1244,15 @@ export default function ProfileScreen() {
       <Modal visible={showProfileEdit} transparent animationType="fade" onRequestClose={() => setShowProfileEdit(false)}>
         <Pressable style={styles.modalOverlayCenter} onPress={() => setShowProfileEdit(false)}>
           <Pressable style={[styles.centerModal, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>პროფილის რედაქტირება</Text>
-            <Text style={[styles.inputLabel, { color: theme.subText }]}>შენი სახელი</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>{t("profile.editProfile")}</Text>
+            <Text style={[styles.inputLabel, { color: theme.subText }]}>{t("profile.yourName")}</Text>
             <TextInput style={[styles.textInput, { backgroundColor: theme.input, color: theme.text }]} value={tempName} onChangeText={setTempName} placeholderTextColor={theme.subText} />
-            <Text style={[styles.inputLabel, { color: theme.subText }]}>ტელეფონის ნომერი</Text>
+            <Text style={[styles.inputLabel, { color: theme.subText }]}>{t("profile.phoneNumber")}</Text>
             <TextInput
               style={[styles.textInput, { backgroundColor: theme.input, color: theme.text }]}
               value={tempPhoneNumber}
               onChangeText={setTempPhoneNumber}
-              placeholder="მაგ: +995 5XX XX XX XX"
+              placeholder={t("profile.phonePlaceholder")}
               placeholderTextColor={theme.subText}
               keyboardType="phone-pad"
               autoCorrect={false}
@@ -1230,10 +1260,10 @@ export default function ProfileScreen() {
             />
             <View style={styles.modalRowBtns}>
               <TouchableOpacity style={[styles.halfBtnGray, { backgroundColor: theme.input, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowProfileEdit(false)}>
-                <Text style={styles.cancelBtnText}>გაუქმება</Text>
+                <Text style={styles.cancelBtnText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.halfBtnPink, { backgroundColor: theme.primary }]} onPress={() => saveSettings(() => setShowProfileEdit(false))}>
-                <Text style={styles.primaryBtnText}>შენახვა</Text>
+                <Text style={styles.primaryBtnText}>{t("common.save")}</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -1262,6 +1292,7 @@ function SettingRow({ icon, bgColor, title, subtitle, value, showArrow, onPress,
 }
 
 function NumberSelector({ value, setValue, min, max, primary, isDark }) {
+  const { t } = useLanguage();
   const decrease = () => Number(value) > min && setValue(String(Number(value) - 1));
   const increase = () => Number(value) < max && setValue(String(Number(value) + 1));
 
@@ -1271,7 +1302,7 @@ function NumberSelector({ value, setValue, min, max, primary, isDark }) {
         <Text style={[styles.selectorBtnText, { color: primary }]}>-</Text>
       </TouchableOpacity>
       <Text style={[styles.valueText, { color: isDark ? "#FFF7FA" : "#1A1A1A" }]}>
-          {value} <Text style={styles.valueLabel}>დღე</Text>
+          {value} <Text style={styles.valueLabel}>{t("common.day")}</Text>
       </Text>
       <TouchableOpacity style={[styles.selectorBtn, { backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "#fff" }, Number(value) >= max && { opacity: 0.3 }]} onPress={increase}>
         <Text style={[styles.selectorBtnText, { color: primary }]}>+</Text>

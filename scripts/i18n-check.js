@@ -32,6 +32,7 @@ const MIGRATED_FILES = [
   "app/onboarding/cycle-length.jsx",
   "app/onboarding/last-period.jsx",
   "app/onboarding/notifications.jsx",
+  "app/(tabs)/profile.js",
 ];
 
 // Georgian literals that are allowed to stay in code because they are stored
@@ -42,6 +43,8 @@ const DB_VALUE_LITERALS = new Set([
   "კონდომი", "ჰორმონალური კონტრაცეფცია", "სპირალი", "ქალწული", "არ ვიყენებ",
   // profiles.health
   "არა", "ჰორმონალური პრობლემა", "ინფექციური პრობლემა", "არ ვიცი",
+  // profiles.goal
+  "ციკლის კონტროლი", "დაორსულება", "ჯანმრთელობის მონიტორინგი",
 ]);
 
 // Georgian strings that were in code on main but are now produced by a
@@ -94,6 +97,10 @@ function georgianLiterals(source) {
   }
   for (const match of clean.matchAll(/>([^<>{}]*[Ⴀ-ჿ][^<>{}]*)</g)) {
     const text = match[1].replace(/\s+/g, " ").trim();
+    // `) : goal === "დაორსულება" ? (` between two tags is JS, not JSX text —
+    // skip when the only Georgian sits inside quoted literals (already
+    // covered by the literal scan above).
+    if (!GEORGIAN.test(text.replace(/"[^"]*"/g, ""))) continue;
     if (text) found.add(text);
   }
   return found;
@@ -153,6 +160,13 @@ for (const file of MIGRATED_FILES) {
     const normalised = text.trim();
     if (DB_VALUE_LITERALS.has(text) || MOVED_TO_LIBRARY.has(text)) continue;
     if (kaValues.has(text) || kaValues.has(normalised) || kaJoined.includes(normalised)) continue;
+    // Template literals: `კვირა ${currentWeek}` became "კვირა {{week}}" — every
+    // Georgian fragment between the ${…} holes must still exist somewhere.
+    const fragments = text
+      .split(/\$\{[^}]*\}/)
+      .map((part) => part.replace(/\\n/g, "\n").trim())
+      .filter((part) => GEORGIAN.test(part));
+    if (fragments.length && fragments.every((part) => kaJoined.includes(part))) continue;
     failures.push(`[${file}] Georgian text from ${BASE_REF} is not in locales/ka.js: "${text}"`);
   }
 }
