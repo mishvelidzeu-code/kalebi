@@ -35,6 +35,7 @@ const MIGRATED_FILES = [
   "app/(tabs)/profile.js",
   "app/(tabs)/index.js",
   "app/(tabs)/calendar.js",
+  "app/(tabs)/statistics.js",
 ];
 
 // Georgian literals that are allowed to stay in code because they are stored

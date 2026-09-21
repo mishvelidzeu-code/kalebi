@@ -1,5 +1,3 @@
-import dayjs from "dayjs";
-import "dayjs/locale/ka";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as FileSystem from "expo-file-system/legacy";
@@ -8,6 +6,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Animated, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { useFertility } from "../../context/FertilityContext";
@@ -16,6 +15,7 @@ import { getFertilityLogsRange } from "../../services/fertilityLogs";
 import { supabase } from "../../services/supabase";
 import { calculateCycleState } from "../../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../../utils/cyclePrediction";
+import dayjs from "../../utils/dayjs";
 import {
   analyzeCycleRegularity,
   buildFertileWindows,
@@ -38,46 +38,26 @@ import {
 } from "../../utils/ovulationDetection";
 import { buildFertilityReport, buildPregnancyTransition } from "../../utils/fertilityExport";
 
-dayjs.locale("ka");
-
-const SYMPTOM_LABELS = {
-  headache: "თავის ტკივილი",
-  cramps: "მუცლის ტკივილი",
-  fatigue: "დაღლილობა",
-  bloating: "შეშუპება",
-  backache: "წელის ტკივილი",
-  irritable: "გაღიზიანება",
-  sad: "სევდა",
-  anxious: "შფოთვა",
-  happy: "ბედნიერი",
-  nausea: "გულისრევა",
-  heartburn: "გულძმარვა",
-  movement: "ბავშვი იძრვის",
-  urination: "ხშირი შარდვა",
-};
-
-const OVULATION_SYMPTOM_LABELS = {
-  cramps: "მუცლის ტკივილი",
-  breast: "მკერდის მგრძნობელობა",
-  libido: "ლიბიდოს ცვლილება",
-  fatigue: "დაღლილობა",
-  nausea: "გულისრევა",
-  energy: "ენერგიის მომატება",
-};
+// Labels come from locales/*.calendar.symptoms / calendar.ovulationSigns /
+// stats.milestones; ids are what the database stores.
+const symptomLabel = (t, id) => (SYMPTOM_IDS.has(id) ? t(`calendar.symptoms.${id}`) : id);
+const SYMPTOM_IDS = new Set(["headache", "cramps", "fatigue", "bloating", "backache", "irritable", "sad", "anxious", "happy", "nausea", "heartburn", "movement", "urination"]);
+const OVULATION_SYMPTOM_IDS = new Set(["cramps", "breast", "libido", "fatigue", "nausea", "energy"]);
 
 const PREGNANCY_MILESTONES = [
-  { week: 12, label: "I ტრიმესტრი სრულდება", icon: "🌱" },
-  { week: 16, label: "სქესის გაგება", icon: "👶" },
-  { week: 20, label: "ანატომიური USG", icon: "🔬" },
-  { week: 24, label: "ვიაბილობის ზღვარი", icon: "💪" },
-  { week: 28, label: "III ტრიმესტრი იწყება", icon: "🌟" },
-  { week: 32, label: "ნაყოფი თითქმის მზადაა", icon: "🎯" },
-  { week: 36, label: "სრული ვადის მიახლოება", icon: "⏰" },
-  { week: 37, label: "სრული ვადა", icon: "✨" },
-  { week: 40, label: "მშობიარობის თარიღი", icon: "🎊" },
+  { week: 12, icon: "🌱" },
+  { week: 16, icon: "👶" },
+  { week: 20, icon: "🔬" },
+  { week: 24, icon: "💪" },
+  { week: 28, icon: "🌟" },
+  { week: 32, icon: "🎯" },
+  { week: 36, icon: "⏰" },
+  { week: 37, icon: "✨" },
+  { week: 40, icon: "🎊" },
 ];
 
 function PregnancyStatisticsScreen() {
+  const { t } = useLanguage();
   const { isDark } = useTheme();
   const { currentWeek, currentTrimester, daysRemaining, pregnancyStartDate } = usePregnancy();
 
@@ -114,7 +94,7 @@ function PregnancyStatisticsScreen() {
         const { data } = await supabase.from("symptoms").select("symptoms").eq("user_id", user.id);
         const all = (data || []).flatMap((s) => s.symptoms || []);
         const counts = all.reduce((acc, s) => { acc[s] = (acc[s] || 0) + 1; return acc; }, {});
-        const top = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 4).map(([id, count]) => ({ label: SYMPTOM_LABELS[id] || id, count }));
+        const top = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 4).map(([id, count]) => ({ label: symptomLabel(t, id), count }));
         setTopSymptoms(top);
       } catch (e) { console.log(e); }
       finally {
@@ -126,7 +106,7 @@ function PregnancyStatisticsScreen() {
       }
     };
     load();
-  }, [fadeAnim, slideAnim]));
+  }, [fadeAnim, slideAnim, t]));
 
   if (loading) {
     return (
@@ -153,8 +133,8 @@ function PregnancyStatisticsScreen() {
         <View style={styles.pageHeader}>
           <View>
             <Text style={[styles.pageEyebrow, { color: theme.accent }]}>MATERNITY INSIGHTS</Text>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>ორსულობის ანალიტიკა</Text>
-            <Text style={[styles.pageSubtitle, { color: theme.subText }]}>შენი პროგრესი და მნიშვნელოვანი ეტაპები</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>{t("stats.pregnancyTitle")}</Text>
+            <Text style={[styles.pageSubtitle, { color: theme.subText }]}>{t("stats.pregnancySubtitle")}</Text>
           </View>
         </View>
 
@@ -163,8 +143,8 @@ function PregnancyStatisticsScreen() {
           {/* Hero */}
           <LinearGradient colors={theme.heroGradient} start={{ x: 0.08, y: 0 }} end={{ x: 0.95, y: 1 }} style={[styles.heroCard, { borderColor: theme.border, borderWidth: 1 }]}>
             <View style={styles.heroGlow} />
-            <Text style={styles.heroLabel}>მშობიარობამდე დარჩა</Text>
-            <Text style={styles.heroNumber}>{daysRemaining} <Text style={styles.heroSubText}>დღე</Text></Text>
+            <Text style={styles.heroLabel}>{t("stats.daysUntilBirth")}</Text>
+            <Text style={styles.heroNumber}>{daysRemaining} <Text style={styles.heroSubText}>{t("stats.dayUnit")}</Text></Text>
             <View style={styles.heroDateBadge}>
               <Text style={styles.heroDate}>{dueDate}</Text>
             </View>
@@ -173,13 +153,13 @@ function PregnancyStatisticsScreen() {
           {/* Progress */}
           <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
             <View style={styles.cardHeaderRow}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>ორსულობის პროგრესი</Text>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.pregnancyProgress")}</Text>
               <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                 <Ionicons name="trending-up-outline" size={17} color={trimesterColor} />
               </View>
             </View>
             <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 10 }}>
-              <Text style={[{ color: theme.subText, fontSize: 13, fontWeight: "600" }]}>კვირა {currentWeek} / 40</Text>
+              <Text style={[{ color: theme.subText, fontSize: 13, fontWeight: "600" }]}>{t("stats.weekOf40", { week: currentWeek })}</Text>
               <Text style={[{ color: trimesterColor, fontSize: 13, fontWeight: "700" }]}>{Math.round(progress)}%</Text>
             </View>
             <View style={[styles.symptomTrack, { backgroundColor: theme.track, height: 12, borderRadius: 6 }]}>
@@ -193,8 +173,8 @@ function PregnancyStatisticsScreen() {
               <View style={[styles.iconBox, { backgroundColor: theme.iconBg }]}>
                 <Text style={{ fontSize: 20 }}>🗓️</Text>
               </View>
-              <Text style={[styles.metricValue, { color: theme.text }]}>{currentWeek}<Text style={styles.metricUnit}> კვ.</Text></Text>
-              <Text style={[styles.metricLabel, { color: theme.subText }]}>მიმდინარე კვირა</Text>
+              <Text style={[styles.metricValue, { color: theme.text }]}>{currentWeek}<Text style={styles.metricUnit}>{t("stats.weekUnit")}</Text></Text>
+              <Text style={[styles.metricLabel, { color: theme.subText }]}>{t("stats.currentWeek")}</Text>
             </LinearGradient>
             <LinearGradient colors={theme.cardGradient} style={[styles.metricCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={[styles.iconBox, { backgroundColor: theme.iconBg }]}>
@@ -205,7 +185,7 @@ function PregnancyStatisticsScreen() {
               <Text style={[styles.metricValue, { color: trimesterColor, fontSize: 22 }]}>
                 {currentTrimester === 1 ? "I" : currentTrimester === 2 ? "II" : "III"}
               </Text>
-              <Text style={[styles.metricLabel, { color: theme.subText }]}>ტრიმესტრი</Text>
+              <Text style={[styles.metricLabel, { color: theme.subText }]}>{t("stats.trimester")}</Text>
             </LinearGradient>
           </View>
 
@@ -215,8 +195,8 @@ function PregnancyStatisticsScreen() {
               <View style={styles.dateItem}>
                 <Text style={styles.dateIcon}>{nextMilestone.icon}</Text>
                 <View>
-                  <Text style={[styles.dateLabel, { color: theme.subText }]}>მომდევნო მილსტოუნი — კვირა {nextMilestone.week}</Text>
-                  <Text style={[styles.dateValue, { color: theme.text }]}>{nextMilestone.label}</Text>
+                  <Text style={[styles.dateLabel, { color: theme.subText }]}>{t("stats.nextMilestone", { week: nextMilestone.week })}</Text>
+                  <Text style={[styles.dateValue, { color: theme.text }]}>{t(`stats.milestones.w${nextMilestone.week}`)}</Text>
                 </View>
               </View>
             </LinearGradient>
@@ -226,7 +206,7 @@ function PregnancyStatisticsScreen() {
           {topSymptoms.length > 0 && (
             <LinearGradient colors={theme.cardGradient} style={[styles.symptomsCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitle, { color: theme.text }]}>ხშირი სიმპტომები</Text>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.frequentSymptoms")}</Text>
                 <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                   <Ionicons name="pulse-outline" size={17} color={trimesterColor} />
                 </View>
@@ -238,7 +218,7 @@ function PregnancyStatisticsScreen() {
                   <View key={i} style={styles.symptomRow}>
                     <View style={styles.symptomHeader}>
                       <Text style={[styles.symptomName, { color: theme.text }]}>{s.label}</Text>
-                      <Text style={[styles.symptomCount, { color: trimesterColor }]}>{s.count}-ჯერ</Text>
+                      <Text style={[styles.symptomCount, { color: trimesterColor }]}>{t("stats.timesCount", { count: s.count })}</Text>
                     </View>
                     <View style={[styles.symptomTrack, { backgroundColor: theme.track }]}>
                       <View style={[styles.symptomFill, { width: `${percent}%`, backgroundColor: trimesterColor }]} />
@@ -296,6 +276,7 @@ const AnimatedBar = ({ value, maxValue, label, index, isDark, accent = "#FF4D88"
 };
 
 function RegularStatisticsScreen() {
+  const { t } = useLanguage();
   const { isDark } = useTheme();
 
   const [loading, setLoading] = useState(true);
@@ -402,7 +383,7 @@ function RegularStatisticsScreen() {
       const topSymptoms = Object.entries(counts)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 4)
-        .map(([id, count]) => ({ label: SYMPTOM_LABELS[id] || id, count }));
+        .map(([id, count]) => ({ label: symptomLabel(t, id), count }));
 
       const history = cycles.slice(-6).map((c) => ({
         month: dayjs(c.start_date).format("MMM"),
@@ -434,7 +415,7 @@ function RegularStatisticsScreen() {
         hasLoadedOnceRef.current = true;
       }
     }
-  }, [startEntranceAnimation]);
+  }, [startEntranceAnimation, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -462,8 +443,8 @@ function RegularStatisticsScreen() {
         <View style={styles.pageHeader}>
           <View>
             <Text style={[styles.pageEyebrow, { color: theme.peach }]}>CYCLE INSIGHTS</Text>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>შენი ანალიტიკა</Text>
-            <Text style={[styles.pageSubtitle, { color: theme.subText }]}>ციკლის დინამიკა და პერსონალური მაჩვენებლები</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>{t("stats.regularTitle")}</Text>
+            <Text style={[styles.pageSubtitle, { color: theme.subText }]}>{t("stats.regularSubtitle")}</Text>
           </View>
         </View>
 
@@ -475,9 +456,9 @@ function RegularStatisticsScreen() {
             style={[styles.heroCard, { borderColor: theme.border, borderWidth: 1 }]}
           >
             <View style={styles.heroGlow} />
-            <Text style={styles.heroLabel}>მომდევნო პერიოდამდე დარჩა</Text>
+            <Text style={styles.heroLabel}>{t("stats.daysUntilPeriod")}</Text>
             <Text style={styles.heroNumber}>
-              {stats.daysLeft} <Text style={styles.heroSubText}>დღე</Text>
+              {stats.daysLeft} <Text style={styles.heroSubText}>{t("stats.dayUnit")}</Text>
             </Text>
             <View style={styles.heroDateBadge}>
               <Text style={styles.heroDate}>{stats.nextPeriod}</Text>
@@ -487,12 +468,12 @@ function RegularStatisticsScreen() {
           {stats.history.length > 0 && (
             <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitle, { color: theme.text }]}>ციკლის დინამიკა</Text>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.cycleDynamics")}</Text>
                 <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                   <Ionicons name="stats-chart-outline" size={17} color={theme.accent} />
                 </View>
               </View>
-              <Text style={[styles.cardSubtitle, { color: theme.subText }]}>ბოლო ჩანაწერები დღეების მიხედვით</Text>
+              <Text style={[styles.cardSubtitle, { color: theme.subText }]}>{t("stats.recentByDays")}</Text>
               <View style={styles.chartContainer}>
                 {stats.history.map((item, index) => (
                   <AnimatedBar key={index} index={index} value={item.length} maxValue={maxChartValue} label={item.month} isDark={isDark} accent={theme.accent} trackColor={theme.track} />
@@ -507,18 +488,18 @@ function RegularStatisticsScreen() {
                 <Text style={{ fontSize: 20 }}>🔄</Text>
               </View>
               <Text style={[styles.metricValue, { color: theme.text }]}>
-                {stats.avgCycle} <Text style={styles.metricUnit}>დღე</Text>
+                {stats.avgCycle} <Text style={styles.metricUnit}>{t("stats.dayUnit")}</Text>
               </Text>
-              <Text style={[styles.metricLabel, { color: theme.subText }]}>საშ. ციკლი</Text>
+              <Text style={[styles.metricLabel, { color: theme.subText }]}>{t("stats.avgCycle")}</Text>
             </LinearGradient>
             <LinearGradient colors={theme.cardGradient} style={[styles.metricCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={[styles.iconBox, { backgroundColor: theme.activeSoft }]}>
                 <Text style={{ fontSize: 20 }}>🩸</Text>
               </View>
               <Text style={[styles.metricValue, { color: theme.text }]}>
-                {stats.avgPeriod} <Text style={styles.metricUnit}>დღე</Text>
+                {stats.avgPeriod} <Text style={styles.metricUnit}>{t("stats.dayUnit")}</Text>
               </Text>
-              <Text style={[styles.metricLabel, { color: theme.subText }]}>საშ. პერიოდი</Text>
+              <Text style={[styles.metricLabel, { color: theme.subText }]}>{t("stats.avgPeriod")}</Text>
             </LinearGradient>
           </View>
 
@@ -526,7 +507,7 @@ function RegularStatisticsScreen() {
             <View style={styles.dateItem}>
               <Text style={styles.dateIcon}>🌸</Text>
               <View>
-                <Text style={[styles.dateLabel, { color: theme.subText }]}>ოვულაცია</Text>
+                <Text style={[styles.dateLabel, { color: theme.subText }]}>{t("stats.ovulation")}</Text>
                 <Text style={[styles.dateValue, { color: theme.text }]}>{stats.ovulationDay}</Text>
               </View>
             </View>
@@ -534,7 +515,7 @@ function RegularStatisticsScreen() {
             <View style={styles.dateItem}>
               <Text style={styles.dateIcon}>✨</Text>
               <View>
-                <Text style={[styles.dateLabel, { color: theme.subText }]}>ნაყოფიერი დღეები</Text>
+                <Text style={[styles.dateLabel, { color: theme.subText }]}>{t("stats.fertileDays")}</Text>
                 <Text style={[styles.dateValue, { color: theme.text }]}>{stats.fertileWindow}</Text>
               </View>
             </View>
@@ -543,7 +524,7 @@ function RegularStatisticsScreen() {
           {stats.topSymptoms.length > 0 && (
             <LinearGradient colors={theme.cardGradient} style={[styles.symptomsCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitle, { color: theme.text }]}>ხშირი სიმპტომები</Text>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.frequentSymptoms")}</Text>
                 <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                   <Ionicons name="pulse-outline" size={17} color={theme.accent} />
                 </View>
@@ -556,7 +537,7 @@ function RegularStatisticsScreen() {
                   <View key={i} style={styles.symptomRow}>
                     <View style={styles.symptomHeader}>
                       <Text style={[styles.symptomName, { color: theme.text }]}>{s.label}</Text>
-                      <Text style={[styles.symptomCount, { color: theme.accent }]}>{s.count}-ჯერ</Text>
+                      <Text style={[styles.symptomCount, { color: theme.accent }]}>{t("stats.timesCount", { count: s.count })}</Text>
                     </View>
                     <View style={[styles.symptomTrack, { backgroundColor: theme.track }]}>
                       <View style={[styles.symptomFill, { width: `${percent}%`, backgroundColor: theme.accent }]} />
@@ -597,10 +578,11 @@ const EMPTY_FERTILITY_STATS = {
   raw: { cycles: [], logs: [], confirmations: [], userName: "", age: null, lastStart: null },
 };
 
-const METHOD_LABELS = { bbt: "ტემპერატურა", lh: "ოვულაციის ტესტი", mucus: "ლორწო" };
-const CONFIDENCE_LABELS = { high: "მაღალი", medium: "საშუალო", low: "დაბალი", none: "—" };
+const METHOD_KEYS = ["bbt", "lh", "mucus"];
+const CONFIDENCE_KEYS = ["high", "medium", "low", "none"];
 
 function FertilityStatisticsScreen() {
+  const { t } = useLanguage();
   const { isDark } = useTheme();
   const { enablePregnancyMode } = usePregnancy();
   const { reload: reloadFertility } = useFertility();
@@ -750,43 +732,44 @@ function FertilityStatisticsScreen() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri);
       } else {
-        Alert.alert("შეცდომა", "გაზიარება ამ მოწყობილობაზე შეუძლებელია.");
+        Alert.alert(t("common.error"), t("stats.shareUnavailable"));
       }
     } catch (error) {
       console.log("Fertility export error:", error);
-      Alert.alert("შეცდომა", "ანგარიშის შექმნა ვერ მოხერხდა.");
+      Alert.alert(t("common.error"), t("stats.reportFailed"));
     } finally {
       setExporting(false);
     }
   };
 
-  // "ორსულად ვარ" — switches to pregnancy mode, carrying the LMP over so the
+  // t("stats.imPregnant") — switches to pregnancy mode, carrying the LMP over so the
   // week count and due date are computed from real data.
   const handlePregnancySwitch = () => {
     const transition = buildPregnancyTransition(stats.raw.lastStart);
 
     if (!transition) {
-      Alert.alert("ჯერ ციკლი დაამატე", "ორსულობის კვირის გამოსათვლელად ბოლო მენსტრუაციის თარიღი გვჭირდება.");
+      Alert.alert(t("stats.addCycleFirstTitle"), t("stats.addCycleFirstBody"));
       return;
     }
 
-    const dueText = `სავარაუდო მშობიარობა: ${transition.dueDate.format("D MMMM YYYY")}\nამჟამინდელი კვირა: ${transition.currentWeek}`;
-    const body = transition.isPlausible
-      ? `ბოლო მენსტრუაცია: ${transition.lmp.format("D MMMM YYYY")}\n${dueText}\n\nგადავიდეთ ორსულობის რეჟიმზე?`
-      : `ბოლო მენსტრუაცია: ${transition.lmp.format("D MMMM YYYY")}\n${dueText}\n\n⚠️ ეს თარიღი უჩვეულოა ორსულობისთვის — გადაამოწმე, სწორია თუ არა. გსურს მაინც გადასვლა?`;
+    const dueText = t("stats.dueText", { date: transition.dueDate.format("D MMMM YYYY"), week: transition.currentWeek });
+    const body = t(transition.isPlausible ? "stats.switchBody" : "stats.switchBodyUnusual", {
+      lmp: transition.lmp.format("D MMMM YYYY"),
+      due: dueText,
+    });
 
-    Alert.alert("ორსულად ვარ 🤰", body, [
-      { text: "გაუქმება", style: "cancel" },
+    Alert.alert(t("stats.imPregnantTitle"), body, [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "დიახ, გადავიდეთ",
+        text: t("stats.yesSwitch"),
         onPress: async () => {
           try {
             await enablePregnancyMode(dayjs(stats.raw.lastStart).format("YYYY-MM-DD"));
             await reloadFertility();
-            Alert.alert("გილოცავ! 🎉", "ორსულობის რეჟიმი ჩაირთო. აპი ახლა შენს კვირებს მიჰყვება.");
+            Alert.alert(t("stats.congratsTitle"), t("stats.congratsBody"));
           } catch (error) {
             console.log("Pregnancy switch error:", error);
-            Alert.alert("შეცდომა", "ორსულობის რეჟიმზე გადასვლა ვერ მოხერხდა.");
+            Alert.alert(t("common.error"), t("stats.switchFailed"));
           }
         },
       },
@@ -814,8 +797,8 @@ function FertilityStatisticsScreen() {
           <View style={styles.pageHeader}>
             <View>
               <Text style={[styles.pageEyebrow, { color: theme.accent }]}>FERTILITY INSIGHTS</Text>
-              <Text style={[styles.headerTitle, { color: theme.text }]}>ნაყოფიერების ანალიტიკა</Text>
-              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>შენი მცდელობის სურათი ერთ სივრცეში</Text>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>{t("stats.fertilityTitle")}</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>{t("stats.fertilitySubtitle")}</Text>
             </View>
           </View>
 
@@ -831,33 +814,33 @@ function FertilityStatisticsScreen() {
               {testTiming ? (
                 testTiming.isReliableNow ? (
                   <>
-                    <Text style={styles.heroLabel}>ორსულობის ტესტი</Text>
-                    <Text style={styles.heroNumber}>ახლა 🎯</Text>
+                    <Text style={styles.heroLabel}>{t("stats.pregnancyTest")}</Text>
+                    <Text style={styles.heroNumber}>{t("stats.now")}</Text>
                     <View style={styles.heroDateBadge}>
-                      <Text style={styles.heroDate}>შედეგი უკვე სანდოა</Text>
+                      <Text style={styles.heroDate}>{t("stats.resultReliable")}</Text>
                     </View>
                   </>
                 ) : (
                   <>
-                    <Text style={styles.heroLabel}>სანდო ტესტამდე დარჩა</Text>
+                    <Text style={styles.heroLabel}>{t("stats.daysUntilReliableTest")}</Text>
                     <Text style={styles.heroNumber}>
-                      {heroDays} <Text style={styles.heroSubText}>დღე</Text>
+                      {heroDays} <Text style={styles.heroSubText}>{t("stats.dayUnit")}</Text>
                     </Text>
                     <View style={styles.heroDateBadge}>
                       <Text style={styles.heroDate}>
                         {testTiming.canTestNow
-                          ? "ადრეული ტესტი უკვე შესაძლებელია"
-                          : `ყველაზე ადრე: ${testTiming.earliest.format("D MMM")}`}
+                          ? t("stats.earlyTestPossible")
+                          : t("stats.earliest", { date: testTiming.earliest.format("D MMM") })}
                       </Text>
                     </View>
                   </>
                 )
               ) : (
                 <>
-                  <Text style={styles.heroLabel}>ორსულობის ტესტი</Text>
+                  <Text style={styles.heroLabel}>{t("stats.pregnancyTest")}</Text>
                   <Text style={styles.heroNumber}>—</Text>
                   <View style={styles.heroDateBadge}>
-                    <Text style={styles.heroDate}>დაამატე ციკლი პროგნოზისთვის</Text>
+                    <Text style={styles.heroDate}>{t("stats.addCycleForForecast")}</Text>
                   </View>
                 </>
               )}
@@ -866,26 +849,26 @@ function FertilityStatisticsScreen() {
             {/* Trying history */}
             <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitle, { color: theme.text }]}>მცდელობის ისტორია</Text>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.tryingHistory")}</Text>
                 <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                   <Ionicons name="time-outline" size={17} color={theme.accent} />
                 </View>
               </View>
               <Text style={[styles.cardSubtitle, { color: theme.subText }]}>
-                {trying?.startedOn ? `თრექინგი დაიწყო ${trying.startedOn.format("D MMMM YYYY")}` : "ჯერ არაფერი აღგირიცხავს"}
+                {trying?.startedOn ? t("stats.trackingStarted", { date: trying.startedOn.format("D MMMM YYYY") }) : t("stats.nothingLogged")}
               </Text>
               <View style={styles.fertStatGrid}>
-                <FertStatCell value={trying?.monthsTrying ?? 0} unit="თვე" label="ცდილობ" theme={theme} />
-                <FertStatCell value={trying?.cyclesCount ?? 0} unit="ციკლი" label="აღრიცხული" theme={theme} />
-                <FertStatCell value={trying?.fertileDaysTracked ?? 0} unit="დღე" label="ნაყოფიერი" theme={theme} />
-                <FertStatCell value={logs?.intercourseInFertile ?? 0} unit="ჯერ" label="დაემთხვა ფანჯარას" theme={theme} />
+                <FertStatCell value={trying?.monthsTrying ?? 0} unit={t("stats.monthUnit")} label={t("stats.trying")} theme={theme} />
+                <FertStatCell value={trying?.cyclesCount ?? 0} unit={t("stats.cycleUnit")} label={t("stats.logged")} theme={theme} />
+                <FertStatCell value={trying?.fertileDaysTracked ?? 0} unit={t("stats.dayUnit")} label={t("stats.fertile")} theme={theme} />
+                <FertStatCell value={logs?.intercourseInFertile ?? 0} unit={t("stats.timesUnit")} label={t("stats.matchedWindow")} theme={theme} />
               </View>
             </LinearGradient>
 
             {/* Cycle regularity */}
             <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitle, { color: theme.text }]}>ციკლის რეგულარულობა</Text>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.cycleRegularity")}</Text>
                 <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                   <Ionicons name="repeat-outline" size={17} color={theme.accent} />
                 </View>
@@ -893,45 +876,41 @@ function FertilityStatisticsScreen() {
               {regularity?.sampleSize > 0 ? (
                 <>
                   <View style={styles.fertRowBetween}>
-                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>საშუალო ციკლი</Text>
-                    <Text style={[styles.fertRowValue, { color: theme.text }]}>{regularity.avgCycle} დღე</Text>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.averageCycle")}</Text>
+                    <Text style={[styles.fertRowValue, { color: theme.text }]}>{t("stats.daysCount", { count: regularity.avgCycle })}</Text>
                   </View>
                   <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
                   <View style={styles.fertRowBetween}>
-                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>ციკლების სხვაობა</Text>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.cycleSpread")}</Text>
                     <Text style={[styles.fertRowValue, { color: theme.text }]}>
-                      {regularity.shortest}–{regularity.longest} დღე ({regularity.spread})
+                      {t("stats.spreadValue", { shortest: regularity.shortest, longest: regularity.longest, spread: regularity.spread })}
                     </Text>
                   </View>
                   <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
                   <View style={styles.fertRowBetween}>
-                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>რეგულარულია?</Text>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.isRegular")}</Text>
                     <Text style={[styles.fertRowValue, { color: regularity.isRegular ? theme.accent : "#E8894A" }]}>
-                      {regularity.isRegular ? "დიახ ✓" : "არარეგულარული"}
+                      {regularity.isRegular ? t("stats.yes") : t("stats.irregular")}
                     </Text>
                   </View>
                   <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
                   <View style={styles.fertRowBetween}>
-                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>პროგნოზის სიზუსტე</Text>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.predictionAccuracy")}</Text>
                     <Text style={[styles.fertRowValue, { color: theme.text }]}>{regularity.accuracyLabel}</Text>
                   </View>
                   {!regularity.isRegular && (
-                    <Text style={[styles.fertNote, { color: theme.subText }]}>
-                      არარეგულარულ ციკლზე ოვულაციის თარიღი მიახლოებითია — ტესტი და ტემპერატურა უფრო სანდოა.
-                    </Text>
+                    <Text style={[styles.fertNote, { color: theme.subText }]}>{t("stats.irregularNote")}</Text>
                   )}
                 </>
               ) : (
-                <Text style={[styles.fertNote, { color: theme.subText }]}>
-                  რეგულარულობის შესაფასებლად მინიმუმ 2 ციკლია საჭირო. დაამატე ციკლები კალენდარში.
-                </Text>
+                <Text style={[styles.fertNote, { color: theme.subText }]}>{t("stats.needTwoCycles")}</Text>
               )}
             </LinearGradient>
 
             {/* Ovulation confirmation from tracked signals */}
             <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitle, { color: theme.text }]}>ოვულაციის დადასტურება</Text>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.ovulationConfirmation")}</Text>
                 <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                   <Ionicons name="checkmark-done-outline" size={17} color={theme.accent} />
                 </View>
@@ -939,56 +918,46 @@ function FertilityStatisticsScreen() {
 
               {stats.currentConfirmation?.confirmed ? (
                 <>
-                  <Text style={[styles.cardSubtitle, { color: theme.subText }]}>
-                    მიმდინარე ციკლის ნიშნების მიხედვით
-                  </Text>
+                  <Text style={[styles.cardSubtitle, { color: theme.subText }]}>{t("stats.byCurrentSigns")}</Text>
                   <View style={styles.fertRowBetween}>
-                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>სავარაუდო ოვულაცია</Text>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.estimatedOvulation")}</Text>
                     <Text style={[styles.fertRowValue, { color: theme.text }]}>
                       {dayjs(stats.currentConfirmation.date).format("D MMMM")}
                     </Text>
                   </View>
                   <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
                   <View style={styles.fertRowBetween}>
-                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>რის მიხედვით</Text>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.basedOn")}</Text>
                     <Text style={[styles.fertRowValue, { color: theme.text }]}>
-                      {stats.currentConfirmation.methods.map((m) => METHOD_LABELS[m] || m).join(" + ")}
+                      {stats.currentConfirmation.methods.map((m) => (METHOD_KEYS.includes(m) ? t(`stats.methods.${m}`) : m)).join(" + ")}
                     </Text>
                   </View>
                   <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
                   <View style={styles.fertRowBetween}>
-                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>სანდოობა</Text>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.reliability")}</Text>
                     <Text style={[styles.fertRowValue, { color: stats.currentConfirmation.confidence === "high" ? theme.accent : theme.text }]}>
-                      {CONFIDENCE_LABELS[stats.currentConfirmation.confidence]}
+                      {CONFIDENCE_KEYS.includes(stats.currentConfirmation.confidence) ? t(`stats.confidence.${stats.currentConfirmation.confidence}`) : "—"}
                     </Text>
                   </View>
                   {stats.currentConfirmation.agreement === false && (
-                    <Text style={[styles.fertNote, { color: "#E8894A" }]}>
-                      ⚠️ ნიშნები ერთმანეთს არ ემთხვევა — ტემპერატურა და ტესტი სხვადასხვა დღეზე მიუთითებს.
-                    </Text>
+                    <Text style={[styles.fertNote, { color: "#E8894A" }]}>{t("stats.signsDisagree")}</Text>
                   )}
-                  <Text style={[styles.fertNote, { color: theme.subText }]}>
-                    ეს რეტროსპექტული შეფასებაა შენს ჩანაწერებზე დაყრდნობით, არა სამედიცინო დადასტურება.
-                  </Text>
+                  <Text style={[styles.fertNote, { color: theme.subText }]}>{t("stats.retrospectiveNote")}</Text>
                 </>
               ) : (
-                <Text style={[styles.fertNote, { color: theme.subText }]}>
-                  ამ ციკლში ოვულაცია ჯერ ვერ დადასტურდა. ბაზალური ტემპერატურა (მინიმუმ 9 დღე) და ოვულაციის ტესტები ამის საშუალებას მოგცემს.
-                </Text>
+                <Text style={[styles.fertNote, { color: theme.subText }]}>{t("stats.notConfirmedYet")}</Text>
               )}
 
               {stats.lutealLength && (
                 <>
                   <View style={[styles.fertRowDivider, { backgroundColor: theme.divider, marginTop: 12 }]} />
                   <View style={styles.fertRowBetween}>
-                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>შენი ლუტეალური ფაზა</Text>
+                    <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.yourLuteal")}</Text>
                     <Text style={[styles.fertRowValue, { color: theme.text }]}>
-                      {stats.lutealLength.days} დღე ({stats.lutealLength.sampleSize} ციკლი)
+                      {t("stats.lutealValue", { days: stats.lutealLength.days, cycles: stats.lutealLength.sampleSize })}
                     </Text>
                   </View>
-                  <Text style={[styles.fertNote, { color: theme.subText }]}>
-                    სტანდარტული 14 დღის ნაცვლად, პროგნოზი ახლა შენს რეალურ ხანგრძლივობას იყენებს.
-                  </Text>
+                  <Text style={[styles.fertNote, { color: theme.subText }]}>{t("stats.lutealNote")}</Text>
                 </>
               )}
             </LinearGradient>
@@ -997,7 +966,7 @@ function FertilityStatisticsScreen() {
             {stats.quality && (
               <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
                 <View style={styles.cardHeaderRow}>
-                  <Text style={[styles.cardTitle, { color: theme.text }]}>პროგნოზის ხარისხი</Text>
+                  <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.predictionQuality")}</Text>
                   <View style={[styles.qualityPill, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder }]}>
                     <Text style={[styles.qualityPillText, { color: stats.quality.level === "high" ? theme.accent : theme.text }]}>
                       {stats.quality.label}
@@ -1006,8 +975,8 @@ function FertilityStatisticsScreen() {
                 </View>
                 <Text style={[styles.cardSubtitle, { color: theme.subText }]}>
                   {stats.quality.confirmedCount > 0
-                    ? `${stats.quality.confirmedCount} ციკლში ოვულაცია დადასტურდა`
-                    : "ჯერ არცერთი ოვულაცია არ დადასტურებულა"}
+                    ? t("stats.confirmedInCycles", { count: stats.quality.confirmedCount })
+                    : t("stats.noneConfirmed")}
                 </Text>
                 {stats.quality.suggestions.map((s, i) => (
                   <View key={i} style={styles.fertTipRow}>
@@ -1021,40 +990,40 @@ function FertilityStatisticsScreen() {
             {/* Fertility stats */}
             <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitle, { color: theme.text }]}>ნაყოფიერების მაჩვენებლები</Text>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.fertilityMetrics")}</Text>
                 <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                   <Ionicons name="leaf-outline" size={17} color={theme.accent} />
                 </View>
               </View>
               <View style={styles.fertRowBetween}>
-                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>საშ. ოვულაციის დღე</Text>
-                <Text style={[styles.fertRowValue, { color: theme.text }]}>ციკლის {avgOvulationDay}-ე დღე</Text>
+                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.avgOvulationDay")}</Text>
+                <Text style={[styles.fertRowValue, { color: theme.text }]}>{t("stats.cycleDayOrdinal", { day: avgOvulationDay })}</Text>
               </View>
               <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
               <View style={styles.fertRowBetween}>
-                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>ბოლო ოვულაცია</Text>
+                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.lastOvulation")}</Text>
                 <Text style={[styles.fertRowValue, { color: theme.text }]}>
                   {lastOvulation ? lastOvulation.format("D MMMM") : "—"}
                 </Text>
               </View>
               <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
               <View style={styles.fertRowBetween}>
-                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>ურთიერთობა ნაყოფიერ დღეს</Text>
+                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.intercourseOnFertile")}</Text>
                 <Text style={[styles.fertRowValue, { color: theme.text }]}>
                   {logs?.intercourseInFertile ?? 0} / {logs?.intercourseCount ?? 0}
                 </Text>
               </View>
               <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
               <View style={styles.fertRowBetween}>
-                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>დადებითი ოვ. ტესტი</Text>
+                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.positiveLh")}</Text>
                 <Text style={[styles.fertRowValue, { color: theme.text }]}>
                   {logs?.lhPositiveCount ?? 0}
-                  {logs?.lastLhPositive ? ` · ბოლო ${dayjs(logs.lastLhPositive).format("D MMM")}` : ""}
+                  {logs?.lastLhPositive ? t("stats.lastSuffix", { date: dayjs(logs.lastLhPositive).format("D MMM") }) : ""}
                 </Text>
               </View>
               <View style={[styles.fertRowDivider, { backgroundColor: theme.divider }]} />
               <View style={styles.fertRowBetween}>
-                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>ტემპერატურის ჩანაწერი</Text>
+                <Text style={[styles.fertRowLabel, { color: theme.subText }]}>{t("stats.bbtEntries")}</Text>
                 <Text style={[styles.fertRowValue, { color: theme.text }]}>{logs?.bbtCount ?? 0}</Text>
               </View>
             </LinearGradient>
@@ -1063,12 +1032,12 @@ function FertilityStatisticsScreen() {
             {stats.history.length > 1 && (
               <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
                 <View style={styles.cardHeaderRow}>
-                  <Text style={[styles.cardTitle, { color: theme.text }]}>ბაზალური ტემპერატურა</Text>
+                  <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.bbt")}</Text>
                   <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                     <Ionicons name="thermometer-outline" size={17} color={theme.accent} />
                   </View>
                 </View>
-                <Text style={[styles.cardSubtitle, { color: theme.subText }]}>ბოლო ჩანაწერები</Text>
+                <Text style={[styles.cardSubtitle, { color: theme.subText }]}>{t("stats.recentEntries")}</Text>
                 <View style={styles.chartContainer}>
                   {stats.history.map((item, index) => (
                     <AnimatedBar
@@ -1091,7 +1060,7 @@ function FertilityStatisticsScreen() {
             {logs?.topSymptoms?.length > 0 && (
               <LinearGradient colors={theme.cardGradient} style={[styles.symptomsCard, { borderColor: theme.border, borderWidth: 1 }]}>
                 <View style={styles.cardHeaderRow}>
-                  <Text style={[styles.cardTitle, { color: theme.text }]}>ოვულაციის ნიშნები</Text>
+                  <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.ovulationSigns")}</Text>
                   <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                     <Ionicons name="pulse-outline" size={17} color={theme.accent} />
                   </View>
@@ -1102,8 +1071,8 @@ function FertilityStatisticsScreen() {
                   return (
                     <View key={i} style={styles.symptomRow}>
                       <View style={styles.symptomHeader}>
-                        <Text style={[styles.symptomName, { color: theme.text }]}>{OVULATION_SYMPTOM_LABELS[s.id] || s.id}</Text>
-                        <Text style={[styles.symptomCount, { color: theme.accent }]}>{s.count}-ჯერ</Text>
+                        <Text style={[styles.symptomName, { color: theme.text }]}>{OVULATION_SYMPTOM_IDS.has(s.id) ? t(`calendar.ovulationSigns.${s.id}`) : s.id}</Text>
+                        <Text style={[styles.symptomCount, { color: theme.accent }]}>{t("stats.timesCount", { count: s.count })}</Text>
                       </View>
                       <View style={[styles.symptomTrack, { backgroundColor: theme.track }]}>
                         <View style={[styles.symptomFill, { width: `${percent}%`, backgroundColor: theme.accent }]} />
@@ -1118,14 +1087,12 @@ function FertilityStatisticsScreen() {
             {stats.doctorSignals?.length > 0 && (
               <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: "#E8894A55", borderWidth: 1 }]}>
                 <View style={styles.cardHeaderRow}>
-                  <Text style={[styles.cardTitle, { color: theme.text }]}>ღირს ექიმთან ახსენო</Text>
+                  <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.worthMentioning")}</Text>
                   <View style={[styles.cardHeaderIcon, { backgroundColor: "rgba(232,137,74,0.14)", borderColor: "#E8894A55", borderWidth: 1 }]}>
                     <Ionicons name="medkit-outline" size={17} color="#E8894A" />
                   </View>
                 </View>
-                <Text style={[styles.cardSubtitle, { color: theme.subText }]}>
-                  ეს არ არის დიაგნოზი — უბრალოდ თემები, რომლებზეც კონსულტაცია გამოგადგება.
-                </Text>
+                <Text style={[styles.cardSubtitle, { color: theme.subText }]}>{t("stats.notDiagnosis")}</Text>
                 {stats.doctorSignals.map((signal) => (
                   <View key={signal.id} style={styles.fertTipRow}>
                     <Text style={styles.fertTipIcon}>{signal.icon}</Text>
@@ -1141,7 +1108,7 @@ function FertilityStatisticsScreen() {
             {/* Partner support */}
             <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitle, { color: theme.text }]}>პარტნიორის მხარდაჭერა</Text>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.partnerSupport")}</Text>
                 <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                   <Ionicons name="people-outline" size={17} color={theme.accent} />
                 </View>
@@ -1160,7 +1127,7 @@ function FertilityStatisticsScreen() {
             {/* Lifestyle */}
             <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.cardTitle, { color: theme.text }]}>ცხოვრების წესი</Text>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>{t("stats.lifestyle")}</Text>
                 <View style={[styles.cardHeaderIcon, { backgroundColor: theme.activeSoft, borderColor: theme.activeBorder, borderWidth: 1 }]}>
                   <Ionicons name="heart-outline" size={17} color={theme.accent} />
                 </View>
@@ -1178,12 +1145,10 @@ function FertilityStatisticsScreen() {
 
             {/* Pregnancy switch */}
             <LinearGradient colors={theme.heroGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
-              <Text style={styles.switchTitle}>დადებითი ტესტი? 🤰</Text>
-              <Text style={styles.switchSub}>
-                ერთი შეხებით გადადი ორსულობის რეჟიმზე — კვირები და სავარაუდო მშობიარობის თარიღი ავტომატურად გამოითვლება შენი მონაცემებიდან.
-              </Text>
+              <Text style={styles.switchTitle}>{t("stats.positiveTest")}</Text>
+              <Text style={styles.switchSub}>{t("stats.switchHint")}</Text>
               <TouchableOpacity style={styles.switchBtn} activeOpacity={0.85} onPress={handlePregnancySwitch}>
-                <Text style={styles.switchBtnText}>ორსულად ვარ</Text>
+                <Text style={styles.switchBtnText}>{t("stats.imPregnant")}</Text>
               </TouchableOpacity>
             </LinearGradient>
 
@@ -1200,17 +1165,15 @@ function FertilityStatisticsScreen() {
                 <>
                   <Ionicons name="document-text-outline" size={18} color={theme.accent} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.exportTitle, { color: theme.text }]}>ექიმისთვის ანგარიშის გაზიარება</Text>
-                    <Text style={[styles.exportSub, { color: theme.subText }]}>ციკლები, ტესტები, ტემპერატურა და ნიშნები — ერთ ფაილში</Text>
+                    <Text style={[styles.exportTitle, { color: theme.text }]}>{t("stats.shareReport")}</Text>
+                    <Text style={[styles.exportSub, { color: theme.subText }]}>{t("stats.shareReportSub")}</Text>
                   </View>
                   <Ionicons name="share-outline" size={18} color={theme.subText} />
                 </>
               )}
             </TouchableOpacity>
 
-            <Text style={[styles.fertNote, { color: theme.subText, textAlign: "center", marginHorizontal: 20 }]}>
-              ℹ️ ეს მაჩვენებლები შენს ჩანაწერებზეა დაფუძნებული და არ ცვლის ექიმის კონსულტაციას.
-            </Text>
+            <Text style={[styles.fertNote, { color: theme.subText, textAlign: "center", marginHorizontal: 20 }]}>{t("stats.disclaimer")}</Text>
 
             <View style={{ height: 100 }} />
           </Animated.View>
