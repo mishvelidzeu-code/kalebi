@@ -36,6 +36,9 @@ const MIGRATED_FILES = [
   "app/(tabs)/index.js",
   "app/(tabs)/calendar.js",
   "app/(tabs)/statistics.js",
+  "app/(tabs)/symptoms.js",
+  "app/premium.jsx",
+  "app/pregnancy-premium.jsx",
 ];
 
 // Georgian literals that are allowed to stay in code because they are stored
@@ -50,6 +53,8 @@ const DB_VALUE_LITERALS = new Set([
   "ციკლის კონტროლი", "დაორსულება", "ჯანმრთელობის მონიტორინგი",
   // symptoms.mood
   "არაჩვეულებრივი", "კარგი", "ნორმალური", "ცუდი", "საშინელი",
+  // external URL, not UI text
+  "https://sites.google.com/view/cycle-care-privacy/მთავარი",
 ]);
 
 // Georgian strings that were in code on main but are now produced by a
@@ -179,8 +184,11 @@ for (const file of MIGRATED_FILES) {
     // Georgian fragment between the ${…} holes must still exist somewhere.
     // Quoted inserts ("\"მინდა დაორსულება\" რეჟიმი…" → "\"{{mode}}\" რეჟიმი…")
     // are split out the same way.
+    // Nested templates (`${name ? `, ${name}` : ""}`) don't tokenise cleanly,
+    // so split on every template/quote/brace boundary and check the Georgian
+    // pieces in between.
     const fragments = text
-      .split(/\$\{[^}]*\}|\\"[^"]*\\"/)
+      .split(/\$\{|\\"|[`"{}]/)
       .map((part) => part.replace(/\\n/g, "\n").trim())
       .filter((part) => GEORGIAN.test(part));
     if (fragments.length && fragments.every((part) => kaJoined.includes(part))) continue;

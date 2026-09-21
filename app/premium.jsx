@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 
+import { useLanguage } from "../context/LanguageContext";
 import { useTheme } from "../context/ThemeContext";
 import {
   canOpenManageSubscriptions,
@@ -28,14 +29,12 @@ import {
 } from "../services/purchases";
 import { logMetaPaywallViewed } from "../services/metaAppEvents";
 
-const FALLBACK_PRICE_LABEL = "$0.99 / თვე";
-const IOS_AUTO_RENEW_COPY =
-  "გამოწერა ავტომატურად განახლდება ყოველთვიურად. თანხა ჩამოიჭრება თქვენი Apple ID ანგარიშიდან. გამოწერის გაუქმება შესაძლებელია მიმდინარე პერიოდის დასრულებამდე მინიმუმ 24 საათით ადრე App Store-ის პარამეტრებიდან.";
-const ANDROID_CHECKOUT_COPY =
-  "Android-ზე გადახდა გადაიყვანს გარე უსაფრთხო ვებსაიტზე. წარმატებული გადახდის შემდეგ Prime სტატუსი შენს ანგარიშზე Supabase-დან განახლდება.";
-
 export default function PremiumScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
+  const FALLBACK_PRICE_LABEL = t("premium.fallbackPrice");
+  const IOS_AUTO_RENEW_COPY = t("premium.autoRenew");
+  const ANDROID_CHECKOUT_COPY = t("premium.androidCheckout");
   const { refreshTheme, isPremium } = useTheme();
 
   const [loading, setLoading] = useState(true);
@@ -48,23 +47,23 @@ export default function PremiumScreen() {
   const features = [
     {
       icon: "sparkles-outline",
-      title: "სრული AI რჩევები",
-      desc: "ჰორმონისა და დღიურის რჩევები სრულად იხსნება და blur მთლიანად ქრება.",
+      title: t("premium.feature1Title"),
+      desc: t("premium.feature1Desc"),
     },
     {
       icon: "chatbubble-ellipses-outline",
-      title: "ულიმიტო ასისტენტი",
-      desc: "დღეში 1 კითხვის ნაცვლად, შეგიძლია ასისტენტს შეუზღუდავად ჰკითხო.",
+      title: t("premium.feature2Title"),
+      desc: t("premium.feature2Desc"),
     },
     {
       icon: "heart-outline",
-      title: "სრული მხარდაჭერა",
-      desc: "კალენდარში დღიურის ანალიზის სრული პასუხი და უფრო ღრმა რეკომენდაციები.",
+      title: t("premium.feature3Title"),
+      desc: t("premium.feature3Desc"),
     },
     {
       icon: "moon-outline",
-      title: "ყველა შეზღუდვის მოხსნა",
-      desc: "Free ლიმიტები ავტომატურად იხსნება შენს account-ზე, როგორც კი subscription აქტიურდება.",
+      title: t("premium.feature4Title"),
+      desc: t("premium.feature4Desc"),
     },
   ];
 
@@ -124,12 +123,12 @@ export default function PremiumScreen() {
         await openAndroidPrimeCheckout();
         setPendingAndroidCheckout(true);
         Alert.alert(
-          "გადახდა გაიხსნა",
-          "გააგრძელე გადახდა ვებსაიტზე. აპში დაბრუნების შემდეგ Prime სტატუსი Supabase-დან განახლდება."
+          t("profile.checkoutOpenedTitle"),
+          t("premium.checkoutOpenedBody")
         );
       } catch (error) {
         console.log("Android Prime checkout error:", error);
-        Alert.alert("შეცდომა", "Android გადახდის გვერდი ვერ გაიხსნა. სცადე თავიდან.");
+        Alert.alert(t("common.error"), t("premium.androidOpenFailed"));
       } finally {
         setPurchasing(false);
       }
@@ -139,8 +138,8 @@ export default function PremiumScreen() {
 
     if (!availablePackage) {
       Alert.alert(
-        "პროდუქტი ჯერ არაა მზად",
-        "Prime subscription ჯერ App Store Connect/RevenueCat-ში ბოლომდე არ არის გამზადებული."
+        t("premium.productNotReadyTitle"),
+        t("premium.productNotReadyBody")
       );
       return;
     }
@@ -152,11 +151,11 @@ export default function PremiumScreen() {
       await refreshTheme();
 
       if (result.isPremium) {
-        Alert.alert("წარმატება ✨", "Prime გააქტიურდა. ყველა შეზღუდვა მოიხსნა.", [
-          { text: "კარგი", onPress: () => router.replace("/(tabs)") },
+        Alert.alert(t("common.success"), t("premium.activatedBody"), [
+          { text: t("common.ok"), onPress: () => router.replace("/(tabs)") },
         ]);
       } else {
-        Alert.alert("ინფორმაცია", "შეძენა დასრულდა, მაგრამ Prime ჯერ არ გააქტიურდა.");
+        Alert.alert(t("common.info"), t("premium.purchasedNotActive"));
       }
     } catch (error) {
       console.log("Prime purchase error:", error);
@@ -165,7 +164,7 @@ export default function PremiumScreen() {
         return;
       }
 
-      Alert.alert("შეცდომა", "შეძენა ვერ დასრულდა. სცადე თავიდან.");
+      Alert.alert(t("common.error"), t("premium.purchaseFailed"));
     } finally {
       setPurchasing(false);
     }
@@ -177,8 +176,8 @@ export default function PremiumScreen() {
     } catch (error) {
       console.log("Manage subscriptions error:", error);
       Alert.alert(
-        "ვერ გაიხსნა",
-        "გამოწერების გვერდი ვერ გაიხსნა. ხელით: App Store → შენი პროფილი → გამოწერები."
+        t("profile.manageFailedTitle"),
+        t("profile.manageFailedBody")
       );
     }
   };
@@ -191,13 +190,13 @@ export default function PremiumScreen() {
       await refreshTheme();
 
       if (result.isPremium) {
-        Alert.alert("აღდგენა დასრულდა ✨", "Prime subscription აღდგა შენს account-ზე.");
+        Alert.alert(t("premium.restoredTitle"), t("premium.restoredBody"));
       } else {
-        Alert.alert("ინფორმაცია", "აქტიური Prime subscription ვერ მოიძებნა.");
+        Alert.alert(t("common.info"), t("premium.noActiveFound"));
       }
     } catch (error) {
       console.log("Prime restore error:", error);
-      Alert.alert("შეცდომა", "Restore ვერ შესრულდა. სცადე თავიდან.");
+      Alert.alert(t("common.error"), t("premium.restoreFailed"));
     } finally {
       setRestoring(false);
     }
@@ -205,7 +204,7 @@ export default function PremiumScreen() {
 
   const storePriceLabel =
     Platform.OS === "android"
-      ? "უსაფრთხო ვებ-გადახდა"
+      ? t("premium.secureWebPayment")
       : availablePackage?.product?.priceString || FALLBACK_PRICE_LABEL;
 
   return (
@@ -234,13 +233,10 @@ export default function PremiumScreen() {
           </View>
 
           <Text style={styles.title}>
-            Prime <Text style={{ color: "#E94560" }}>გამოწერა</Text>
+            Prime <Text style={{ color: "#E94560" }}>{t("premium.subscriptionWord")}</Text>
           </Text>
 
-          <Text style={styles.subtitle}>
-            Prime გიხსნის სრულ AI რჩევებს, ულიმიტო ასისტენტს და ყველა free
-            შეზღუდვას.
-          </Text>
+          <Text style={styles.subtitle}>{t("premium.subtitle")}</Text>
 
           <View style={{ width: "100%", marginBottom: 28 }}>
             {features.map((feature) => (
@@ -274,23 +270,21 @@ export default function PremiumScreen() {
             <View style={styles.warningBox}>
               <Text style={styles.warningTitle}>
                 {Platform.OS === "ios"
-                  ? "RevenueCat ჯერ არაა მიბმული"
-                  : "Android გადახდის ბმული აკლია"}
+                  ? t("premium.rcNotLinked")
+                  : t("premium.androidLinkMissing")}
               </Text>
               <Text style={styles.warningText}>
                 {Platform.OS === "ios"
-                  ? "ამ გვერდის UI უკვე მზადაა, მაგრამ რეალური ყიდვისთვის საჭიროა RevenueCat API key და App Store subscription product."
-                  : "დაამატე EXPO_PUBLIC_ANDROID_PRIME_PAYMENT_URL, რომ Android-ზე გარე გადახდის გვერდი გაიხსნას."}
+                  ? t("premium.rcNotLinkedBody")
+                  : t("premium.androidLinkMissingBody")}
               </Text>
             </View>
           )}
 
           {isPremium ? (
             <View style={styles.activeBox}>
-              <Text style={styles.activeTitle}>Prime უკვე აქტიურია ✨</Text>
-              <Text style={styles.activeText}>
-                შენს account-ზე ყველა premium ფუნქცია გახსნილია.
-              </Text>
+              <Text style={styles.activeTitle}>{t("premium.alreadyActive")}</Text>
+              <Text style={styles.activeText}>{t("premium.alreadyActiveBody")}</Text>
             </View>
           ) : null}
 
@@ -307,10 +301,10 @@ export default function PremiumScreen() {
             ) : (
               <Text style={styles.buttonText}>
                 {isPremium
-                  ? "Prime აქტიურია"
+                  ? t("premium.buttonActive")
                   : Platform.OS === "android"
-                    ? "Prime გადახდის გახსნა"
-                    : "Prime-ის შეძენა"}
+                    ? t("premium.buttonAndroid")
+                    : t("premium.buttonBuy")}
               </Text>
             )}
           </TouchableOpacity>
@@ -331,7 +325,7 @@ export default function PremiumScreen() {
 
           {canOpenManageSubscriptions() && (
             <TouchableOpacity style={styles.manageButton} onPress={handleManageSubscription}>
-              <Text style={styles.manageButtonText}>გამოწერის მართვა / გაუქმება</Text>
+              <Text style={styles.manageButtonText}>{t("premium.manage")}</Text>
             </TouchableOpacity>
           )}
 

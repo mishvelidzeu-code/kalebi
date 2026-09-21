@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 
+import { useLanguage } from "../context/LanguageContext";
 import { usePregnancy } from "../context/PregnancyContext";
 import {
   canOpenManageSubscriptions,
@@ -27,33 +28,18 @@ import {
 } from "../services/purchases";
 
 const ACCENT = "#06D6A0";
-const FALLBACK_PRICE_LABEL = "$2.99 / თვე";
-
-const features = [
-  {
-    icon: "heart-outline",
-    title: "ყოველკვირეული AI რჩევა",
-    desc: "ყოველ კვირას ნაყოფის განვითარებისა და ამ კვირის სიმპტომების შესახებ პირადი AI რჩევა.",
-  },
-  {
-    icon: "notifications-outline",
-    title: "ორსულობის ნოტიფიკაციები",
-    desc: "კვირის მილსტოუნები, ექიმის ვიზიტების შეხსენება და დღიური ყოველ 2 დღეში.",
-  },
-  {
-    icon: "calendar-outline",
-    title: "ორსულობის კალენდარი",
-    desc: "სრული ორსულობის კალენდარი ტრიმესტრებით, კვირის პროგრესით და სავარაუდო მშობიარობის თარიღით.",
-  },
-  {
-    icon: "image-outline",
-    title: "ნაყოფის ვიზუალიზაცია",
-    desc: "კვირის მიხედვით ნაყოფის სურათები — გახსენი და ნახე, სად არის ახლა შენი ბავშვი.",
-  },
-];
+// Feature texts live in locales/*.pregnancyPremium.feature{n}Title/Desc
+const FEATURE_ICONS = ["heart-outline", "notifications-outline", "calendar-outline", "image-outline"];
 
 export default function PregnancyPremiumScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
+  const FALLBACK_PRICE_LABEL = t("pregnancyPremium.fallbackPrice");
+  const features = FEATURE_ICONS.map((icon, index) => ({
+    icon,
+    title: t(`pregnancyPremium.feature${index + 1}Title`),
+    desc: t(`pregnancyPremium.feature${index + 1}Desc`),
+  }));
   const { pregnancyMode, enablePregnancyMode } = usePregnancy();
 
   const [loading, setLoading] = useState(true);
@@ -95,7 +81,7 @@ export default function PregnancyPremiumScreen() {
 
   const handlePurchase = async () => {
     if (!availablePackage && storeConfigured) {
-      Alert.alert("პროდუქტი ჯერ არაა მზად", "ორსულობის გამოწერა ჯერ App Store-ში გამოქვეყნებული არ არის.");
+      Alert.alert(t("premium.productNotReadyTitle"), t("pregnancyPremium.productNotReadyBody"));
       return;
     }
 
@@ -104,8 +90,8 @@ export default function PregnancyPremiumScreen() {
       if (!storeConfigured) {
         // Dev/simulator bypass
         await enablePregnancyMode(lmpDateStr);
-        Alert.alert("წარმატება 🤰", "ორსულობის რეჟიმი ჩაირთო.", [
-          { text: "კარგი", onPress: () => router.replace("/(tabs)") },
+        Alert.alert(t("pregnancyPremium.successTitle"), t("pregnancyPremium.modeEnabled"), [
+          { text: t("common.ok"), onPress: () => router.replace("/(tabs)") },
         ]);
         return;
       }
@@ -113,8 +99,8 @@ export default function PregnancyPremiumScreen() {
       const status = await checkPregnancySubscriptionStatus();
       if (status.hasSubscription) {
         await enablePregnancyMode(lmpDateStr);
-        Alert.alert("წარმატება 🤰", "ორსულობის რეჟიმი ჩაირთო.", [
-          { text: "კარგი", onPress: () => router.replace("/(tabs)") },
+        Alert.alert(t("pregnancyPremium.successTitle"), t("pregnancyPremium.modeEnabled"), [
+          { text: t("common.ok"), onPress: () => router.replace("/(tabs)") },
         ]);
         return;
       }
@@ -122,16 +108,16 @@ export default function PregnancyPremiumScreen() {
       const result = await purchasePregnancyPackage(availablePackage);
       if (result.hasSubscription) {
         await enablePregnancyMode(lmpDateStr);
-        Alert.alert("წარმატება 🤰", "ორსულობის რეჟიმი ჩაირთო. კეთილი იყოს შენი ორსულობა!", [
-          { text: "კარგი", onPress: () => router.replace("/(tabs)") },
+        Alert.alert(t("pregnancyPremium.successTitle"), t("pregnancyPremium.modeEnabledWelcome"), [
+          { text: t("common.ok"), onPress: () => router.replace("/(tabs)") },
         ]);
       } else {
-        Alert.alert("ინფორმაცია", "შეძენა დასრულდა, მაგრამ ორსულობის რეჟიმი ჯერ არ გააქტიურდა.");
+        Alert.alert(t("common.info"), t("pregnancyPremium.purchasedNotActive"));
       }
     } catch (error) {
       const code = String(error?.userCancelled || error?.code || "");
       if (code.includes("true") || code.includes("PURCHASE_CANCELLED")) return;
-      Alert.alert("შეცდომა", "შეძენა ვერ დასრულდა. სცადე თავიდან.");
+      Alert.alert(t("common.error"), t("premium.purchaseFailed"));
     } finally {
       setPurchasing(false);
     }
@@ -143,8 +129,8 @@ export default function PregnancyPremiumScreen() {
     } catch (error) {
       console.log("Manage subscriptions error:", error);
       Alert.alert(
-        "ვერ გაიხსნა",
-        "გამოწერების გვერდი ვერ გაიხსნა. ხელით: App Store → შენი პროფილი → გამოწერები."
+        t("profile.manageFailedTitle"),
+        t("profile.manageFailedBody")
       );
     }
   };
@@ -155,14 +141,14 @@ export default function PregnancyPremiumScreen() {
       const result = await restorePregnancyPurchases();
       if (result.hasSubscription) {
         await enablePregnancyMode(lmpDateStr);
-        Alert.alert("აღდგენა დასრულდა 🤰", "ორსულობის გამოწერა აღდგა შენს account-ზე.", [
-          { text: "კარგი", onPress: () => router.replace("/(tabs)") },
+        Alert.alert(t("pregnancyPremium.restoredTitle"), t("pregnancyPremium.restoredBody"), [
+          { text: t("common.ok"), onPress: () => router.replace("/(tabs)") },
         ]);
       } else {
-        Alert.alert("ინფორმაცია", "აქტიური ორსულობის გამოწერა ვერ მოიძებნა.");
+        Alert.alert(t("common.info"), t("pregnancyPremium.noActiveFound"));
       }
     } catch {
-      Alert.alert("შეცდომა", "Restore ვერ შესრულდა. სცადე თავიდან.");
+      Alert.alert(t("common.error"), t("premium.restoreFailed"));
     } finally {
       setRestoring(false);
     }
@@ -202,13 +188,11 @@ export default function PregnancyPremiumScreen() {
           </View>
 
           <Text style={styles.title}>
-            ორსულობის{" "}
-            <Text style={{ color: ACCENT }}>რეჟიმი</Text>
+            {t("pregnancyPremium.titleFirst")}{" "}
+            <Text style={{ color: ACCENT }}>{t("pregnancyPremium.titleSecond")}</Text>
           </Text>
 
-          <Text style={styles.subtitle}>
-            სპეციალური რეჟიმი ორსული ქალებისთვის — ყოველკვირეული AI რჩევა, ნოტიფიკაციები და ნაყოფის ვიზუალიზაცია.
-          </Text>
+          <Text style={styles.subtitle}>{t("pregnancyPremium.subtitle")}</Text>
 
           <View style={{ width: "100%", marginBottom: 28 }}>
             {features.map((feature) => (
@@ -226,10 +210,8 @@ export default function PregnancyPremiumScreen() {
 
           {/* LMP Date Picker */}
           <View style={styles.dateSectionCard}>
-            <Text style={styles.dateSectionTitle}>ბოლო მენსტრუაციის პირველი დღე</Text>
-            <Text style={styles.dateSectionHint}>
-              ეს თარიღი გამოიყენება ორსულობის კვირის გამოსათვლელად.
-            </Text>
+            <Text style={styles.dateSectionTitle}>{t("pregnancyPremium.lmpTitle")}</Text>
+            <Text style={styles.dateSectionHint}>{t("pregnancyPremium.lmpHint")}</Text>
             <TouchableOpacity
               style={styles.dateButton}
               onPress={() => setShowDatePicker(true)}
@@ -263,9 +245,7 @@ export default function PregnancyPremiumScreen() {
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={styles.cardTitle}>Pregnancy Monthly</Text>
               <Text style={styles.cardPrice}>{storePriceLabel}</Text>
-              <Text style={styles.autoRenewText}>
-                გამოწერა ავტომატურად განახლდება ყოველთვიურად. თანხა ჩამოიჭრება თქვენი Apple ID ანგარიშიდან. გამოწერის გაუქმება შესაძლებელია მიმდინარე პერიოდის დასრულებამდე მინიმუმ 24 საათით ადრე App Store-ის პარამეტრებიდან.
-              </Text>
+              <Text style={styles.autoRenewText}>{t("premium.autoRenew")}</Text>
             </View>
             <View style={styles.best}>
               <Text style={styles.bestText}>BEST</Text>
@@ -274,19 +254,15 @@ export default function PregnancyPremiumScreen() {
 
           {!storeConfigured && (
             <View style={styles.warningBox}>
-              <Text style={styles.warningTitle}>RevenueCat ჯერ არაა მიბმული</Text>
-              <Text style={styles.warningText}>
-                ამ გვერდის UI მზადაა, მაგრამ Simulator-ში ყიდვა იმუშავებს პირდაპირ.
-              </Text>
+              <Text style={styles.warningTitle}>{t("premium.rcNotLinked")}</Text>
+              <Text style={styles.warningText}>{t("pregnancyPremium.rcNotLinkedBody")}</Text>
             </View>
           )}
 
           {pregnancyMode && (
             <View style={styles.activeBox}>
-              <Text style={styles.activeTitle}>ორსულობის რეჟიმი უკვე აქტიურია 🤰</Text>
-              <Text style={styles.activeText}>
-                შენს account-ზე ორსულობის ყველა ფუნქცია გახსნილია.
-              </Text>
+              <Text style={styles.activeTitle}>{t("pregnancyPremium.alreadyActive")}</Text>
+              <Text style={styles.activeText}>{t("pregnancyPremium.alreadyActiveBody")}</Text>
             </View>
           )}
 
@@ -299,7 +275,7 @@ export default function PregnancyPremiumScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.buttonText}>
-                {pregnancyMode ? "ორსულობის რეჟიმი აქტიურია" : "ორსულობის რეჟიმის ჩართვა"}
+                {pregnancyMode ? t("pregnancyPremium.buttonActive") : t("pregnancyPremium.buttonEnable")}
               </Text>
             )}
           </TouchableOpacity>
@@ -318,7 +294,7 @@ export default function PregnancyPremiumScreen() {
 
           {canOpenManageSubscriptions() && (
             <TouchableOpacity style={styles.manageButton} onPress={handleManageSubscription}>
-              <Text style={styles.manageButtonText}>გამოწერის მართვა / გაუქმება</Text>
+              <Text style={styles.manageButtonText}>{t("premium.manage")}</Text>
             </TouchableOpacity>
           )}
 

@@ -30,22 +30,12 @@ import {
 } from "../../services/assistantOrchestrator";
 import { saveAssistantChatHistory } from "../../services/assistantHistory";
 import { supabase } from "../../services/supabase";
+import { useLanguage } from "../../context/LanguageContext";
 const ASSISTANT_GUIDE_IMAGE = require("../../assets/images/assistant-guide.png");
 
-const QUICK_PROMPTS = [
-  "დღეს როგორ მოვუარო თავს?",
-  "PMS-ის დროს რას მირჩევ?",
-  "ჩემი სიმპტომები ნორმალურია?",
-];
-
-const PREGNANCY_QUICK_PROMPTS = [
-  "რამდენ კვირაში ვარ?",
-  "გულისრევა — რა ვქნა?",
-  "ბავშვი ამ კვირას რა ვითარდება?",
-  "ზურგის ტკივილი ნორმალურია?",
-  "კვება ორსულობაში",
-  "როდის არის მშობიარობა?",
-];
+// Texts in locales/*.assistant.quickPrompts / pregnancyQuickPrompts
+const QUICK_PROMPT_KEYS = ["q1", "q2", "q3"];
+const PREGNANCY_QUICK_PROMPT_KEYS = ["q1", "q2", "q3", "q4", "q5", "q6"];
 
 const EMPTY_SUMMARY = {
   goalLabel: "",
@@ -103,20 +93,21 @@ async function setAssistantDailyUsage(userId, count) {
   }
 }
 
-const buildWelcomeMessage = (name) => ({
+const buildWelcomeMessage = (t, name) => ({
   id: `assistant-welcome-${Date.now()}`,
   role: "assistant",
   synthetic: true,
-  text: `გამარჯობა${name ? `, ${name}` : ""}. მე შენი ასისტენტი ვარ. შეგიძლია მკითხო ციკლზე, სიმპტომებზე, თვითმოვლაზე და შენს დღიურზე დაყრდნობით მოკლე რჩევებზეც.`,
+  text: t("assistant.welcome", { name: name ? `, ${name}` : "" }),
 });
 
-const formatSymptomsText = (symptoms) =>
+const formatSymptomsText = (t, symptoms) =>
   symptoms?.length
     ? symptoms.join(", ")
-    : "დღეს ჯერ სიმპტომები არ გაქვს ჩანიშნული";
+    : t("assistant.noSymptomsToday");
 
 export default function AssistantScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const { isDark, isPremium, isAdmin } = useTheme();
   const { pregnancyMode, currentWeek, currentTrimester, daysRemaining } = usePregnancy();
@@ -204,7 +195,7 @@ export default function AssistantScreen() {
         setUserAvatarUri("");
         setSummary(EMPTY_SUMMARY);
         setQuestionsUsedToday(0);
-        setMessages((prev) => (prev.length ? prev : [buildWelcomeMessage("")]));
+        setMessages((prev) => (prev.length ? prev : [buildWelcomeMessage(t, "")]));
         setLoadingProfile(false);
         setLoadingSummary(false);
         return;
@@ -235,7 +226,7 @@ export default function AssistantScreen() {
       setUserName(fallbackName);
       setUserAvatarUri(avatarUrl);
       setQuestionsUsedToday(usageCount);
-      setMessages((prev) => (prev.length ? prev : [buildWelcomeMessage(fallbackName)]));
+      setMessages((prev) => (prev.length ? prev : [buildWelcomeMessage(t, fallbackName)]));
       setLoadingProfile(false);
 
       const summaryData = await getAssistantScreenSummary();
@@ -248,12 +239,12 @@ export default function AssistantScreen() {
       setAssistantUserId(null);
       setUserAvatarUri("");
       setSummary(EMPTY_SUMMARY);
-      setMessages((prev) => (prev.length ? prev : [buildWelcomeMessage("")]));
+      setMessages((prev) => (prev.length ? prev : [buildWelcomeMessage(t, "")]));
     } finally {
       setLoadingProfile(false);
       setLoadingSummary(false);
     }
-  }, [messages.length]);
+  }, [messages.length, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -280,16 +271,16 @@ export default function AssistantScreen() {
     if (!prompt || sending) return;
     if (!hasQuestionLeft) {
       Alert.alert(
-        "დღის ლიმიტი ამოიწურა",
+        t("assistant.limitTitle"),
         isAdmin
-          ? "ადმინ ანგარიშზე ასისტენტის ლიმიტი არ მოქმედებს."
+          ? t("assistant.limitAdmin")
           : isPremium
-          ? "დღეს Prime ასისტენტთან 20 კითხვა უკვე გამოიყენე. ახალი კითხვები ხვალ განახლდება."
+          ? t("assistant.limitPrime")
           : pregnancyMode
-            ? "დღეს ორსულობის ასისტენტთან 10 კითხვა უკვე გამოიყენე. ახალი კითხვები ხვალ განახლდება."
-            : "დღეს ასისტენტთან 1 უფასო კითხვა უკვე გამოიყენე. ახალი კითხვა ხვალ გახდება ხელმისაწვდომი.",
+            ? t("assistant.limitPregnancy")
+            : t("assistant.limitFree"),
         [
-          { text: "კარგი", style: "cancel" },
+          { text: t("common.ok"), style: "cancel" },
           ...(!isPremium && !pregnancyMode ? [{ text: "Prime", onPress: () => router.push("/premium") }] : []),
         ]
       );
@@ -356,8 +347,8 @@ export default function AssistantScreen() {
           id: `assistant-error-${Date.now()}`,
           role: "assistant",
           text: isDailyLimitError
-            ? "დღევანდელი კითხვების ლიმიტი უკვე ამოწურულია. ახალი კითხვები ხვალ განახლდება."
-            : "ახლა პასუხის მიღება ვერ მოხერხდა. სცადე თავიდან ცოტა მოგვიანებით.",
+            ? t("assistant.limitReachedMessage")
+            : t("assistant.answerFailed"),
         },
       ]);
     } finally {
@@ -397,11 +388,11 @@ export default function AssistantScreen() {
             <View style={styles.headerRow}>
               <View style={styles.headerCopy}>
                 <Text style={[styles.headerEyebrow, fertilityMode && { color: theme.primary }]}>PERSONAL HEALTH ASSISTANT</Text>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>ასისტენტი</Text>
+                <Text style={[styles.headerTitle, { color: theme.text }]}>{t("assistant.title")}</Text>
                 <Text style={[styles.headerSubtitle, { color: theme.subText }]}>
                   {userName
-                    ? `${userName}, მკითხე რაც გაინტერესებს`
-                    : "მკითხე რაც გაინტერესებს"}
+                    ? t("assistant.askAnythingNamed", { name: userName })
+                    : t("assistant.askAnything")}
                 </Text>
               </View>
               <View style={[styles.headerAssistantPortrait, { borderColor: theme.border }]}>
@@ -435,7 +426,7 @@ export default function AssistantScreen() {
                   {pregnancyMode ? "MATERNITY OVERVIEW" : fertilityMode ? "FERTILITY OVERVIEW" : "DAILY OVERVIEW"}
                 </Text>
                 <Text style={[styles.noticeTitle, { color: theme.text }]}>
-                  {pregnancyMode ? "შენი ორსულობა 🤰" : fertilityMode ? "შენი ნაყოფიერება 🌿" : "შენი დღევანდელი სურათი"}
+                  {pregnancyMode ? t("assistant.yourPregnancy") : fertilityMode ? t("assistant.yourFertility") : t("assistant.yourDay")}
                 </Text>
               </View>
               <View style={styles.noticeIcon}>
@@ -450,52 +441,52 @@ export default function AssistantScreen() {
             {loadingSummary ? (
               <View style={styles.summaryLoadingRow}>
                 <ActivityIndicator size="small" color={theme.primary} />
-                <Text style={[styles.noticeText, { color: theme.subText }]}>ვამოწმებ შენს უახლეს მონაცემებს...</Text>
+                <Text style={[styles.noticeText, { color: theme.subText }]}>{t("assistant.checkingData")}</Text>
               </View>
             ) : pregnancyMode ? (
               <View style={styles.summaryGrid}>
                 <View style={styles.summaryItem}>
-                  <Text style={[styles.summaryLabel, { color: theme.subText }]}>მიმდინარე კვირა</Text>
-                  <Text style={[styles.summaryValue, { color: theme.text }]}>{currentWeek ? `${currentWeek}-ე კვირა` : "—"}</Text>
+                  <Text style={[styles.summaryLabel, { color: theme.subText }]}>{t("assistant.currentWeek")}</Text>
+                  <Text style={[styles.summaryValue, { color: theme.text }]}>{currentWeek ? t("home.weekOrdinal", { week: currentWeek }) : "—"}</Text>
                 </View>
                 <View style={styles.summaryItem}>
-                  <Text style={[styles.summaryLabel, { color: theme.subText }]}>ტრიმესტრი</Text>
+                  <Text style={[styles.summaryLabel, { color: theme.subText }]}>{t("assistant.trimester")}</Text>
                   <Text style={[styles.summaryValue, { color: theme.text }]}>
-                    {currentTrimester === 1 ? "I ტრიმესტრი" : currentTrimester === 2 ? "II ტრიმესტრი" : currentTrimester === 3 ? "III ტრიმესტრი" : "—"}
+                    {[1, 2, 3].includes(currentTrimester) ? t(`home.trimester${currentTrimester}`) : "—"}
                   </Text>
                 </View>
                 <View style={styles.summaryItemFull}>
-                  <Text style={[styles.summaryLabel, { color: theme.subText }]}>მშობიარობამდე</Text>
-                  <Text style={[styles.summaryValue, { color: theme.text }]}>{daysRemaining != null ? `${daysRemaining} დღე` : "—"}</Text>
+                  <Text style={[styles.summaryLabel, { color: theme.subText }]}>{t("assistant.untilBirth")}</Text>
+                  <Text style={[styles.summaryValue, { color: theme.text }]}>{daysRemaining != null ? t("home.daysValue", { count: daysRemaining }) : "—"}</Text>
                 </View>
                 <View style={styles.summaryItemFull}>
-                  <Text style={[styles.summaryLabel, { color: theme.subText }]}>დღევანდელი განწყობა</Text>
-                  <Text style={[styles.summaryValue, { color: theme.text }]}>{summary.mood || "ჯერ არ შეგივსია"}</Text>
+                  <Text style={[styles.summaryLabel, { color: theme.subText }]}>{t("assistant.todayMood")}</Text>
+                  <Text style={[styles.summaryValue, { color: theme.text }]}>{summary.mood || t("assistant.notFilledYet")}</Text>
                 </View>
               </View>
             ) : (
               <>
                 <Text style={[styles.noticeText, { color: theme.subText }]}>
                   {summary.phaseLabel
-                    ? `${userName ? `${userName}, ` : ""}ახლა ხარ ${summary.phaseLabel}-ში${summary.cycleDay ? ` და ციკლის ${summary.cycleDay}-ე დღე გაქვს.` : "."}`
-                    : "მონაცემები ჯერ ბოლომდე არ ჩანს, მაგრამ შეგიძლია მაინც მკითხო ყველაფერი ციკლზე, სიმპტომებზე და თვითმოვლაზე."}
+                    ? `${userName ? `${userName}, ` : ""}${t("assistant.phaseIntro", { phase: summary.phaseLabel })}${summary.cycleDay ? t("assistant.cycleDayPart", { day: summary.cycleDay }) : "."}`
+                    : t("assistant.noDataYet")}
                 </Text>
                 <View style={styles.summaryGrid}>
                   <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryLabel, { color: theme.subText }]}>მიზანი</Text>
-                    <Text style={[styles.summaryValue, { color: theme.text }]}>{summary.goalLabel || "არ არის მითითებული"}</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.subText }]}>{t("assistant.goal")}</Text>
+                    <Text style={[styles.summaryValue, { color: theme.text }]}>{summary.goalLabel || t("assistant.notSet")}</Text>
                   </View>
                   <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryLabel, { color: theme.subText }]}>შემდეგ პერიოდამდე</Text>
-                    <Text style={[styles.summaryValue, { color: theme.text }]}>{summary.daysUntilNextPeriod == null ? "—" : `${summary.daysUntilNextPeriod} დღე`}</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.subText }]}>{t("assistant.untilNextPeriod")}</Text>
+                    <Text style={[styles.summaryValue, { color: theme.text }]}>{summary.daysUntilNextPeriod == null ? "—" : t("home.daysValue", { count: summary.daysUntilNextPeriod })}</Text>
                   </View>
                   <View style={styles.summaryItemFull}>
-                    <Text style={[styles.summaryLabel, { color: theme.subText }]}>დღევანდელი განწყობა</Text>
-                    <Text style={[styles.summaryValue, { color: theme.text }]}>{summary.mood || "ჯერ არ შეგივსია"}</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.subText }]}>{t("assistant.todayMood")}</Text>
+                    <Text style={[styles.summaryValue, { color: theme.text }]}>{summary.mood || t("assistant.notFilledYet")}</Text>
                   </View>
                   <View style={styles.summaryItemFull}>
-                    <Text style={[styles.summaryLabel, { color: theme.subText }]}>დღევანდელი სიმპტომები</Text>
-                    <Text style={[styles.summaryValue, { color: theme.text }]}>{formatSymptomsText(summary.symptoms)}</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.subText }]}>{t("assistant.todaySymptoms")}</Text>
+                    <Text style={[styles.summaryValue, { color: theme.text }]}>{formatSymptomsText(t, summary.symptoms)}</Text>
                   </View>
                 </View>
               </>
@@ -503,11 +494,11 @@ export default function AssistantScreen() {
           </LinearGradient>
 
           <View style={styles.quickHeader}>
-            <Text style={[styles.quickTitle, { color: theme.text }]}>სწრაფი კითხვები</Text>
-            <Text style={[styles.quickSubtitle, { color: theme.subText }]}>აირჩიე თემა ან დაწერე შენი კითხვა</Text>
+            <Text style={[styles.quickTitle, { color: theme.text }]}>{t("assistant.quickQuestions")}</Text>
+            <Text style={[styles.quickSubtitle, { color: theme.subText }]}>{t("assistant.pickTopic")}</Text>
           </View>
           <View style={styles.quickRow}>
-            {(pregnancyMode ? PREGNANCY_QUICK_PROMPTS : QUICK_PROMPTS).map((prompt) => (
+            {(pregnancyMode ? PREGNANCY_QUICK_PROMPT_KEYS.map((key) => t(`assistant.pregnancyQuickPrompts.${key}`)) : QUICK_PROMPT_KEYS.map((key) => t(`assistant.quickPrompts.${key}`))).map((prompt) => (
               <TouchableOpacity
                 key={prompt}
                 style={[styles.quickChip, { backgroundColor: theme.quickChip, borderColor: theme.border }, sending && styles.quickChipDisabled]}
@@ -561,9 +552,7 @@ export default function AssistantScreen() {
                   </Text>
                 </View>
                 {!isUser && (
-                  <Text style={{ fontSize: 11, color: theme.subText, marginTop: 3, marginLeft: 4, opacity: 0.6 }}>
-                    ასისტენტი შეიძლება შეცდეს
-                  </Text>
+                  <Text style={{ fontSize: 11, color: theme.subText, marginTop: 3, marginLeft: 4, opacity: 0.6 }}>{t("home.assistantMayErr")}</Text>
                 )}
               </View>
                 {isUser && (
@@ -592,9 +581,7 @@ export default function AssistantScreen() {
                   { backgroundColor: theme.card, borderColor: theme.border },
                 ]}
               >
-                <Text style={[styles.typingText, { color: theme.subText }]}>
-                  ასისტენტი პასუხობს...
-                </Text>
+                <Text style={[styles.typingText, { color: theme.subText }]}>{t("assistant.replying")}</Text>
               </View>
             </View>
           )}
@@ -615,7 +602,7 @@ export default function AssistantScreen() {
         <View style={styles.composerMeta}>
           {hasQuestionLeft ? (
             <Text style={[styles.limitText, { color: theme.subText }]}>
-              {`დღეს დარჩენილი კითხვები: ${remainingQuestions}/${dailyQuestionLimit}`}
+              {t("assistant.remainingToday", { remaining: remainingQuestions, limit: dailyQuestionLimit })}
             </Text>
           ) : (
             <TouchableOpacity
@@ -625,12 +612,12 @@ export default function AssistantScreen() {
             >
               <Text style={[styles.limitText, styles.limitTextAction, { color: theme.primary }]}>
                 {isAdmin
-                  ? "ადმინ ანგარიშზე ასისტენტის ლიმიტი არ მოქმედებს."
+                  ? t("assistant.limitAdmin")
                   : isPremium
-                  ? "დღეს Prime კითხვები უკვე გამოიყენე. ახალი კითხვები ხვალ განახლდება."
+                  ? t("assistant.usedPrimeShort")
                   : pregnancyMode
-                    ? "დღეს 10 კითხვა გამოიყენე. ახალი კითხვები ხვალ განახლდება."
-                    : "დღეს უფასო კითხვა უკვე გამოიყენე. ახალი კითხვა ხვალ გახდება ხელმისაწვდომი."}
+                    ? t("assistant.usedPregnancyShort")
+                    : t("assistant.usedFreeShort")}
               </Text>
             </TouchableOpacity>
           )}
@@ -660,8 +647,8 @@ export default function AssistantScreen() {
               onChangeText={setInput}
               placeholder={
                 hasQuestionLeft
-                  ? "დაწერე კითხვა..."
-                  : "დღის ლიმიტი ამოიწურა"
+                  ? t("assistant.inputPlaceholder")
+                  : t("assistant.limitTitle")
               }
               placeholderTextColor={theme.subText}
               multiline
@@ -691,7 +678,7 @@ export default function AssistantScreen() {
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <>
-                  <Text style={styles.sendButtonText}>გაგზავნა</Text>
+                  <Text style={styles.sendButtonText}>{t("assistant.send")}</Text>
                   <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
                 </>
               )}
