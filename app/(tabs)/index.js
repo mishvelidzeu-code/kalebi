@@ -242,7 +242,7 @@ function PregnancyHomeScreen({ isDark }) {
     } finally {
       if (isMountedRef.current) setAdviceLoading(false);
     }
-  }, [week]);
+  }, [week, t]);
 
   useFocusEffect(
     useCallback(() => {
