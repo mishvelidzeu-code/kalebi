@@ -1045,7 +1045,7 @@ export async function getAssistantScreenSummary() {
     goalLabel: context.user_goal_label || goalDisplayLabel(DEFAULT_GOAL_LABEL),
     phaseLabel: context.current_phase_label || t("assistant.unknownPhase"),
     cycleDay: context.cycle_day,
-    mood: context.todayEntry?.mood || null,
+    mood: context.todayEntry?.mood ? moodLabel(context.todayEntry.mood) : null,
     symptoms: context.todayEntry?.symptoms || [],
     note: context.todayEntry?.note || null,
     hasTodayEntry: Boolean(context.todayEntry?.exists),

@@ -6,6 +6,7 @@ import {
   Animated,
   Dimensions,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -20,11 +21,19 @@ const { width } = Dimensions.get("window");
 
 export default function Birth() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { data, setData } = useContext(OnboardingContext);
+  const scrollRef = useRef(null);
 
   const [date, setDate] = useState(new Date(2000, 0, 1)); // საწყისად 2000 წელი ჯობს, უფრო მოსახერხებელია
   const [show, setShow] = useState(false);
+
+  // The spinner adds ~260px below the date card; on smaller phones that used
+  // to slide under the footer button. Scroll it into view once it mounts.
+  const openPicker = () => {
+    setShow(true);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+  };
 
   // --- ანიმაციები ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -64,6 +73,13 @@ export default function Birth() {
       <View style={styles.bgCircleTop} />
       <View style={styles.bgCircleBottom} />
 
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
       <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         
         <View style={styles.header}>
@@ -78,7 +94,7 @@ export default function Birth() {
         <TouchableOpacity
           activeOpacity={0.8}
           style={styles.dateCard}
-          onPress={() => setShow(true)}
+          onPress={openPicker}
         >
           <Text style={styles.dateLabel}>{t("onboarding.birth.dateLabel")}</Text>
           <Text style={styles.dateText}>
@@ -96,6 +112,7 @@ export default function Birth() {
               onChange={onChange}
               maximumDate={new Date()}
               textColor="#ff4d88"
+              locale={language}
             />
             {Platform.OS === "ios" && (
               <TouchableOpacity style={styles.confirmBtn} onPress={() => setShow(false)}>
@@ -106,6 +123,7 @@ export default function Birth() {
         )}
 
       </Animated.View>
+      </ScrollView>
 
       <Animated.View style={[styles.footer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <TouchableOpacity
@@ -128,6 +146,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingTop: 80,
     paddingBottom: 50,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 24,
   },
 
   // --- ფონის დეკორაციები ---

@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -1129,7 +1130,7 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={[styles.pregnancyBannerImageWrap, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
-              <Image source={FERTILITY_BANNER_IMAGE} style={styles.pregnancyBannerImage} resizeMode="cover" />
+              <ExpoImage source={FERTILITY_BANNER_IMAGE} style={styles.pregnancyBannerImage} contentFit="cover" contentPosition="top center" />
             </View>
           </LinearGradient>
         </TouchableOpacity>
