@@ -12,11 +12,13 @@ import {
 } from "react-native";
 
 import { OnboardingContext } from "../../components/OnboardingContext";
+import { useLanguage } from "../../context/LanguageContext";
 
 const { width } = Dimensions.get("window");
 
 export default function CycleLength() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { data, setData } = useContext(OnboardingContext);
 
   const [cycleSelected, setCycleSelected] = useState(data?.cycle_length || 28);
@@ -92,15 +94,13 @@ export default function CycleLength() {
           <View style={styles.iconBox}>
             <Text style={styles.emoji}>🔄</Text>
           </View>
-          <Text style={styles.title}>შენი ციკლი</Text>
-          <Text style={styles.subtitle}>
-            მონიშნე საშუალო ხანგრძლივობა, რომ შევძლოთ ზუსტი პროგნოზის გაკეთება.
-          </Text>
+          <Text style={styles.title}>{t("onboarding.cycleLength.title")}</Text>
+          <Text style={styles.subtitle}>{t("onboarding.cycleLength.subtitle")}</Text>
         </View>
 
         {/* --- ციკლის ამომრჩეველი --- */}
         <View style={styles.selectorSection}>
-          <Text style={styles.sectionTitle}>ციკლის ხანგრძლივობა (დღე)</Text>
+          <Text style={styles.sectionTitle}>{t("onboarding.cycleLength.cycleSection")}</Text>
           <ScrollView 
             ref={cycleScrollRef}
             horizontal 
@@ -119,7 +119,7 @@ export default function CycleLength() {
                   <Text style={[styles.numberText, isSelected && styles.numberTextSelected]}>
                     {day}
                   </Text>
-                  {isSelected && <Text style={styles.dayLabel}>დღე</Text>}
+                  {isSelected && <Text style={styles.dayLabel}>{t("onboarding.cycleLength.dayLabel")}</Text>}
                 </TouchableOpacity>
               );
             })}
@@ -128,7 +128,7 @@ export default function CycleLength() {
 
         {/* --- პერიოდის ამომრჩეველი --- */}
         <View style={styles.selectorSection}>
-          <Text style={styles.sectionTitle}>პერიოდის ხანგრძლივობა (დღე)</Text>
+          <Text style={styles.sectionTitle}>{t("onboarding.cycleLength.periodSection")}</Text>
           <ScrollView 
             ref={periodScrollRef}
             horizontal 
@@ -147,7 +147,7 @@ export default function CycleLength() {
                   <Text style={[styles.numberText, isSelected && styles.numberTextSelected]}>
                     {day}
                   </Text>
-                  {isSelected && <Text style={styles.dayLabel}>დღე</Text>}
+                  {isSelected && <Text style={styles.dayLabel}>{t("onboarding.cycleLength.dayLabel")}</Text>}
                 </TouchableOpacity>
               );
             })}
@@ -163,7 +163,7 @@ export default function CycleLength() {
           onPress={handleNext}
           activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>შემდეგი ნაბიჯი ✨</Text>
+          <Text style={styles.buttonText}>{t("onboarding.nextStep")}</Text>
         </TouchableOpacity>
       </Animated.View>
 

@@ -5,12 +5,15 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { OnboardingContext } from "../../components/OnboardingContext";
+import { useLanguage } from "../../context/LanguageContext";
 import { formatLastPeriodSelection } from "../../utils/cycleEngine";
+import dayjs from "../../utils/dayjs";
 
 const { width } = Dimensions.get("window");
 
 export default function LastPeriod() {
   const router = useRouter();
+  const { t, language } = useLanguage();
   const { data, setData } = useContext(OnboardingContext);
 
   const currentMonth = new Date().getMonth() + 1;
@@ -30,20 +33,9 @@ export default function LastPeriod() {
     ]).start();
   }, []);
 
-  const months = [
-    "იანვარი",
-    "თებერვალი",
-    "მარტი",
-    "აპრილი",
-    "მაისი",
-    "ივნისი",
-    "ივლისი",
-    "აგვისტო",
-    "სექტემბერი",
-    "ოქტომბერი",
-    "ნოემბერი",
-    "დეკემბერი",
-  ];
+  // Month names come from the dayjs locale, which follows the chosen language
+  // (`language` is read so the list re-renders on change).
+  const months = Array.from({ length: 12 }, (_, index) => dayjs().locale(language).month(index).date(1).format("MMMM"));
 
   const days = Array.from({ length: 31 }, (_, index) => index + 1);
 
@@ -76,14 +68,14 @@ export default function LastPeriod() {
             <Text style={styles.emoji}>🩸</Text>
           </View>
 
-          <Text style={styles.title}>პერიოდის პირველი დღე</Text>
+          <Text style={styles.title}>{t("onboarding.lastPeriod.title")}</Text>
 
-          <Text style={styles.subtitle}>აირჩიე ის თარიღი, როცა ბოლო პერიოდი დაიწყო. თუ ახლა მესამე დღეა, მიუთითე 2 დღით წინანდელი დაწყების დღე.</Text>
+          <Text style={styles.subtitle}>{t("onboarding.lastPeriod.subtitle")}</Text>
         </View>
 
         <View style={styles.pickerRow}>
           <View style={styles.pickerContainer}>
-            <Text style={styles.pickerLabel}>თვე</Text>
+            <Text style={styles.pickerLabel}>{t("onboarding.lastPeriod.month")}</Text>
 
             <Picker style={styles.picker} itemStyle={styles.pickerItem} selectedValue={month} onValueChange={(value) => setMonth(value)} dropdownIconColor="#ff4d88" selectionColor="#ff4d88">
               {months.map((label, index) => (
@@ -93,7 +85,7 @@ export default function LastPeriod() {
           </View>
 
           <View style={styles.pickerContainer}>
-            <Text style={styles.pickerLabel}>რიცხვი</Text>
+            <Text style={styles.pickerLabel}>{t("onboarding.lastPeriod.day")}</Text>
 
             <Picker style={styles.picker} itemStyle={styles.pickerItem} selectedValue={day} onValueChange={(value) => setDay(value)} dropdownIconColor="#ff4d88">
               {days.map((value) => (
@@ -106,7 +98,7 @@ export default function LastPeriod() {
 
       <Animated.View style={[styles.footer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <TouchableOpacity style={styles.button} onPress={handleFinish} disabled={saving} activeOpacity={0.8}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>შემდეგი ნაბიჯი ✨</Text>}
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t("onboarding.nextStep")}</Text>}
         </TouchableOpacity>
       </Animated.View>
     </LinearGradient>

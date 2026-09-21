@@ -12,11 +12,13 @@ import {
 } from "react-native";
 
 import { OnboardingContext } from "../../components/OnboardingContext";
+import { useLanguage } from "../../context/LanguageContext";
 
 const { width } = Dimensions.get("window");
 
 export default function Protection() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { data, setData } = useContext(OnboardingContext);
 
   const [selected, setSelected] = useState(data?.protection || null);
@@ -32,13 +34,14 @@ export default function Protection() {
     ]).start();
   }, []);
 
-  // ვიზუალურად გამდიდრებული ვარიანტები
+  // id is what gets stored in profiles.protection (kept in Georgian so
+  // existing rows keep matching); the label is translated.
   const protectionOptions = [
-    { id: "კონდომი", label: "კონდომი", icon: "🛡️" },
-    { id: "ჰორმონალური კონტრაცეფცია", label: "ჰორმონალური აბები", icon: "💊" },
-    { id: "სპირალი", label: "სპირალი (IUD)", icon: "⚕️" },
-    { id: "ქალწული", label: "ქალწული", icon: "🤍" }, // 👈 დამატებული ვარიანტი
-    { id: "არ ვიყენებ", label: "არ ვიყენებ / ბუნებრივი", icon: "🌿" }
+    { id: "კონდომი", label: t("onboarding.protection.options.condom"), icon: "🛡️" },
+    { id: "ჰორმონალური კონტრაცეფცია", label: t("onboarding.protection.options.hormonal"), icon: "💊" },
+    { id: "სპირალი", label: t("onboarding.protection.options.iud"), icon: "⚕️" },
+    { id: "ქალწული", label: t("onboarding.protection.options.virgin"), icon: "🤍" },
+    { id: "არ ვიყენებ", label: t("onboarding.protection.options.none"), icon: "🌿" }
   ];
 
   const handleNext = () => {
@@ -68,10 +71,8 @@ export default function Protection() {
             <View style={styles.iconBox}>
               <Text style={styles.emoji}>🛡️</Text>
             </View>
-            <Text style={styles.title}>რითი იცავ თავს?</Text>
-            <Text style={styles.subtitle}>
-              ეს ინფორმაცია დაგვეხმარება ოვულაციისა და ნაყოფიერი დღეების უფრო ზუსტად გათვლაში.
-            </Text>
+            <Text style={styles.title}>{t("onboarding.protection.title")}</Text>
+            <Text style={styles.subtitle}>{t("onboarding.protection.subtitle")}</Text>
           </View>
 
           <View style={styles.optionsContainer}>
@@ -114,7 +115,7 @@ export default function Protection() {
           onPress={handleNext}
           activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>შემდეგი ნაბიჯი ✨</Text>
+          <Text style={styles.buttonText}>{t("onboarding.nextStep")}</Text>
         </TouchableOpacity>
       </Animated.View>
 

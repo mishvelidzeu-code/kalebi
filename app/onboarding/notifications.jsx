@@ -5,11 +5,13 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { OnboardingContext } from "../../components/OnboardingContext";
+import { useLanguage } from "../../context/LanguageContext";
 
 const { width } = Dimensions.get("window");
 
 export default function NotificationsOnboarding() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { data, setData } = useContext(OnboardingContext);
 
   const [loading, setLoading] = useState(false);
@@ -57,7 +59,7 @@ export default function NotificationsOnboarding() {
 
       if (status !== "granted") {
         setPermissionGranted(false);
-        Alert.alert("შეტყობინებები გამორთულია", "შეგიძლია შემდეგშიც ჩართო პროფილიდან, როცა მოგინდება.");
+        Alert.alert(t("onboarding.notifications.disabledTitle"), t("onboarding.notifications.disabledBody"));
         continueToRegister(false);
         return;
       }
@@ -66,7 +68,7 @@ export default function NotificationsOnboarding() {
       continueToRegister(true);
     } catch (error) {
       console.log("Notification permission request error:", error);
-      Alert.alert("შეცდომა", "შეტყობინებების ჩართვა ვერ მოხერხდა. შეგიძლია შემდეგში პროფილიდან ჩართო.");
+      Alert.alert(t("common.error"), t("onboarding.notifications.enableFailed"));
       continueToRegister(false);
     } finally {
       setLoading(false);
@@ -87,28 +89,26 @@ export default function NotificationsOnboarding() {
           <View style={styles.iconBox}>
             <Text style={styles.emoji}>🔔</Text>
           </View>
-          <Text style={styles.title}>შეხსენებები გინდა?</Text>
-          <Text style={styles.subtitle}>
-            ჩართე ნოთიფიკაციები და აპი შეგახსენებს მოსალოდნელ პერიოდს, ნაყოფიერ დღეებს და ზოგად check-in შეტყობინებებს.
-          </Text>
+          <Text style={styles.title}>{t("onboarding.notifications.title")}</Text>
+          <Text style={styles.subtitle}>{t("onboarding.notifications.subtitle")}</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>რას მიიღებ</Text>
-          <Text style={styles.cardItem}>• პერიოდამდე შეხსენება</Text>
-          <Text style={styles.cardItem}>• ოვულაციისა და ნაყოფიერი დღეების შეტყობინება</Text>
-          <Text style={styles.cardItem}>• პერიოდული კითხვა: როგორ გრძნობ თავს დღეს?</Text>
-          {permissionGranted && <Text style={styles.enabledText}>შეტყობინებების წვდომა უკვე ჩართულია.</Text>}
+          <Text style={styles.cardTitle}>{t("onboarding.notifications.cardTitle")}</Text>
+          <Text style={styles.cardItem}>{t("onboarding.notifications.item1")}</Text>
+          <Text style={styles.cardItem}>{t("onboarding.notifications.item2")}</Text>
+          <Text style={styles.cardItem}>{t("onboarding.notifications.item3")}</Text>
+          {permissionGranted && <Text style={styles.enabledText}>{t("onboarding.notifications.alreadyEnabled")}</Text>}
         </View>
       </Animated.View>
 
       <Animated.View style={[styles.footer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <TouchableOpacity style={styles.primaryButton} onPress={handleEnableNotifications} disabled={loading} activeOpacity={0.8}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>ჩართე შეხსენებები</Text>}
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>{t("onboarding.notifications.enableButton")}</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.secondaryButton} onPress={handleSkip} disabled={loading} activeOpacity={0.8}>
-          <Text style={styles.secondaryButtonText}>ახლა არა</Text>
+          <Text style={styles.secondaryButtonText}>{t("onboarding.notifications.skipButton")}</Text>
         </TouchableOpacity>
       </Animated.View>
     </LinearGradient>

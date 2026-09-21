@@ -156,7 +156,7 @@ export default function Name() {
 
           <Animated.View style={[styles.footer, keyboardVisible ? styles.footerOpen : styles.footerClosed, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
             <TouchableOpacity style={[styles.button, isNextDisabled && styles.buttonDisabled]} disabled={isNextDisabled} onPress={handleNext} activeOpacity={0.8}>
-              <Text style={styles.buttonText}>{t("onboarding.name.nextButton")}</Text>
+              <Text style={styles.buttonText}>{t("onboarding.nextStep")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

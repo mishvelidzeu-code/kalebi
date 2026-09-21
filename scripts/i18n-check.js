@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-env node */
 // Localisation guard. Run with `node scripts/i18n-check.js`. Checks three things:
 //
 //  1. Key parity — every key in locales/ka.js exists in en.js and ru.js, and the
@@ -25,7 +26,30 @@ const MIGRATED_FILES = [
   "app/auth/login.jsx",
   "app/auth/register.jsx",
   "app/onboarding/name.jsx",
+  "app/onboarding/birth.jsx",
+  "app/onboarding/protection.jsx",
+  "app/onboarding/health.jsx",
+  "app/onboarding/cycle-length.jsx",
+  "app/onboarding/last-period.jsx",
+  "app/onboarding/notifications.jsx",
 ];
+
+// Georgian literals that are allowed to stay in code because they are stored
+// values (profiles.goal / protection / health / symptoms.mood …), not UI text.
+// Changing them would break matching against rows already in the database.
+const DB_VALUE_LITERALS = new Set([
+  // profiles.protection
+  "კონდომი", "ჰორმონალური კონტრაცეფცია", "სპირალი", "ქალწული", "არ ვიყენებ",
+  // profiles.health
+  "არა", "ჰორმონალური პრობლემა", "ინფექციური პრობლემა", "არ ვიცი",
+]);
+
+// Georgian strings that were in code on main but are now produced by a
+// library (dayjs "ka" locale) instead of the dictionary.
+const MOVED_TO_LIBRARY = new Set([
+  "იანვარი", "თებერვალი", "მარტი", "აპრილი", "მაისი", "ივნისი",
+  "ივლისი", "აგვისტო", "სექტემბერი", "ოქტომბერი", "ნოემბერი", "დეკემბერი",
+]);
 
 const GEORGIAN = /[Ⴀ-ჿ]/;
 
@@ -113,7 +137,10 @@ for (const file of MIGRATED_FILES) {
   }
   const current = fs.readFileSync(full, "utf8");
   const leftover = georgianLiterals(current);
-  for (const text of leftover) failures.push(`[${file}] Georgian still in code: "${text}"`);
+  for (const text of leftover) {
+    if (DB_VALUE_LITERALS.has(text)) continue;
+    failures.push(`[${file}] Georgian still in code: "${text}"`);
+  }
 
   let base;
   try {
@@ -124,6 +151,7 @@ for (const file of MIGRATED_FILES) {
   }
   for (const text of georgianLiterals(base)) {
     const normalised = text.trim();
+    if (DB_VALUE_LITERALS.has(text) || MOVED_TO_LIBRARY.has(text)) continue;
     if (kaValues.has(text) || kaValues.has(normalised) || kaJoined.includes(normalised)) continue;
     failures.push(`[${file}] Georgian text from ${BASE_REF} is not in locales/ka.js: "${text}"`);
   }

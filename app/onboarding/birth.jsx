@@ -1,6 +1,4 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import dayjs from "dayjs";
-import "dayjs/locale/ka";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -15,12 +13,14 @@ import {
 } from "react-native";
 
 import { OnboardingContext } from "../../components/OnboardingContext";
+import { useLanguage } from "../../context/LanguageContext";
+import dayjs from "../../utils/dayjs";
 
-dayjs.locale("ka");
 const { width } = Dimensions.get("window");
 
 export default function Birth() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { data, setData } = useContext(OnboardingContext);
 
   const [date, setDate] = useState(new Date(2000, 0, 1)); // საწყისად 2000 წელი ჯობს, უფრო მოსახერხებელია
@@ -70,10 +70,8 @@ export default function Birth() {
           <View style={styles.iconBox}>
             <Text style={styles.emoji}>🎂</Text>
           </View>
-          <Text style={styles.title}>როდის დაიბადე?</Text>
-          <Text style={styles.subtitle}>
-            ეს დაგვეხმარება, რომ შენი ციკლის პროგნოზი კიდევ უფრო ზუსტი და პერსონალური გავხადოთ.
-          </Text>
+          <Text style={styles.title}>{t("onboarding.birth.title")}</Text>
+          <Text style={styles.subtitle}>{t("onboarding.birth.subtitle")}</Text>
         </View>
 
         {/* --- თარიღის არჩევის ბარათი --- */}
@@ -82,7 +80,7 @@ export default function Birth() {
           style={styles.dateCard}
           onPress={() => setShow(true)}
         >
-          <Text style={styles.dateLabel}>დაბადების თარიღი</Text>
+          <Text style={styles.dateLabel}>{t("onboarding.birth.dateLabel")}</Text>
           <Text style={styles.dateText}>
             {dayjs(date).format("D MMMM, YYYY")}
           </Text>
@@ -101,7 +99,7 @@ export default function Birth() {
             />
             {Platform.OS === "ios" && (
               <TouchableOpacity style={styles.confirmBtn} onPress={() => setShow(false)}>
-                <Text style={styles.confirmBtnText}>დადასტურება</Text>
+                <Text style={styles.confirmBtnText}>{t("onboarding.birth.confirm")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -115,7 +113,7 @@ export default function Birth() {
           onPress={handleNext}
           activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>შემდეგი ნაბიჯი ✨</Text>
+          <Text style={styles.buttonText}>{t("onboarding.nextStep")}</Text>
         </TouchableOpacity>
       </Animated.View>
 

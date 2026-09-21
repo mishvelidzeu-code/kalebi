@@ -12,11 +12,13 @@ import {
 } from "react-native";
 
 import { OnboardingContext } from "../../components/OnboardingContext";
+import { useLanguage } from "../../context/LanguageContext";
 
 const { width } = Dimensions.get("window");
 
 export default function Health() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { data, setData } = useContext(OnboardingContext);
 
   const [selected, setSelected] = useState(data?.health || null);
@@ -32,12 +34,13 @@ export default function Health() {
     ]).start();
   }, []);
 
-  // ვიზუალურად გამდიდრებული ვარიანტები (id მიდის ბაზაში, label ჩანს ეკრანზე)
+  // id is what gets stored in profiles.health (kept in Georgian so existing
+  // rows keep matching); the label is translated.
   const healthOptions = [
-    { id: "არა", label: "არა, სრულიად ჯანმრთელი ვარ", icon: "✨" },
-    { id: "ჰორმონალური პრობლემა", label: "ჰორმონალური პრობლემა", icon: "🦋" },
-    { id: "ინფექციური პრობლემა", label: "ინფექციური პრობლემა", icon: "🦠" },
-    { id: "არ ვიცი", label: "არ ვიცი / დარწმუნებული არ ვარ", icon: "🤔" }
+    { id: "არა", label: t("onboarding.health.options.none"), icon: "✨" },
+    { id: "ჰორმონალური პრობლემა", label: t("onboarding.health.options.hormonal"), icon: "🦋" },
+    { id: "ინფექციური პრობლემა", label: t("onboarding.health.options.infection"), icon: "🦠" },
+    { id: "არ ვიცი", label: t("onboarding.health.options.unsure"), icon: "🤔" }
   ];
 
   const handleNext = () => {
@@ -67,10 +70,8 @@ export default function Health() {
             <View style={styles.iconBox}>
               <Text style={styles.emoji}>🩺</Text>
             </View>
-            <Text style={styles.title}>ჯანმრთელობის მდგომარეობა</Text>
-            <Text style={styles.subtitle}>
-              რაიმე პრობლემა ხომ არ გაქვს? ეს ინფორმაცია დაგვეხმარება ციკლის უკეთ ანალიზში.
-            </Text>
+            <Text style={styles.title}>{t("onboarding.health.title")}</Text>
+            <Text style={styles.subtitle}>{t("onboarding.health.subtitle")}</Text>
           </View>
 
           <View style={styles.optionsContainer}>
@@ -113,7 +114,7 @@ export default function Health() {
           onPress={handleNext}
           activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>შემდეგი ნაბიჯი ✨</Text>
+          <Text style={styles.buttonText}>{t("onboarding.nextStep")}</Text>
         </TouchableOpacity>
       </Animated.View>
     </LinearGradient>
