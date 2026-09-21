@@ -15,4 +15,4 @@ export const TEMP_HIDE_ASSISTANT_HEADER = true;
 // While false the app behaves exactly as before: every user gets Georgian and
 // never sees a language choice, even though the dictionaries are already wired
 // in. Flip to true once the English and Russian dictionaries are complete.
-export const TEMP_LANGUAGE_PICKER_ENABLED = false;
+export const TEMP_LANGUAGE_PICKER_ENABLED = true;
