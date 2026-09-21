@@ -88,6 +88,9 @@ export default function CycleLength() {
       <View style={styles.bgCircleTop} />
       <View style={styles.bgCircleBottom} />
 
+      {/* Scrollable so the footer button never sits on top of the pickers on
+          short screens (iPhone SE/8). */}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         
         <View style={styles.header}>
@@ -155,6 +158,7 @@ export default function CycleLength() {
         </View>
 
       </Animated.View>
+      </ScrollView>
 
       <Animated.View style={[styles.footer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <TouchableOpacity
@@ -175,8 +179,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "space-between",
-    paddingTop: 80,
-    paddingBottom: 50,
+    paddingTop: 64,
+    paddingBottom: 40,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 12,
   },
 
   // --- ფონის დეკორაციები ---
@@ -190,7 +201,7 @@ const styles = StyleSheet.create({
 
   header: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 28,
     paddingHorizontal: 30,
   },
   iconBox: {
@@ -226,7 +237,7 @@ const styles = StyleSheet.create({
 
   // --- სელექტორების სექცია ---
   selectorSection: {
-    marginBottom: 35,
+    marginBottom: 22,
   },
   sectionTitle: {
     fontSize: 15,
