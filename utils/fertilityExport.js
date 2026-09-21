@@ -1,43 +1,26 @@
 import dayjs from "dayjs";
 
+import { t } from "../services/i18n";
+
 // Builds a plain-text fertility report the user can hand to a doctor.
 // Pure string building — the screen handles writing/sharing the file.
+// All copy comes from locales/*.report (and the shared calendar/stats keys
+// for option labels), so the report is written in the app's language.
 
-const LH_LABELS = {
-  negative: "უარყოფითი",
-  weak: "სუსტი დადებითი",
-  positive: "დადებითი",
-  peak: "პიკი",
-};
+const known = (set, id) => set.includes(id);
+const LH_IDS = ["negative", "weak", "positive", "peak"];
+const MUCUS_IDS = ["dry", "sticky", "creamy", "watery", "eggwhite"];
+const SYMPTOM_IDS = ["cramps", "breast", "libido", "fatigue", "nausea", "energy"];
+const SUPPLEMENT_IDS = ["folic", "vitamin_d", "omega3", "iron", "iodine"];
+const METHOD_IDS = ["bbt", "lh", "mucus"];
+const CONFIDENCE_IDS = ["high", "medium", "low"];
 
-const MUCUS_LABELS = {
-  dry: "მშრალი",
-  sticky: "წებოვანი",
-  creamy: "კრემისებრი",
-  watery: "წყლიანი",
-  eggwhite: "კვერცხის ცილა",
-};
-
-const SYMPTOM_LABELS = {
-  cramps: "მუცლის ტკივილი",
-  breast: "მკერდის მგრძნობელობა",
-  libido: "ლიბიდოს ცვლილება",
-  fatigue: "დაღლილობა",
-  nausea: "გულისრევა",
-  energy: "ენერგიის მომატება",
-};
-
-const SUPPLEMENT_LABELS = {
-  folic: "ფოლიუმის მჟავა",
-  vitamin_d: "ვიტამინი D",
-  omega3: "ომეგა 3",
-  iron: "რკინა",
-  iodine: "იოდი",
-  other: "სხვა",
-};
-
-const METHOD_LABELS = { bbt: "ტემპერატურა", lh: "ოვულაციის ტესტი", mucus: "ლორწო" };
-const CONFIDENCE_LABELS = { high: "მაღალი", medium: "საშუალო", low: "დაბალი" };
+const lhLabel = (id) => (known(LH_IDS, id) ? t(`calendar.lh.${id}`) : id);
+const mucusLabel = (id) => (known(MUCUS_IDS, id) ? t(`calendar.mucus.${id}`) : id);
+const symptomLabel = (id) => (known(SYMPTOM_IDS, id) ? t(`calendar.ovulationSigns.${id}`) : id);
+const supplementLabel = (id) => (known(SUPPLEMENT_IDS, id) ? t(`fertility.supplements.${id}`) : id === "other" ? t("report.otherSupplement") : id);
+const methodLabel = (id) => (known(METHOD_IDS, id) ? t(`stats.methods.${id}`) : id);
+const confidenceLabel = (id) => (known(CONFIDENCE_IDS, id) ? t(`stats.confidence.${id}`) : id);
 
 const line = (label, value) => `${label}: ${value}`;
 const section = (title) => `\n${title}\n${"-".repeat(title.length)}`;
@@ -62,105 +45,112 @@ export function buildFertilityReport({
 } = {}) {
   const out = [];
 
-  out.push("ნაყოფიერების ანგარიში / FERTILITY REPORT");
+  out.push(t("report.title"));
   out.push("=".repeat(42));
-  out.push(line("მომხმარებელი", userName || "—"));
-  if (age != null) out.push(line("ასაკი", `${age}`));
-  out.push(line("ანგარიშის თარიღი", fmt(dayjs())));
+  out.push(line(t("report.user"), userName || "—"));
+  if (age != null) out.push(line(t("report.age"), `${age}`));
+  out.push(line(t("report.reportDate"), fmt(dayjs())));
 
   // -- Summary ------------------------------------------------------
-  out.push(section("შეჯამება"));
+  out.push(section(t("report.summary")));
   if (trying) {
-    out.push(line("მცდელობის ხანგრძლივობა", `${trying.monthsTrying} თვე`));
-    out.push(line("აღრიცხული ციკლები", `${trying.cyclesCount}`));
+    out.push(line(t("report.tryingDuration"), t("report.months", { count: trying.monthsTrying })));
+    out.push(line(t("report.loggedCycles"), `${trying.cyclesCount}`));
   }
   if (regularity?.sampleSize > 0) {
-    out.push(line("საშუალო ციკლი", `${regularity.avgCycle} დღე`));
-    out.push(line("ციკლების დიაპაზონი", `${regularity.shortest}–${regularity.longest} დღე (სხვაობა ${regularity.spread})`));
-    out.push(line("რეგულარულობა", regularity.isRegular ? "რეგულარული" : "არარეგულარული"));
+    out.push(line(t("report.avgCycle"), t("report.days", { count: regularity.avgCycle })));
+    out.push(line(t("report.cycleRange"), t("report.cycleRangeValue", { shortest: regularity.shortest, longest: regularity.longest, spread: regularity.spread })));
+    out.push(line(t("report.regularity"), regularity.isRegular ? t("report.regular") : t("report.irregular")));
   } else {
-    out.push("ციკლის რეგულარულობის შესაფასებლად საკმარისი მონაცემი არ არის.");
+    out.push(t("report.notEnoughData"));
   }
   if (lutealLength) {
-    out.push(line("ლუტეალური ფაზა (გაზომილი)", `${lutealLength.days} დღე, ${lutealLength.sampleSize} ციკლის მიხედვით`));
+    out.push(line(t("report.lutealMeasured"), t("report.lutealValue", { days: lutealLength.days, cycles: lutealLength.sampleSize })));
   }
   if (logSummary) {
-    out.push(line("ურთიერთობა ნაყოფიერ ფანჯარაში", `${logSummary.intercourseInFertile} / ${logSummary.intercourseCount}`));
-    out.push(line("დადებითი ოვულაციის ტესტები", `${logSummary.lhPositiveCount} / ${logSummary.lhTestCount}`));
-    out.push(line("ტემპერატურის ჩანაწერები", `${logSummary.bbtCount}`));
+    out.push(line(t("report.intercourseInWindow"), `${logSummary.intercourseInFertile} / ${logSummary.intercourseCount}`));
+    out.push(line(t("report.positiveLhTests"), `${logSummary.lhPositiveCount} / ${logSummary.lhTestCount}`));
+    out.push(line(t("report.bbtEntries"), `${logSummary.bbtCount}`));
   }
 
   // -- Confirmed ovulations ----------------------------------------
-  out.push(section("დადასტურებული ოვულაციები (ნიშნების მიხედვით)"));
+  out.push(section(t("report.confirmedOvulations")));
   if (confirmations.length === 0) {
-    out.push("ოვულაცია ჩანაწერებით ჯერ არ დადასტურებულა.");
+    out.push(t("report.noneConfirmed"));
   } else {
     confirmations.forEach((c, i) => {
-      const methods = c.methods.map((m) => METHOD_LABELS[m] || m).join(" + ");
-      const luteal = c.lutealLength != null ? `, ლუტეალური ფაზა ${c.lutealLength} დღე` : "";
+      const methods = c.methods.map(methodLabel).join(" + ");
+      const luteal = c.lutealLength != null ? t("report.lutealSuffix", { days: c.lutealLength }) : "";
       out.push(
-        `${i + 1}. ${fmt(c.ovulationDate)} — ციკლის ${c.cycleDay}-ე დღე (${methods}; სანდოობა: ${CONFIDENCE_LABELS[c.confidence] || c.confidence}${luteal})`
+        t("report.confirmationLine", {
+          index: i + 1,
+          date: fmt(c.ovulationDate),
+          day: c.cycleDay,
+          methods,
+          confidence: confidenceLabel(c.confidence),
+          luteal,
+        })
       );
     });
   }
 
   // -- Cycle history -----------------------------------------------
-  out.push(section("ციკლების ისტორია"));
+  out.push(section(t("report.cycleHistory")));
   const sortedCycles = [...cycles]
     .filter((c) => c?.start_date)
     .sort((a, b) => dayjs(b.start_date).diff(dayjs(a.start_date)));
   if (sortedCycles.length === 0) {
-    out.push("ჩანაწერი არ არის.");
+    out.push(t("report.noEntries"));
   } else {
     sortedCycles.forEach((c, i) => {
-      out.push(`${i + 1}. დაწყება: ${fmt(c.start_date)} | ხანგრძლივობა: ${c.cycle_length || "—"} დღე | მენსტრუაცია: ${c.period_length || "—"} დღე`);
+      out.push(t("report.cycleLine", { index: i + 1, start: fmt(c.start_date), cycle: c.cycle_length || "—", period: c.period_length || "—" }));
     });
   }
 
   // -- LH tests ------------------------------------------------------
   const lhLogs = sortedByDate(logs, "lh_test");
-  out.push(section("ოვულაციის ტესტები"));
-  if (lhLogs.length === 0) out.push("ჩანაწერი არ არის.");
-  else lhLogs.forEach((l) => out.push(`${fmt(l.date)}: ${LH_LABELS[l.value?.result] || l.value?.result || "—"}`));
+  out.push(section(t("report.lhTests")));
+  if (lhLogs.length === 0) out.push(t("report.noEntries"));
+  else lhLogs.forEach((l) => out.push(`${fmt(l.date)}: ${l.value?.result ? lhLabel(l.value.result) : "—"}`));
 
   // -- BBT -----------------------------------------------------------
   const bbtLogs = sortedByDate(logs, "bbt");
-  out.push(section("ბაზალური ტემპერატურა (°C)"));
-  if (bbtLogs.length === 0) out.push("ჩანაწერი არ არის.");
+  out.push(section(t("report.bbt")));
+  if (bbtLogs.length === 0) out.push(t("report.noEntries"));
   else bbtLogs.forEach((l) => out.push(`${fmt(l.date)}: ${l.value?.temp ?? "—"}`));
 
   // -- Mucus ---------------------------------------------------------
   const mucusLogs = sortedByDate(logs, "cervical_mucus");
-  out.push(section("საშვილოსნოს ყელის ლორწო"));
-  if (mucusLogs.length === 0) out.push("ჩანაწერი არ არის.");
-  else mucusLogs.forEach((l) => out.push(`${fmt(l.date)}: ${MUCUS_LABELS[l.value?.mucus] || l.value?.mucus || "—"}`));
+  out.push(section(t("report.mucus")));
+  if (mucusLogs.length === 0) out.push(t("report.noEntries"));
+  else mucusLogs.forEach((l) => out.push(`${fmt(l.date)}: ${l.value?.mucus ? mucusLabel(l.value.mucus) : "—"}`));
 
   // -- Symptoms ------------------------------------------------------
   const symptomLogs = sortedByDate(logs, "ovulation_symptom");
-  out.push(section("ოვულაციის ნიშნები"));
-  if (symptomLogs.length === 0) out.push("ჩანაწერი არ არის.");
+  out.push(section(t("report.ovulationSigns")));
+  if (symptomLogs.length === 0) out.push(t("report.noEntries"));
   else {
     symptomLogs.forEach((l) => {
-      const labels = (l.value?.symptoms || []).map((s) => SYMPTOM_LABELS[s] || s).join(", ");
+      const labels = (l.value?.symptoms || []).map(symptomLabel).join(", ");
       out.push(`${fmt(l.date)}: ${labels || "—"}`);
     });
   }
 
   // -- Supplements ---------------------------------------------------
   const supplementLogs = sortedByDate(logs, "supplement");
-  out.push(section("ვიტამინები და დამატებები"));
-  if (supplementLogs.length === 0) out.push("ჩანაწერი არ არის.");
+  out.push(section(t("report.supplements")));
+  if (supplementLogs.length === 0) out.push(t("report.noEntries"));
   else {
     supplementLogs.forEach((l) => {
-      const labels = (l.value?.taken || []).map((s) => SUPPLEMENT_LABELS[s] || s).join(", ");
+      const labels = (l.value?.taken || []).map(supplementLabel).join(", ");
       out.push(`${fmt(l.date)}: ${labels || "—"}`);
     });
   }
 
-  out.push(section("შენიშვნა"));
-  out.push("ეს ანგარიში მომხმარებლის მიერ აპში შეყვანილ ჩანაწერებს ეფუძნება.");
-  out.push("ოვულაციის შეფასება რეტროსპექტულია და არ წარმოადგენს სამედიცინო დასკვნას.");
-  out.push("გენერირებულია: Cycle Care");
+  out.push(section(t("report.note")));
+  out.push(t("report.noteLine1"));
+  out.push(t("report.noteLine2"));
+  out.push(t("report.generatedBy"));
 
   return out.join("\n");
 }

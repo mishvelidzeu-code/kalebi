@@ -5,6 +5,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
 import { isAdminEmail, isTestAccountEmail } from "./adminAccess";
+import { t } from "./i18n";
 import { resolvePregnancyAccessFromProfile } from "./purchases";
 import { supabase } from "./supabase";
 
@@ -61,52 +62,14 @@ export async function registerPushTokenForCurrentUser() {
   }
 }
 
-const PREGNANCY_WEEK_SIZES = {
-  5: ["სეზამის მარცვლის", "🌱"],
-  6: ["ოსპის", "🫘"],
-  7: ["მოცვის", "🫐"],
-  8: ["ჟოლოს", "🍓"],
-  9: ["ყურძნის მარცვლის", "🍇"],
-  10: ["ქლიავის", "🍑"],
-  11: ["ლეღვის", "🍋"],
-  12: ["ლიმონის", "🍋"],
-  13: ["ატმის", "🍑"],
-  14: ["ვაშლის", "🍎"],
-  15: ["ფორთოხლის", "🍊"],
-  16: ["ავოკადოს", "🥑"],
-  17: ["მსხლის", "🍐"],
-  18: ["ბოლოკის", "🥕"],
-  19: ["მანგოს", "🥭"],
-  20: ["ბანანის", "🍌"],
-  21: ["სტაფილოს", "🥕"],
-  22: ["ქოქოსის", "🥥"],
-  23: ["გრეიფრუტის", "🍈"],
-  24: ["სიმინდის ტაროს", "🌽"],
-  25: ["ყვავილოვანი კომბოსტოს", "🥦"],
-  26: ["სალათის კოჭის", "🥬"],
-  27: ["კომბოსტოს", "🥬"],
-  28: ["ბადრიჯნის", "🍆"],
-  29: ["კიტრის", "🥒"],
-  30: ["გოგრის ნაჭრის", "🎃"],
-  31: ["ქოქოსის", "🥥"],
-  32: ["ანანასის", "🍍"],
-  33: ["ნესვის", "🍈"],
-  34: ["პაპაიას", "🍈"],
-  35: ["ბოსტნეულის", "🥦"],
-  36: ["სალათის", "🥬"],
-  37: ["ნესვის", "🍈"],
-  38: ["ნერგის", "🌿"],
-  39: ["გოგრის", "🎃"],
-  40: ["სასიხარულო", "👶"],
+// Texts live in locales/*.notifications — sizes.w5..w40 (genitive/accusative
+// as the sentence needs), milestones.w12/20/28/36/40. Only the emoji stays here.
+const PREGNANCY_WEEK_EMOJI = {
+  5: "🌱", 6: "🫘", 7: "🫐", 8: "🍓", 9: "🍇", 10: "🍑", 11: "🍋", 12: "🍋", 13: "🍑", 14: "🍎", 15: "🍊", 16: "🥑", 17: "🍐", 18: "🥕",
+  19: "🥭", 20: "🍌", 21: "🥕", 22: "🥥", 23: "🍈", 24: "🌽", 25: "🥦", 26: "🥬", 27: "🥬", 28: "🍆", 29: "🥒", 30: "🎃", 31: "🥥", 32: "🍍",
+  33: "🍈", 34: "🍈", 35: "🥦", 36: "🥬", 37: "🍈", 38: "🌿", 39: "🎃", 40: "👶",
 };
-
-const PREGNANCY_MILESTONE_MESSAGES = {
-  12: "I ტრიმესტრი დასრულდა! 🎉 ყველაზე კრიტიკული ეტაპი წარმატებით გადალახე!",
-  20: "ნახევარი გზა გავლილია! 🌟 ბავშვი ახლა სრულად ჩამოყალიბებულია",
-  28: "III ტრიმესტრი დაიწყო! 💪 ფინიშამდე ცოტა დარჩა!",
-  36: "ბავშვი სრულად მზადაა დასაბადებლად! ✨ მომზადება დაიწყე",
-  40: "სავარაუდო მშობიარობის კვირა! 👶 მალე გნახავ, ჩვილო!",
-};
+const PREGNANCY_MILESTONE_WEEKS = [12, 20, 28, 36, 40];
 
 const DOCTOR_VISIT_WEEKS = [8, 12, 16, 20, 24, 28, 32, 36, 38, 40];
 
@@ -224,8 +187,8 @@ export function calculateCycleDates(cycleStartDate, cycleLength) {
 export async function schedulePeriodNotification(nextPeriodDate) {
   const triggerDate = addDays(parseCycleDate(nextPeriodDate), -2);
   return scheduleLocalNotification(
-    "მენსტრუაცია 🌸",
-    "მენსტრუაცია სავარაუდოდ 2 დღეში დაიწყება",
+    t("notifications.periodTitle"),
+    t("notifications.periodBody"),
     triggerDate
   );
 }
@@ -233,8 +196,8 @@ export async function schedulePeriodNotification(nextPeriodDate) {
 export async function scheduleOvulationNotification(ovulationDate) {
   const triggerDate = addDays(parseCycleDate(ovulationDate), -1);
   return scheduleLocalNotification(
-    "ოვულაცია 💕",
-    "ხვალ ოვულაციის სავარაუდო დღეა",
+    t("notifications.ovulationTitle"),
+    t("notifications.ovulationBody"),
     triggerDate
   );
 }
@@ -242,8 +205,8 @@ export async function scheduleOvulationNotification(ovulationDate) {
 export async function scheduleFertileNotification(fertileStartDate) {
   const triggerDate = parseCycleDate(fertileStartDate);
   return scheduleLocalNotification(
-    "ნაყოფიერი დღეები 🌱",
-    "დღეს იწყება ნაყოფიერი პერიოდი",
+    t("notifications.fertileTitle"),
+    t("notifications.fertileBody"),
     triggerDate
   );
 }
@@ -251,8 +214,8 @@ export async function scheduleFertileNotification(fertileStartDate) {
 export async function scheduleWellnessCheckinNotification(checkinDate) {
   const triggerDate = parseCycleDate(checkinDate);
   return scheduleLocalNotification(
-    "როგორ გრძნობ თავს დღეს? 💗",
-    "შეავსე დღიური და ჩაინიშნე შენი განწყობა და სიმპტომები.",
+    t("notifications.checkinTitle"),
+    t("notifications.checkinBody"),
     triggerDate
   );
 }
@@ -287,10 +250,11 @@ async function scheduleWellnessCheckins() {
 // repeating triggers (1 slot each) and the dated ones cover 2 cycles.
 const FERTILITY_CYCLES_TO_SCHEDULE = 2;
 
-const FERTILITY_DAILY_REMINDERS = [
-  { hour: 7, minute: 0, title: "ბაზალური ტემპერატურა 🌡️", body: "გაზომე ტემპერატურა ადგომამდე, სანამ დღე დაიწყება." },
-  { hour: 10, minute: 0, title: "ვიტამინები 💊", body: "ფოლიუმის მჟავა და დანარჩენი დამატებები დღეს მიიღე?" },
-  { hour: 15, minute: 0, title: "წყალი 💧", body: "დალიე წყალი — ჰიდრატაცია ლორწოს ხარისხზეც აისახება." },
+// Resolved at schedule time so the text follows the current language.
+const getFertilityDailyReminders = () => [
+  { hour: 7, minute: 0, title: t("notifications.bbtTitle"), body: t("notifications.bbtBody") },
+  { hour: 10, minute: 0, title: t("notifications.vitaminsTitle"), body: t("notifications.vitaminsBody") },
+  { hour: 15, minute: 0, title: t("notifications.waterTitle"), body: t("notifications.waterBody") },
 ];
 
 async function scheduleDailyRepeatingNotification({ hour, minute, title, body }) {
@@ -314,7 +278,7 @@ export async function scheduleFertilityReminders(lastPeriodDate, cycleLength) {
 
     const scheduledIds = [];
 
-    for (const reminder of FERTILITY_DAILY_REMINDERS) {
+    for (const reminder of getFertilityDailyReminders()) {
       const id = await scheduleDailyRepeatingNotification(reminder);
       if (id) scheduledIds.push(id);
     }
@@ -330,8 +294,8 @@ export async function scheduleFertilityReminders(lastPeriodDate, cycleLength) {
       // LH testing ramp-up: the 3 days before ovulation.
       for (let offset = -4; offset <= -2; offset += 1) {
         const id = await scheduleLocalNotification(
-          "ოვულაციის ტესტი 🧪",
-          "ტესტირების ფანჯარაა — დღეში ერთი ტესტი საკმარისია.",
+          t("notifications.lhTitle"),
+          t("notifications.lhBody"),
           addDays(ovulation, offset)
         );
         if (id) scheduledIds.push(id);
@@ -340,8 +304,8 @@ export async function scheduleFertilityReminders(lastPeriodDate, cycleLength) {
       // Peak days: the day before ovulation and ovulation itself.
       for (let offset = -1; offset <= 0; offset += 1) {
         const id = await scheduleLocalNotification(
-          "პიკის დღეა 💕",
-          "ჩასახვის შანსი დღეს მაქსიმალურია.",
+          t("notifications.peakTitle"),
+          t("notifications.peakBody"),
           addDays(ovulation, offset)
         );
         if (id) scheduledIds.push(id);
@@ -419,20 +383,19 @@ export async function schedulePregnancyNotifications(lmpDate) {
       weekStartDate.setHours(DEFAULT_NOTIFICATION_HOUR, 0, 0, 0);
       if (!isFutureTrigger(weekStartDate)) continue;
 
-      const milestoneMsg = PREGNANCY_MILESTONE_MESSAGES[week];
-      const sizeData = PREGNANCY_WEEK_SIZES[week];
+      const sizeEmoji = PREGNANCY_WEEK_EMOJI[week];
 
       let body;
-      if (milestoneMsg) {
-        body = milestoneMsg;
-      } else if (sizeData) {
-        body = `ნაყოფი ახლა ${sizeData[0]} ზომისაა ${sizeData[1]}`;
+      if (PREGNANCY_MILESTONE_WEEKS.includes(week)) {
+        body = t(`notifications.milestones.w${week}`);
+      } else if (sizeEmoji) {
+        body = t("notifications.weekSize", { size: t(`notifications.sizes.w${week}`), emoji: sizeEmoji });
       } else {
-        body = `${week}-ე კვირა დაიწყო! 🤰`;
+        body = t("notifications.weekStarted", { week });
       }
 
       const id = await scheduleLocalNotification(
-        `კვირა ${week} 🤰`,
+        t("notifications.weekTitle", { week }),
         body,
         weekStartDate
       );
@@ -448,8 +411,8 @@ export async function schedulePregnancyNotifications(lmpDate) {
       if (!isFutureTrigger(reminderDate)) continue;
 
       const id = await scheduleLocalNotification(
-        "ექიმის ვიზიტი 🏥",
-        `კვირა ${week} ახლოვდება — ექიმის ვიზიტი დაჯავშნე`,
+        t("notifications.doctorTitle"),
+        t("notifications.doctorBody", { week }),
         reminderDate
       );
       if (id) scheduledIds.push(id);
@@ -460,8 +423,8 @@ export async function schedulePregnancyNotifications(lmpDate) {
     diaryDate.setHours(9, 0, 0, 0);
     for (let i = 0; i < DIARY_REMINDERS_TO_SCHEDULE; i++) {
       const id = await scheduleLocalNotification(
-        "ორსულობის დღიური 📔",
-        "დაფიქსირე დღევანდელი სიმპტომები და განწყობა",
+        t("notifications.diaryTitle"),
+        t("notifications.diaryBody"),
         new Date(diaryDate)
       );
       if (id) scheduledIds.push(id);

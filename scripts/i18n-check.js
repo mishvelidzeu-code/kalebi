@@ -48,6 +48,9 @@ const MIGRATED_FILES = [
   "utils/fertilityPlan.js",
   "utils/pregnancyMemory.js",
   "utils/fertilityInsights.js",
+  "utils/dailyAdvice.js",
+  "utils/fertilityExport.js",
+  "services/notifications.js",
   // app/(tabs)/_layout.tsx: tab titles are translated, but the AdminAssistant
   // widget in the same file is admin-only and stays Georgian on purpose, so
   // the file is not listed here. Same for app/admin.jsx and services/adminQuery.js.
