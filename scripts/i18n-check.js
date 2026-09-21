@@ -33,6 +33,7 @@ const MIGRATED_FILES = [
   "app/onboarding/last-period.jsx",
   "app/onboarding/notifications.jsx",
   "app/(tabs)/profile.js",
+  "app/(tabs)/index.js",
 ];
 
 // Georgian literals that are allowed to stay in code because they are stored
@@ -143,11 +144,13 @@ for (const file of MIGRATED_FILES) {
     continue;
   }
   const current = fs.readFileSync(full, "utf8");
-  const leftover = georgianLiterals(current);
-  for (const text of leftover) {
-    if (DB_VALUE_LITERALS.has(text)) continue;
-    failures.push(`[${file}] Georgian still in code: "${text}"`);
-  }
+  // Line-based so JSX text mixed with expressions (`{week} კვირა`) is caught
+  // too, not only clean literals.
+  stripComments(current).split("\n").forEach((line, index) => {
+    if (!GEORGIAN.test(line)) return;
+    const rest = line.replace(/"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'/g, (m, a, b) => (DB_VALUE_LITERALS.has(a ?? b) ? "" : m));
+    if (GEORGIAN.test(rest)) failures.push(`[${file}:${index + 1}] Georgian still in code: ${line.trim().slice(0, 120)}`);
+  });
 
   let base;
   try {
@@ -162,8 +165,10 @@ for (const file of MIGRATED_FILES) {
     if (kaValues.has(text) || kaValues.has(normalised) || kaJoined.includes(normalised)) continue;
     // Template literals: `კვირა ${currentWeek}` became "კვირა {{week}}" — every
     // Georgian fragment between the ${…} holes must still exist somewhere.
+    // Quoted inserts ("\"მინდა დაორსულება\" რეჟიმი…" → "\"{{mode}}\" რეჟიმი…")
+    // are split out the same way.
     const fragments = text
-      .split(/\$\{[^}]*\}/)
+      .split(/\$\{[^}]*\}|\\"[^"]*\\"/)
       .map((part) => part.replace(/\\n/g, "\n").trim())
       .filter((part) => GEORGIAN.test(part));
     if (fragments.length && fragments.every((part) => kaJoined.includes(part))) continue;

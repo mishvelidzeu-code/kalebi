@@ -1,5 +1,3 @@
-import dayjs from "dayjs";
-import "dayjs/locale/ka";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -12,6 +10,7 @@ import PrimePreview from "../../components/PrimePreview";
 import { TEMP_FERTILITY_COMING_SOON } from "../../constants/tempFlags";
 import { getFertilityLogsForDay } from "../../services/fertilityLogs";
 import { buildDailyPlan } from "../../utils/fertilityPlan";
+import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { useFertility } from "../../context/FertilityContext";
@@ -21,8 +20,7 @@ import { supabase } from "../../services/supabase";
 import { calculateCycleState, getPregnancyChanceKey } from "../../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../../utils/cyclePrediction";
 import { getDailyAdvice } from "../../utils/dailyAdvice";
-
-dayjs.locale("ka");
+import dayjs from "../../utils/dayjs";
 
 const DEFAULT_GOAL = "ციკლის კონტროლი";
 const HOME_ADVICE_CACHE_KEY_PREFIX = "@cycle-care/home-advice";
@@ -38,25 +36,14 @@ function getBabyImageUrl(week) {
   return `${SUPABASE_URL}/storage/v1/object/public/baby-images/${imageKey}.png`;
 }
 
-function getBabyWeekDetails(week, baby) {
-  const trimesterNote =
-    week <= 12
-      ? "ამ ეტაპზე სხეული სწრაფად ეწყობა ორსულობას. დაღლილობა, გულისრევა, მკერდის მგრძნობელობა და ემოციური ცვლილებები ხშირია."
-      : week <= 27
-        ? "ამ პერიოდში ბევრს ენერგია უბრუნდება. შეიძლება ნელ-ნელა იგრძნო მოძრაობა, მუცლის დაჭიმულობა ან ზურგის მსუბუქი დაღლა."
-        : "ბავშვი აქტიურად იმატებს წონაში. შეიძლება იგრძნო სიმძიმე, შეშუპება, ძილის სირთულე ან უფრო ხშირი მოძრაობები.";
-
-  const developmentNote =
-    week <= 8
-      ? "ნაყოფის მთავარი ორგანოები ახლა ყალიბდება და განვითარება ძალიან სწრაფად მიდის."
-      : week <= 19
-        ? "სახის ნაკვთები, კიდურები და შეგრძნებების საფუძველი უფრო მკაფიო ხდება."
-        : week <= 30
-          ? "ბავშვი იზრდება, მოძრაობები ძლიერდება და სმენა/რეაქციები უფრო შესამჩნევი ხდება."
-          : "ბავშვი უკვე ემზადება დაბადებისთვის: იმატებს ცხიმს, ძალას და უფრო სტაბილურ რიტმს.";
+function getBabyWeekDetails(t, week, baby) {
+  const trimesterNote = t(week <= 12 ? "home.trimesterNote1" : week <= 27 ? "home.trimesterNote2" : "home.trimesterNote3");
+  const developmentNote = t(
+    week <= 8 ? "home.developmentNote1" : week <= 19 ? "home.developmentNote2" : week <= 30 ? "home.developmentNote3" : "home.developmentNote4"
+  );
 
   return [
-    `${week}-ე კვირაში ნაყოფის ზომა დაახლოებით "${baby.size}"-ს შეედრება.`,
+    t("home.weekSizeIntro", { week, size: baby.size }),
     developmentNote,
     trimesterNote,
     baby.advice,
@@ -103,52 +90,59 @@ async function writeCachedHomeAdvice(userId, adviceKey, text) {
   }
 }
 
-const BABY_DATA = {
-  1:  { size: "ნაყოფის უჯრედი", emoji: "🔬", advice: "ორსულობა ახლა იწყება. ფოლიუმის მჟავა ძალიან მნიშვნელოვანია." },
-  2:  { size: "ნაყოფის უჯრედი", emoji: "🔬", advice: "ორგანიზმი მზადდება ნაყოფის ჩასახვისთვის." },
-  3:  { size: "ყაყაჩოს თესლი", emoji: "🌱", advice: "ნაყოფი ახლა ძალიან პატარაა - 1-2 მმ. მიიღე ვიტამინები." },
-  4:  { size: "ხაშხაშის თესლი", emoji: "🌸", advice: "გული ახლა ჩამოყალიბდება. მოერიდე ალკოჰოლს და კოფეინს." },
-  5:  { size: "სეზამი", emoji: "🫘", advice: "ნაყოფი დაახლოებით 5 მმ-ია. პირველი ექიმის ვიზიტი დაგეგმე." },
-  6:  { size: "მოცვი", emoji: "🫐", advice: "გული ცემს! ახლა შეიძლება გულისრევა გაჩნდეს." },
-  7:  { size: "ჟოლო", emoji: "🍓", advice: "ტვინი სწრაფად ვითარდება. ბევრი სითხე დალიე." },
-  8:  { size: "კივი", emoji: "🥝", advice: "ნაყოფი 1.6 სმ-ია. ყველა ძირითადი ორგანო ვითარდება." },
-  9:  { size: "ყურძნის მარცვალი", emoji: "🍇", advice: "ნაყოფს ახლა ყველა თითი აქვს. ეჭვები ნორმალურია." },
-  10: { size: "ატამი", emoji: "🍑", advice: "კრიტიკული ფაზა დასრულდა - ნაყოფი ახლა ნაყოფია!" },
-  11: { size: "ლეღვი", emoji: "🍈", advice: "ნაყოფი 4.5 სმ-ია. პირველი ტრიმესტრი თითქმის დასრულდა." },
-  12: { size: "ლიმონი", emoji: "🍋", advice: "ალბათ გულისრევა შეიმსუბუქება. USG დროა!" },
-  13: { size: "ნეკერჩხალი", emoji: "🍎", advice: "მეორე ტრიმესტრი იწყება! ენერგია დაბრუნდება." },
-  14: { size: "ლიმონი", emoji: "🍋", advice: "ნაყოფი 8.5 სმ-ია. მოძრაობა მალე იგრძნობა." },
-  15: { size: "ვაშლი", emoji: "🍎", advice: "სმენა ვითარდება. ესაუბრე შენს ბავშვს!" },
-  16: { size: "ავოკადო", emoji: "🥑", advice: "ნაყოფი 11.5 სმ-ია. სქესი შეიძლება გაიგო USG-ზე." },
-  17: { size: "ბოლოკი", emoji: "🥕", advice: "ნაყოფი ცხიმს იკრებს. ეს მას სიტყველობს." },
-  18: { size: "ბადრიჯანი", emoji: "🍆", advice: "პირველი მოძრაობა შეიძლება იგრძნო!" },
-  19: { size: "მანგო", emoji: "🥭", advice: "ნაყოფი 15 სმ-ია. კანი ჩამოყალიბება." },
-  20: { size: "ბანანი", emoji: "🍌", advice: "ნახევარი გზა გავლილია! შენიშნე ბავშვის მოძრაობა." },
-  21: { size: "სტაფილო", emoji: "🥕", advice: "ნაყოფი 26 სმ-ია. ძილი გვერდზე უფრო კომფორტულია." },
-  22: { size: "სიმინდი", emoji: "🌽", advice: "ტუჩები და წარბები ჩამოყალიბდა. ბავშვი გეფიცხება!" },
-  23: { size: "კივი", emoji: "🥝", advice: "სმენა კარგად ვითარდება. მუსიკა უკრა!" },
-  24: { size: "სიმინდი", emoji: "🌽", advice: "ნაყოფი ახლა 600 გ-ია. ფილტვები ვითარდება." },
-  25: { size: "ბოსტნეული", emoji: "🫑", advice: "ნაყოფი 34 სმ-ია. ძილი შეიძლება გართულდეს." },
-  26: { size: "ბადრიჯანი", emoji: "🍆", advice: "თვალები გაიხელება! ნაყოფი სინათლეს გრძნობს." },
-  27: { size: "ყვავილოვანი კომბოსტო", emoji: "🥦", advice: "მესამე ტრიმესტრის ბოლო კვირა. ბავშვი ბრუნდება." },
-  28: { size: "ბადია", emoji: "🫚", advice: "მესამე ტრიმესტრი! ნაყოფი 1 კგ-ია. ბრეგტონ-ჰიქსი ნორმალურია." },
-  29: { size: "კარტოფილი", emoji: "🥔", advice: "ნაყოფი ბრუნდება. თავი ქვემოთ კარგი ნიშანია." },
-  30: { size: "კომბოსტო", emoji: "🥬", advice: "ახლა ნაყოფი 1.3 კგ-ია. სვინგები ხშირია - ეს ნორმალურია." },
-  31: { size: "ქოქოსი", emoji: "🥥", advice: "ნაყოფი 1.5 კგ-ია. ოფლიანობა შეიძლება მოიმატოს." },
-  32: { size: "ჯუნჯული", emoji: "🫚", advice: "ნაყოფი 1.7 კგ-ია. ნებისმიერ დროს მზადაა გარე სამყაროსთვის." },
-  33: { size: "ანანასი", emoji: "🍍", advice: "ნაყოფი 1.9 კგ-ია. ბებიაქალი/ექიმი ვიზიტი სულ უახლოვდება." },
-  34: { size: "კივი", emoji: "🥝", advice: "ფილტვები თითქმის მზადაა. ბავშვი ნებისმიერ დროს შეიძლება მოვიდეს." },
-  35: { size: "ნემსიყლაპია", emoji: "🫚", advice: "ნაყოფი 2.4 კგ-ია. გირჩევ, საავადმყოფოს ჩანთა შეფუთო!" },
-  36: { size: "ქოქოსი", emoji: "🥥", advice: "ნაყოფი 2.6 კგ-ია. ყოველი კვირა მნიშვნელოვანია!" },
-  37: { size: "ბოლქვი", emoji: "🧅", advice: "ბავშვი სრული ვადისაა! ნებისმიერ დროს შეიძლება." },
-  38: { size: "ვიდრო", emoji: "🥬", advice: "ნაყოფი 3 კგ-ია. სხეული ემზადება მშობიარობისთვის." },
-  39: { size: "საზამთრო", emoji: "🍉", advice: "თითქმის დროა! ისვენე, ძალები შეინახე." },
-  40: { size: "საზამთრო", emoji: "🍉", advice: "სრული ვადა! ბავშვი ნებისმიერ დროს მოდის. 🎉" },
+// Size name and tip per week live in locales/*.pregnancyWeeks; only the
+// emoji stays here.
+const BABY_EMOJI = {
+  1: "🔬",
+  2: "🔬",
+  3: "🌱",
+  4: "🌸",
+  5: "🫘",
+  6: "🫐",
+  7: "🍓",
+  8: "🥝",
+  9: "🍇",
+  10: "🍑",
+  11: "🍈",
+  12: "🍋",
+  13: "🍎",
+  14: "🍋",
+  15: "🍎",
+  16: "🥑",
+  17: "🥕",
+  18: "🍆",
+  19: "🥭",
+  20: "🍌",
+  21: "🥕",
+  22: "🌽",
+  23: "🥝",
+  24: "🌽",
+  25: "🫑",
+  26: "🍆",
+  27: "🥦",
+  28: "🫚",
+  29: "🥔",
+  30: "🥬",
+  31: "🥥",
+  32: "🫚",
+  33: "🍍",
+  34: "🥝",
+  35: "🫚",
+  36: "🥥",
+  37: "🧅",
+  38: "🥬",
+  39: "🍉",
+  40: "🍉",
 };
 
-const TRIMESTER_LABELS = { 1: "I ტრიმესტრი", 2: "II ტრიმესტრი", 3: "III ტრიმესტრი" };
+const getBabyData = (t, week) => ({
+  emoji: BABY_EMOJI[week],
+  size: t(`pregnancyWeeks.w${week}.size`),
+  advice: t(`pregnancyWeeks.w${week}.advice`),
+});
 
 function PregnancyHomeScreen({ isDark }) {
+  const { t } = useLanguage();
   const { currentWeek, currentTrimester, daysRemaining } = usePregnancy();
   const { width: screenWidth } = useWindowDimensions();
   const [weeklyAdvice, setWeeklyAdvice] = useState("");
@@ -161,7 +155,7 @@ function PregnancyHomeScreen({ isDark }) {
   const calendarScrollRef = useRef(null);
 
   const week = Math.min(Math.max(currentWeek || 1, 1), 40);
-  const baby = BABY_DATA[week];
+  const baby = getBabyData(t, week);
   const progress = (week / 40) * 100;
   const today = dayjs();
   const calendarVisibleWidth = screenWidth - 40;
@@ -172,7 +166,7 @@ function PregnancyHomeScreen({ isDark }) {
   const todayCalendarOffset = Math.max(0, (todayCalendarIndex - 2) * calendarSnapInterval);
   const calendarDays = Array.from({ length: 61 }, (_, index) => today.add(index - todayCalendarIndex, "day"));
   const babyImageUrl = getBabyImageUrl(week);
-  const trimesterLabel = TRIMESTER_LABELS[currentTrimester] || TRIMESTER_LABELS[1];
+  const trimesterLabel = t(`home.trimester${[1, 2, 3].includes(currentTrimester) ? currentTrimester : 1}`);
   const theme = {
     bg: isDark ? "#1A1115" : "#fff8fa",
     card: isDark ? "rgba(35,24,30,0.82)" : "rgba(255,255,255,0.72)",
@@ -244,7 +238,7 @@ function PregnancyHomeScreen({ isDark }) {
     } catch (err) {
       if (!isMountedRef.current) return;
       console.log("Pregnancy weekly advice error:", err?.message);
-      setAdviceError(err?.message || "შეცდომა");
+      setAdviceError(err?.message || t("common.error"));
     } finally {
       if (isMountedRef.current) setAdviceLoading(false);
     }
@@ -278,7 +272,7 @@ function PregnancyHomeScreen({ isDark }) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         <View style={styles.pregnancyHeader}>
-          <Text style={[styles.pregnancyTitle, { color: theme.text }]}>ბავშვის ზრდის ფაზა</Text>
+          <Text style={[styles.pregnancyTitle, { color: theme.text }]}>{t("home.babyGrowthPhase")}</Text>
         </View>
 
         <ScrollView
@@ -329,7 +323,7 @@ function PregnancyHomeScreen({ isDark }) {
             style={styles.babyGrowthGradient}
           >
             <View style={[styles.babyWeekBadge, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
-              <Text style={[styles.babyWeekBadgeText, { color: theme.cardText }]}>{week} კვირა</Text>
+              <Text style={[styles.babyWeekBadgeText, { color: theme.cardText }]}>{t("home.weekBadge", { week })}</Text>
             </View>
             <View style={styles.babyImageStage}>
               <BabyPreview uri={babyImageUrl} emoji={baby.emoji} />
@@ -344,7 +338,7 @@ function PregnancyHomeScreen({ isDark }) {
                 <Text style={styles.assistantAvatarEmoji}>{baby.emoji}</Text>
               </View>
               <View style={styles.assistantCopy}>
-                <Text style={[styles.assistantLabel, { color: theme.cardText }]}>ნაყოფის აღწერა</Text>
+                <Text style={[styles.assistantLabel, { color: theme.cardText }]}>{t("home.babyDescription")}</Text>
                 <Text style={[styles.assistantSub, { color: theme.mutedText }]}>{baby.size}</Text>
               </View>
               <View style={[styles.assistantArrow, { backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.75)" }]}>
@@ -356,27 +350,27 @@ function PregnancyHomeScreen({ isDark }) {
 
         <View style={styles.pregnancyInsightGrid}>
           <View style={[styles.pregnancyMetricCard, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
-            <Text style={[styles.pregnancyMetricLabel, { color: theme.mutedText }]}>ტრიმესტრი</Text>
+            <Text style={[styles.pregnancyMetricLabel, { color: theme.mutedText }]}>{t("home.trimester")}</Text>
             <Text style={[styles.pregnancyMetricValue, { color: theme.cardText }]}>{trimesterLabel}</Text>
           </View>
           <View style={[styles.pregnancyMetricCard, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
-            <Text style={[styles.pregnancyMetricLabel, { color: theme.mutedText }]}>დარჩენილია</Text>
-            <Text style={[styles.pregnancyMetricValue, { color: theme.cardText }]}>{daysRemaining} დღე</Text>
+            <Text style={[styles.pregnancyMetricLabel, { color: theme.mutedText }]}>{t("home.remaining")}</Text>
+            <Text style={[styles.pregnancyMetricValue, { color: theme.cardText }]}>{t("home.daysValue", { count: daysRemaining })}</Text>
           </View>
         </View>
 
         <View style={[styles.weekProgressCard, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
           <View style={styles.weekProgressHeader}>
-            <Text style={[styles.weekProgressTitle, { color: theme.cardText }]}>ორსულობის პროგრესი</Text>
+            <Text style={[styles.weekProgressTitle, { color: theme.cardText }]}>{t("home.pregnancyProgress")}</Text>
             <Text style={styles.weekProgressPercent}>{Math.round(progress)}%</Text>
           </View>
           <View style={styles.weekProgressTrack}>
             <View style={[styles.weekProgressFill, { width: `${Math.min(progress, 100)}%` }]} />
           </View>
-          <Text style={[styles.weekProgressHint, { color: theme.mutedText }]}>სავარაუდო მშობიარობა: {dayjs().add(daysRemaining, "day").format("D MMMM YYYY")}</Text>
+          <Text style={[styles.weekProgressHint, { color: theme.mutedText }]}>{t("home.dueDateHint", { date: dayjs().add(daysRemaining, "day").format("D MMMM YYYY") })}</Text>
         </View>
 
-        <Text style={[styles.pregnancySectionTitle, { color: theme.text }]}>კვირის რჩევა</Text>
+        <Text style={[styles.pregnancySectionTitle, { color: theme.text }]}>{t("home.weekAdvice")}</Text>
         <View style={[styles.weekAdviceGlass, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
           <View style={styles.pregnancyAdviceDoctorRow}>
             <View style={[styles.pregnancyAdviceDoctorAvatar, { borderColor: theme.glassBorder }]}>
@@ -386,7 +380,7 @@ function PregnancyHomeScreen({ isDark }) {
           {adviceLoading ? (
             <View style={styles.pregnancyAdviceLoading}>
               <ActivityIndicator color={theme.primary} size="small" />
-              <Text style={[styles.weekAdviceText, { color: theme.cardText }]}>ასისტენტი ამზადებს კვირის განახლებას...</Text>
+              <Text style={[styles.weekAdviceText, { color: theme.cardText }]}>{t("home.preparingWeekly")}</Text>
             </View>
           ) : weeklyAdvice ? (
             <WeeklyAdviceCard text={weeklyAdvice} trimesterColor={theme.primary} isDark={isDark} theme={theme} />
@@ -394,7 +388,7 @@ function PregnancyHomeScreen({ isDark }) {
             <View style={{ padding: 20 }}>
               <Text style={[styles.weekAdviceText, { color: theme.cardText }]}>{adviceError}</Text>
               <TouchableOpacity onPress={() => loadWeeklyAdvice(true)} style={styles.retryAdviceButton}>
-                <Text style={styles.retryAdviceText}>ხელახლა სცადე</Text>
+                <Text style={styles.retryAdviceText}>{t("home.retry")}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -426,9 +420,9 @@ function PregnancyHomeScreen({ isDark }) {
             <View style={styles.babyModalPreview}>
               <BabyPreview uri={babyImageUrl} emoji={baby.emoji} />
             </View>
-            <Text style={styles.babyModalWeek}>{week}-ე კვირა</Text>
-            <Text style={[styles.babyModalTitle, { color: theme.cardText }]}>ნაყოფის აღწერა</Text>
-            <Text style={[styles.babyModalText, { color: theme.mutedText }]}>{getBabyWeekDetails(week, baby)}</Text>
+            <Text style={styles.babyModalWeek}>{t("home.weekOrdinal", { week })}</Text>
+            <Text style={[styles.babyModalTitle, { color: theme.cardText }]}>{t("home.babyDescription")}</Text>
+            <Text style={[styles.babyModalText, { color: theme.mutedText }]}>{getBabyWeekDetails(t, week, baby)}</Text>
           </Pressable>
         </Pressable>
       </Modal>
@@ -438,6 +432,7 @@ function PregnancyHomeScreen({ isDark }) {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { isDark, isPremium, isAdmin, isTestAccount } = useTheme();
   const { pregnancyMode, accessLapsed } = usePregnancy();
   const { fertilityMode } = useFertility();
@@ -451,14 +446,13 @@ export default function HomeScreen() {
   const [daysLeft, setDaysLeft] = useState(null);
   const [cycleDay, setCycleDay] = useState(null);
   const [cycleLength, setCycleLength] = useState(28);
-  const [phase, setPhase] = useState("");
   const [phaseKey, setPhaseKey] = useState("period");
   const [periodLength, setPeriodLength] = useState(5);
-  const [pregnancyChance, setPregnancyChance] = useState("დაბალი");
+  const [pregnancyChanceKey, setPregnancyChanceKey] = useState("low");
   const [phaseColor, setPhaseColor] = useState("#ff4d88");
   const [userName, setUserName] = useState("");
   const [adviceLoading, setAdviceLoading] = useState(false);
-  const [dailyAdvice, setDailyAdvice] = useState("დღეს საკუთარ სხეულს მოუსმინე და ჩაინიშნე როგორ გრძნობ თავს.");
+  const [dailyAdvice, setDailyAdvice] = useState(() => t("home.defaultAdvice"));
   const [dailyPlan, setDailyPlan] = useState(null);
 
   const theme = {
@@ -559,25 +553,26 @@ export default function HomeScreen() {
     const ovulation = totalLength - 13;
     const chanceKey = getPregnancyChanceKey(day, totalLength);
 
+    // Labels are looked up at render time (home.phases.* / home.chance.*)
+    // so they follow the language.
     if (day <= pLength) {
-      return { phase: "პერიოდი", phaseKey: "period", chance: "ძალიან დაბალი", color: theme.primary };
+      return { phaseKey: "period", chanceKey: "veryLow", color: theme.primary };
     }
 
     if (day < ovulation - 5) {
-      return { phase: "ფოლიკულური ფაზა", phaseKey: "follicular", chance: "დაბალი", color: "#48CAE4" };
+      return { phaseKey: "follicular", chanceKey: "low", color: "#48CAE4" };
     }
 
     if (day >= ovulation - 5 && day <= ovulation + 1) {
       const isPeak = day === ovulation || day === ovulation - 1;
       return {
-        phase: "ნაყოფიერი პერიოდი",
         phaseKey: "fertile",
-        chance: chanceKey === "veryHigh" ? "უმაღლესი 🔥" : "მაღალი",
+        chanceKey: chanceKey === "veryHigh" ? "veryHigh" : "high",
         color: isPeak ? "#ffd166" : "#06d6a0",
       };
     }
 
-    return { phase: "ლუტეალური ფაზა", phaseKey: "luteal", chance: "დაბალი", color: "#C8B6FF" };
+    return { phaseKey: "luteal", chanceKey: "low", color: "#C8B6FF" };
   }, [theme.primary]);
 
   const loadData = useCallback(async ({ forceAdviceRefresh = false } = {}) => {
@@ -608,7 +603,7 @@ export default function HomeScreen() {
       const fertilityUnlocked = isAdmin || isTestAccount || Boolean(profile?.has_pregnancy_subscription);
       const currentGoal = rawGoal === "დაორსულება" && !fertilityUnlocked ? DEFAULT_GOAL : rawGoal;
 
-      setUserName(profile?.name || user.email?.split("@")[0] || "ანი");
+      setUserName(profile?.name || user.email?.split("@")[0] || t("home.defaultName"));
 
       if (!profile && cycles.length === 0) {
         setAdviceLoading(false);
@@ -646,9 +641,8 @@ export default function HomeScreen() {
       setCycleDay(dayInCycle);
 
       const status = getPhaseAndChance(dayInCycle, preferredCycleLength, preferredPeriodLength);
-      setPhase(status.phase);
       setPhaseKey(status.phaseKey);
-      setPregnancyChance(status.chance);
+      setPregnancyChanceKey(status.chanceKey);
       setPhaseColor(status.color);
 
       // Fertility mode: today's action plan, ticked off from today's logs.
@@ -703,7 +697,7 @@ export default function HomeScreen() {
         hasLoadedOnceRef.current = true;
       }
     }
-  }, [getPhaseAndChance, isPremium, isAdmin, isTestAccount, fertilityMode, refreshHomeAdvice]);
+  }, [getPhaseAndChance, isPremium, isAdmin, isTestAccount, fertilityMode, refreshHomeAdvice, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -722,14 +716,14 @@ export default function HomeScreen() {
       const { data: existing } = await supabase.from("cycles").select("id").eq("user_id", user.id).eq("start_date", today).maybeSingle();
 
       if (existing) {
-        Alert.alert("ინფორმაცია", "დღევანდელი ციკლი უკვე დაფიქსირებულია.");
+        Alert.alert(t("home.infoTitle"), t("home.alreadyLoggedBody"));
         return;
       }
 
-      Alert.alert("დადასტურება", "დარწმუნებული ხარ, რომ ციკლი დღეს მოგივიდა? ✨", [
-        { text: "გაუქმება", style: "cancel" },
+      Alert.alert(t("home.confirmTitle"), t("home.confirmBody"), [
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "დიახ, დაამატე",
+          text: t("home.yesAdd"),
           onPress: async () => {
             const { error } = await supabase.from("cycles").insert([
               {
@@ -746,8 +740,8 @@ export default function HomeScreen() {
             await syncCycleRemindersForUser();
 
             Alert.alert(
-              "წარმატება 🎉",
-              "ახალი პერიოდი დაფიქსირებულია!\n\n💡 მითითება: თუ კალენდარში ძველი არასწორი ნიშნებიც დარჩა, შეგიძლია კალენდარში გადახვიდე, იმ დღეს დააჭირო და წაშალო."
+              t("home.successTitle"),
+              t("home.periodLoggedBody")
             );
 
             loadData();
@@ -756,7 +750,7 @@ export default function HomeScreen() {
         },
       ]);
     } catch {
-      Alert.alert("შეცდომა", "მონაცემების შენახვა ვერ მოხერხდა");
+      Alert.alert(t("common.error"), t("common.saveFailed"));
     }
   };
 
@@ -779,12 +773,15 @@ export default function HomeScreen() {
   let daysToOvulation = cycleDay ? ovulationDay - cycleDay : null;
   if (daysToOvulation != null && daysToOvulation < -1) daysToOvulation += cycleLength;
   const ovulationLabel = daysToOvulation == null
-    ? "დაამატე ციკლი პროგნოზისთვის"
+    ? t("home.addCycleForForecast")
     : daysToOvulation > 0
-      ? `ოვულაციამდე ${daysToOvulation} დღე`
+      ? t("home.daysToOvulation", { count: daysToOvulation })
       : daysToOvulation === 0
-        ? "ოვულაცია სავარაუდოდ დღეს 🌟"
-        : "ოვულაცია ახლახან იყო";
+        ? t("home.ovulationToday")
+        : t("home.ovulationJustPassed");
+  const phase = t(`home.phases.${phaseKey}`);
+  const pregnancyChance = t(`home.chance.${pregnancyChanceKey}`);
+  const chanceIsHigh = pregnancyChanceKey === "high" || pregnancyChanceKey === "veryHigh";
   const calendarColors = {
     period: "#E94560",
     ovulation: "#FFD166",
@@ -804,8 +801,8 @@ export default function HomeScreen() {
   });
   const heroMainNumber = cycleDay && cycleDay <= periodLength ? cycleDay : (daysLeft ?? "-");
   const heroMainLabel = cycleDay && cycleDay <= periodLength
-    ? "მენსტრუაციის მიმდინარე დღე"
-    : "მენსტრუაციამდე დარჩა";
+    ? t("home.currentPeriodDay")
+    : t("home.daysUntilPeriod");
   const trackerNumberColor = cycleDay && cycleDay <= periodLength
     ? theme.primary
     : daysLeft != null && daysLeft <= 1
@@ -822,7 +819,7 @@ export default function HomeScreen() {
       <ScrollView style={styles.regularScroll} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}>
         <View style={styles.regularHeader}>
           <View>
-            <Text style={[styles.regularGreeting, { color: theme.text }]}>გამარჯობა, {userName || "ანი"}!</Text>
+            <Text style={[styles.regularGreeting, { color: theme.text }]}>{t("home.greeting", { name: userName || t("home.defaultName") })}</Text>
             <Text style={[styles.regularDate, { color: theme.subText }]}>{dayjs().format("D MMMM, dddd")}</Text>
           </View>
         </View>
@@ -836,7 +833,7 @@ export default function HomeScreen() {
                 <Ionicons name="leaf" size={16} color={theme.fertile} />
               </View>
               <View style={styles.heroMiniCopy}>
-                <Text style={[styles.heroMiniLabel, { color: theme.subText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>ნაყოფიერი პერიოდი</Text>
+                <Text style={[styles.heroMiniLabel, { color: theme.subText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>{t("home.phases.fertile")}</Text>
                 <Text style={[styles.heroMiniValue, { color: phaseColor }]} numberOfLines={1}>{phase}</Text>
               </View>
             </View>
@@ -845,8 +842,8 @@ export default function HomeScreen() {
                 <Ionicons name="heart" size={16} color={fertilityMode ? theme.peach : "#FF8A6B"} />
               </View>
               <View style={styles.heroMiniCopy}>
-                <Text style={[styles.heroMiniLabel, { color: theme.subText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>დაორსულების შანსი</Text>
-                <Text style={[styles.heroMiniValue, { color: pregnancyChance.includes("მაღალი") || pregnancyChance.includes("უმაღლესი") ? "#06D6A0" : theme.primary }]} numberOfLines={1}>{pregnancyChance}</Text>
+                <Text style={[styles.heroMiniLabel, { color: theme.subText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{t("home.chanceLabel")}</Text>
+                <Text style={[styles.heroMiniValue, { color: chanceIsHigh ? "#06D6A0" : theme.primary }]} numberOfLines={1}>{pregnancyChance}</Text>
               </View>
             </View>
           </View>
@@ -855,7 +852,7 @@ export default function HomeScreen() {
               <View style={[styles.trackerInner, { backgroundColor: isDark ? "#1B171E" : "#FFFDFC" }]}>
                 <Text style={[styles.trackerLabel, { color: theme.subText }]}>{heroMainLabel}</Text>
                 <Text style={[styles.trackerNumber, { color: trackerNumberColor, textShadowColor: `${trackerNumberColor}55` }]}>{heroMainNumber}</Text>
-                <Text style={[styles.trackerDateHint, { color: theme.subText }]}>შემდეგი პროგნოზი: {nextPeriod}</Text>
+                <Text style={[styles.trackerDateHint, { color: theme.subText }]}>{t("home.nextForecast", { date: nextPeriod })}</Text>
               </View>
             </LinearGradient>
             <View style={[styles.trackerProgressDot, { backgroundColor: phaseColor, transform: [{ rotate: `${Math.min(progress, 100) * 3.6}deg` }, { translateY: -104 }] }]} />
@@ -865,7 +862,7 @@ export default function HomeScreen() {
             onPress={logPeriod}
             activeOpacity={0.86}
           >
-            <Text style={styles.trackerCtaText}>ციკლი დამეწყო დღეს</Text>
+            <Text style={styles.trackerCtaText}>{t("home.logPeriodToday")}</Text>
           </TouchableOpacity>
         </LinearGradient>
 
@@ -880,7 +877,7 @@ export default function HomeScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.fertilityStripTitle, { color: theme.text }]}>{ovulationLabel}</Text>
-              <Text style={[styles.fertilityStripSub, { color: theme.subText }]}>დღეს: {pregnancyChance} · აღრიცხე ტესტი, ტემპერატურა და ნიშნები</Text>
+              <Text style={[styles.fertilityStripSub, { color: theme.subText }]}>{t("home.fertilityStripSub", { chance: pregnancyChance })}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.subText} />
           </TouchableOpacity>
@@ -890,13 +887,13 @@ export default function HomeScreen() {
           <LinearGradient colors={theme.cardGradient} style={[styles.planCard, { borderColor: theme.border }]}>
             <View style={styles.planHeaderRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.planEyebrow, { color: "#0E9F6E" }]}>დღევანდელი გეგმა</Text>
+                <Text style={[styles.planEyebrow, { color: "#0E9F6E" }]}>{t("home.todayPlan")}</Text>
                 <Text style={[styles.planTitle, { color: theme.text }]}>
                   {dailyPlan.isPeakDay
-                    ? "პიკის დღეა 🔥"
+                    ? t("home.peakDay")
                     : dailyPlan.inFertileWindow
-                      ? "ნაყოფიერ ფანჯარაში ხარ 🌿"
-                      : "დღევანდელი ნაბიჯები"}
+                      ? t("home.inFertileWindow")
+                      : t("home.todaySteps")}
                 </Text>
               </View>
               <View style={[styles.planCountPill, { backgroundColor: "rgba(14,159,110,0.14)" }]}>
@@ -965,20 +962,20 @@ export default function HomeScreen() {
           <View style={styles.weekLegendRow}>
             <View style={[styles.weekLegendItem, { backgroundColor: theme.glassIcon }]}>
               <View style={[styles.weekLegendDot, { backgroundColor: calendarColors.period }]} />
-              <Text style={[styles.weekLegendText, { color: theme.subText }]}>პერიოდი</Text>
+              <Text style={[styles.weekLegendText, { color: theme.subText }]}>{t("home.phases.period")}</Text>
             </View>
             <View style={[styles.weekLegendItem, { backgroundColor: theme.glassIcon }]}>
               <View style={[styles.weekLegendDot, { backgroundColor: calendarColors.ovulation }]} />
-              <Text style={[styles.weekLegendText, { color: theme.subText }]}>ოვულაცია</Text>
+              <Text style={[styles.weekLegendText, { color: theme.subText }]}>{t("home.legendOvulation")}</Text>
             </View>
             <View style={[styles.weekLegendItem, { backgroundColor: theme.glassIcon }]}>
               <View style={[styles.weekLegendDot, { backgroundColor: calendarColors.fertile }]} />
-              <Text style={[styles.weekLegendText, { color: theme.subText }]}>ნაყოფიერი</Text>
+              <Text style={[styles.weekLegendText, { color: theme.subText }]}>{t("home.legendFertile")}</Text>
             </View>
           </View>
         </View>
 
-        <Text style={[styles.regularSectionTitle, { color: theme.text }]}>დღევანდელი მაჩვენებლები</Text>
+        <Text style={[styles.regularSectionTitle, { color: theme.text }]}>{t("home.todayMetrics")}</Text>
         <LinearGradient
           colors={theme.cardGradient}
           start={{ x: 0, y: 0 }}
@@ -988,17 +985,17 @@ export default function HomeScreen() {
           <View style={styles.regularStatsHeader}>
             <View>
               <Text style={[styles.regularStatsEyebrow, fertilityMode && { color: theme.primary }]}>DAILY OVERVIEW</Text>
-              <Text style={[styles.regularStatsTitle, { color: theme.text }]}>შენი დღიური სურათი</Text>
+              <Text style={[styles.regularStatsTitle, { color: theme.text }]}>{t("home.dailyPicture")}</Text>
             </View>
             <View style={[styles.regularStatsIcon, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
               <Ionicons name="analytics-outline" size={19} color={fertilityMode ? theme.primary : "#FF8A6B"} />
             </View>
           </View>
           <View style={[styles.regularStatsDivider, { backgroundColor: theme.border }]} />
-          <StatMeter icon="flame-outline" label="გაღიზიანება" percent={stats.anger} color="#FF7A7A" textColor={theme.text} />
-          <StatMeter icon="flash-outline" label="ენერგიის დონე" percent={stats.energy} color="#9AB7FF" textColor={theme.text} />
-          <StatMeter icon="restaurant-outline" label="მადა" percent={stats.appetite} color="#FFB56F" textColor={theme.text} />
-          <StatMeter icon="leaf-outline" label="სტაბილურობა" percent={stats.stability} color="#71D7B8" textColor={theme.text} isLast />
+          <StatMeter icon="flame-outline" label={t("home.statIrritability")} percent={stats.anger} color="#FF7A7A" textColor={theme.text} />
+          <StatMeter icon="flash-outline" label={t("home.statEnergy")} percent={stats.energy} color="#9AB7FF" textColor={theme.text} />
+          <StatMeter icon="restaurant-outline" label={t("home.statAppetite")} percent={stats.appetite} color="#FFB56F" textColor={theme.text} />
+          <StatMeter icon="leaf-outline" label={t("home.statStability")} percent={stats.stability} color="#71D7B8" textColor={theme.text} isLast />
         </LinearGradient>
 
         <LinearGradient
@@ -1015,23 +1012,23 @@ export default function HomeScreen() {
               <Text style={styles.smallInsightEmoji}>{phaseKey === "fertile" ? "🌿" : phaseKey === "period" ? "🫶" : "🍵"}</Text>
             </View>
             <View style={styles.adviceTitleWrap}>
-              <Text style={[styles.adviceEyebrow, fertilityMode && { color: theme.primary }]}>დღის გზამკვლევი</Text>
-              <Text style={[styles.adviceTitle, { color: theme.text }]}>დღევანდელი რჩევა</Text>
+              <Text style={[styles.adviceEyebrow, fertilityMode && { color: theme.primary }]}>{t("home.dayGuide")}</Text>
+              <Text style={[styles.adviceTitle, { color: theme.text }]}>{t("home.todayAdvice")}</Text>
             </View>
           </View>
           <PrimePreview
             style={styles.insightPreview}
             minHeight={142}
             concealCompletely
-            message="სრული რჩევისთვის გახსენი Prime"
-            buttonLabel="გახსნა"
+            message={t("home.primeAdviceMessage")}
+            buttonLabel={t("home.unlock")}
           >
             <Text style={[styles.insightText, { color: theme.subText }]}>{dailyAdvice}</Text>
           </PrimePreview>
           {isPremium && adviceLoading && (
             <View style={styles.insightLoadingRow}>
               <ActivityIndicator size="small" color={theme.primary} />
-              <Text style={[styles.insightHint, { color: theme.subText }]}>ასისტენტი აახლებს რჩევას...</Text>
+              <Text style={[styles.insightHint, { color: theme.subText }]}>{t("home.refreshingAdvice")}</Text>
             </View>
           )}
         </LinearGradient>
@@ -1054,13 +1051,9 @@ export default function HomeScreen() {
               <Ionicons name="alert-circle-outline" size={22} color={isDark ? "#F0A868" : "#B4541F"} />
             </View>
             <View style={styles.lapsedBannerCopy}>
-              <Text style={[styles.lapsedBannerTitle, isDark && { color: "#FFD9B8" }]}>
-                ორსულობის გამოწერა დასრულდა
-              </Text>
-              <Text style={[styles.lapsedBannerSub, isDark && { color: "#D8B49A" }]}>
-                აპი დროებით ჩვეულებრივ რეჟიმშია. შენი ჩანაწერები დაცულია და გამოწერის განახლებისთანავე ყველაფერი დაბრუნდება.
-              </Text>
-              <Text style={[styles.lapsedBannerCta, isDark && { color: "#F0A868" }]}>განახლება →</Text>
+              <Text style={[styles.lapsedBannerTitle, isDark && { color: "#FFD9B8" }]}>{t("home.lapsedTitle")}</Text>
+              <Text style={[styles.lapsedBannerSub, isDark && { color: "#D8B49A" }]}>{t("home.lapsedBody")}</Text>
+              <Text style={[styles.lapsedBannerCta, isDark && { color: "#F0A868" }]}>{t("home.lapsedCta")}</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -1090,8 +1083,8 @@ export default function HomeScreen() {
                   <View style={styles.pregnancyBannerDot} />
                   <Text style={styles.pregnancyBannerEyebrowText}>PREMIUM</Text>
                 </View>
-                <Text style={[styles.pregnancyBannerTitle, { color: theme.text }]}>ორსულობის რეჟიმი</Text>
-                <Text style={[styles.pregnancyBannerSub, { color: theme.subText }]}>კვირეული AI რჩევა, ნოტიფიკაციები და ნაყოფის ვიზუალიზაცია</Text>
+                <Text style={[styles.pregnancyBannerTitle, { color: theme.text }]}>{t("profile.pregnancyMode")}</Text>
+                <Text style={[styles.pregnancyBannerSub, { color: theme.subText }]}>{t("home.pregnancyBannerSub")}</Text>
               </View>
             </View>
             <View style={[styles.pregnancyBannerImageWrap, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
@@ -1107,7 +1100,7 @@ export default function HomeScreen() {
           style={[styles.pregnancyBanner, styles.fertilityBannerShell]}
           onPress={() => {
             if (TEMP_FERTILITY_COMING_SOON) {
-              Alert.alert("მალე დაემატება 🌿", "\"მინდა დაორსულება\" რეჟიმი მალე გაეშვება — ცოტაც მოითმინე.");
+              Alert.alert(t("profile.fertilityComingSoonTitle"), t("profile.fertilityComingSoonBody", { mode: t("goals.fertility") }));
               return;
             }
             router.push({ pathname: "/(tabs)/profile", params: { openFertility: String(Date.now()) } });
@@ -1131,8 +1124,8 @@ export default function HomeScreen() {
                   <View style={styles.fertilityBannerDot} />
                   <Text style={styles.fertilityBannerEyebrowText}>PREMIUM</Text>
                 </View>
-                <Text style={[styles.pregnancyBannerTitle, { color: theme.text }]}>მინდა დაორსულება</Text>
-                <Text style={[styles.pregnancyBannerSub, { color: theme.subText }]}>ოვულაცია, ნაყოფიერი ფანჯარა და AI რჩევები ჩასახვის დაგეგმვისთვის</Text>
+                <Text style={[styles.pregnancyBannerTitle, { color: theme.text }]}>{t("goals.fertility")}</Text>
+                <Text style={[styles.pregnancyBannerSub, { color: theme.subText }]}>{t("home.fertilityBannerSub")}</Text>
               </View>
             </View>
             <View style={[styles.pregnancyBannerImageWrap, { backgroundColor: theme.glassIcon, borderColor: theme.border }]}>
@@ -1177,6 +1170,7 @@ function BabyPreview({ uri, emoji }) {
 }
 
 function WeeklyAdviceCard({ text, trimesterColor, isDark, theme }) {
+  const { t } = useLanguage();
   const babyIdx = text.indexOf("🍼");
   const adviceIdx = text.indexOf("💗");
 
@@ -1196,7 +1190,7 @@ function WeeklyAdviceCard({ text, trimesterColor, isDark, theme }) {
       <View style={{ padding: 20 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <View style={{ width: 3, height: 18, borderRadius: 2, backgroundColor: trimesterColor }} />
-          <Text style={{ color: trimesterColor, fontWeight: "700", fontSize: 14 }}>🍼 ნაყოფის განვითარება</Text>
+          <Text style={{ color: trimesterColor, fontWeight: "700", fontSize: 14 }}>{t("home.babyDevelopment")}</Text>
         </View>
         <Text style={{ color: theme.text, fontSize: 15, lineHeight: 26 }}>{babyBody}</Text>
       </View>
@@ -1204,11 +1198,11 @@ function WeeklyAdviceCard({ text, trimesterColor, isDark, theme }) {
       <View style={{ padding: 20 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <View style={{ width: 3, height: 18, borderRadius: 2, backgroundColor: "#ff4d88" }} />
-          <Text style={{ color: "#ff4d88", fontWeight: "700", fontSize: 14 }}>💗 ამ კვირის რჩევა</Text>
+          <Text style={{ color: "#ff4d88", fontWeight: "700", fontSize: 14 }}>{t("home.thisWeekAdvice")}</Text>
         </View>
         <Text style={{ color: theme.text, fontSize: 15, lineHeight: 26 }}>{adviceBody}</Text>
       </View>
-      <Text style={{ fontSize: 11, color: "#aaa", textAlign: "right", paddingHorizontal: 20, paddingBottom: 12, opacity: 0.7 }}>ასისტენტი შეიძლება შეცდეს</Text>
+      <Text style={{ fontSize: 11, color: "#aaa", textAlign: "right", paddingHorizontal: 20, paddingBottom: 12, opacity: 0.7 }}>{t("home.assistantMayErr")}</Text>
     </View>
   );
 }
