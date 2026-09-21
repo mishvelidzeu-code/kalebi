@@ -938,6 +938,9 @@ export default {
     usedFreeShort: "დღეს უფასო კითხვა უკვე გამოიყენე. ახალი კითხვა ხვალ გახდება ხელმისაწვდომი.",
     inputPlaceholder: "დაწერე კითხვა...",
     send: "გაგზავნა",
+    unknownPhase: "უცნობი ფაზა",
+    userNotFound: "მომხმარებელი ვერ მოიძებნა.",
+    defaultUser: "მომხმარებელი",
   },
   premium: {
     fallbackPrice: "$0.99 / თვე",

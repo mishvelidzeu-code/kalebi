@@ -51,6 +51,7 @@ const MIGRATED_FILES = [
   "utils/dailyAdvice.js",
   "utils/fertilityExport.js",
   "services/notifications.js",
+  "services/assistantOrchestrator.js",
   // app/(tabs)/_layout.tsx: tab titles are translated, but the AdminAssistant
   // widget in the same file is admin-only and stays Georgian on purpose, so
   // the file is not listed here. Same for app/admin.jsx and services/adminQuery.js.
@@ -83,6 +84,24 @@ const MOVED_TO_LIBRARY = new Set([
   "კვი", "ორშ", "სამ", "ოთხ", "ხუთ", "პარ", "შაბ",
 ]);
 
+// Georgian example phrases that used to sit inside the (English) AI system
+// prompts. They were replaced by English examples so the prompts are
+// language-neutral; the model answers in whatever language the CRITICAL RULE
+// names. Not UI text, so not expected in the dictionaries.
+const REPLACED_WITH_ENGLISH = [
+  "გულისრევა I ტრიმესტრში გქონდა — ახლა უკეთ ხარ?",
+  "თუ ეს იყო ბოლო მენსტრუაციის პირველი დღე...",
+  "ნიშნების მიხედვით სავარაუდოდ",
+  "დადასტურდა",
+  "მინდა დაორსულება",
+  "ციკლის კონტროლი",
+  "დაორსულება",
+  "ჯანმრთელობის მონიტორინგი",
+  // weekly-card headings now come from home.babyDevelopment / thisWeekAdvice
+  "ნაყოფის განვითარება",
+  "ამ კვირის რჩევა",
+];
+
 const GEORGIAN = /[Ⴀ-ჿ]/;
 
 function loadDictionary(code) {
@@ -107,9 +126,13 @@ function flatten(node, prefix = "", out = {}) {
   return out;
 }
 
-// Comments and console.* calls are developer-facing, not UI — ignored.
+// Comments and console.* calls are developer-facing, not UI — ignored. So is
+// anything between `// i18n-check: ignore-start` and `// i18n-check: ignore-end`
+// (used for the Georgian keyword matcher in the assistant orchestrator, which
+// is a pattern table, not UI text).
 function stripComments(source) {
   return source
+    .replace(/\/\/ i18n-check: ignore-start[\s\S]*?\/\/ i18n-check: ignore-end/g, "")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:"'`])\/\/.*$/gm, "$1")
     .replace(/console\.(log|warn|error|info|debug)\([^;]*\);?/g, "");
@@ -190,6 +213,8 @@ for (const file of MIGRATED_FILES) {
   for (const text of georgianLiterals(base)) {
     const normalised = text.trim();
     if (DB_VALUE_LITERALS.has(text) || MOVED_TO_LIBRARY.has(text)) continue;
+    // Still in the file verbatim (e.g. inside an ignore block) → nothing lost.
+    if (current.includes(text)) continue;
     if (kaValues.has(text) || kaValues.has(normalised) || kaJoined.includes(normalised)) continue;
     // "თავის ტკივილი 🤕" is now label + icon joined at runtime — compare without
     // the trailing emoji.
@@ -203,10 +228,12 @@ for (const file of MIGRATED_FILES) {
     // so split on every template/quote/brace boundary and check the Georgian
     // pieces in between.
     const fragments = text
-      .split(/\$\{|\\"|[`"{}]/)
+      .split(/\$\{|\\"|[`"{}()]/)
       .map((part) => part.replace(/\\n/g, "\n").trim())
       .filter((part) => GEORGIAN.test(part));
-    if (fragments.length && fragments.every((part) => kaJoined.includes(part))) continue;
+    const fragmentOk = (part) =>
+      kaJoined.includes(part) || current.includes(part) || REPLACED_WITH_ENGLISH.some((example) => part.includes(example));
+    if (fragments.length && fragments.every(fragmentOk)) continue;
     failures.push(`[${file}] Georgian text from ${BASE_REF} is not in locales/ka.js: "${text}"`);
   }
 }

@@ -939,6 +939,9 @@ export default {
     usedFreeShort: "Бесплатный вопрос на сегодня использован. Новый появится завтра.",
     inputPlaceholder: "Напишите вопрос...",
     send: "Отправить",
+    unknownPhase: "Неизвестная фаза",
+    userNotFound: "Пользователь не найден.",
+    defaultUser: "Пользователь",
   },
   premium: {
     fallbackPrice: "$0.99 / мес.",

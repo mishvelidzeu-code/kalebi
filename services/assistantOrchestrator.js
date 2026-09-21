@@ -18,6 +18,7 @@ import {
 } from "../utils/ovulationDetection";
 import { isAdminEmail, isTestAccountEmail } from "./adminAccess";
 import { generateAiResponse } from "./ai";
+import { getLanguage, t } from "./i18n";
 import { getFertilityLogsForDay, getFertilityLogsRange } from "./fertilityLogs";
 import { resolvePregnancyAccessFromProfile } from "./purchases";
 import { supabase } from "./supabase";
@@ -37,31 +38,47 @@ GOAL_MAP["Cycle Control"] = "Cycle Control";
 GOAL_MAP["Get Pregnant"] = "Get Pregnant";
 GOAL_MAP["Health Monitoring"] = "Health Monitoring";
 
+// The model gets the phase in English plus the user's own label, e.g.
+// "Period (პერიოდი)" / "Period (Менструация)".
+const PHASE_ENGLISH = {
+  period: "Period",
+  follicular: "Follicular Phase",
+  fertile: "Fertile Window",
+  luteal: "Luteal Phase",
+};
+const phaseLabel = (key) => `${PHASE_ENGLISH[key]} (${t(`home.phases.${key}`)})`;
 const PHASE_LABELS = {
-  period: "Period (პერიოდი)",
-  follicular: "Follicular Phase (ფოლიკულური ფაზა)",
-  fertile: "Fertile Window (ნაყოფიერი პერიოდი)",
-  luteal: "Luteal Phase (ლუტეალური ფაზა)",
+  get period() { return phaseLabel("period"); },
+  get follicular() { return phaseLabel("follicular"); },
+  get fertile() { return phaseLabel("fertile"); },
+  get luteal() { return phaseLabel("luteal"); },
 };
+const phaseDisplayLabel = (key) => (PHASE_ENGLISH[key] ? t(`home.phases.${key}`) : t("assistant.unknownPhase"));
 
-const PHASE_DISPLAY_LABELS = {
-  period: "პერიოდი",
-  follicular: "ფოლიკულური ფაზა",
-  fertile: "ნაყოფიერი პერიოდი",
-  luteal: "ლუტეალური ფაზა",
-};
+const SYMPTOM_IDS = new Set(["headache", "cramps", "fatigue", "bloating", "backache", "irritable", "sad", "anxious", "happy", "nausea", "heartburn", "movement", "urination"]);
+const symptomLabel = (id) => (SYMPTOM_IDS.has(id) ? t(`calendar.symptoms.${id}`) : id);
 
-const SYMPTOM_LABELS = {
-  headache: "თავის ტკივილი",
-  cramps: "მუცლის ტკივილი",
-  fatigue: "დაღლილობა",
-  bloating: "შეშუპება",
-  backache: "წელის ტკივილი",
-  irritable: "გაღიზიანება",
-  sad: "სევდა",
-  anxious: "შფოთვა",
-  happy: "ბედნიერი",
+// Stored symptoms.mood values are Georgian; the model gets the user's language.
+const MOOD_VALUE_KEYS = {
+  "არაჩვეულებრივი": "amazing",
+  "კარგი": "good",
+  "ნორმალური": "normal",
+  "ცუდი": "bad",
+  "საშინელი": "terrible",
 };
+const moodLabel = (value) => (MOOD_VALUE_KEYS[value] ? t(`calendar.moods.${MOOD_VALUE_KEYS[value]}`) : value);
+
+const GOAL_LABEL_KEYS = {
+  "ციკლის კონტროლი": "goals.cycleControl",
+  "დაორსულება": "goals.fertility",
+  "ჯანმრთელობის მონიტორინგი": "goals.healthMonitoring",
+};
+const goalDisplayLabel = (value) => (GOAL_LABEL_KEYS[value] ? t(GOAL_LABEL_KEYS[value]) : value);
+
+// The system prompts are English; only the language the model must answer in
+// changes. Built per language on demand.
+const LANGUAGE_NAMES = { ka: "GEORGIAN", en: "ENGLISH", ru: "RUSSIAN" };
+const languageName = () => LANGUAGE_NAMES[getLanguage()] || LANGUAGE_NAMES.ka;
 
 const ASSISTANT_CONTEXT_CACHE_TTL_MS = 45 * 1000;
 
@@ -71,10 +88,10 @@ let assistantContextCache = {
   value: null,
 };
 
-const PREGNANCY_SYSTEM_PROMPT = `
+const PREGNANCY_SYSTEM_PROMPT_TEMPLATE = `
 # SYSTEM ROLE & IDENTITY
 You are a warm, highly empathetic AI companion embedded in a pregnancy tracking application. You are a blend of a knowledgeable pregnancy expert, a supportive best friend, and a psychological guide for expecting mothers.
-CRITICAL RULE: You must communicate with the user EXCLUSIVELY in natural, modern, and warm GEORGIAN language.
+CRITICAL RULE: You must communicate with the user EXCLUSIVELY in natural, modern, and warm __LANGUAGE__ language.
 
 # OBJECTIVES
 1. Support and educate the user through their pregnancy journey week by week.
@@ -97,7 +114,7 @@ CRITICAL RULE: You must communicate with the user EXCLUSIVELY in natural, modern
 
 # LONG-TERM MEMORY (only when context.pregnancyMemory exists)
 This holds a factual summary of her whole pregnancy so far, NOT past chat transcripts. Use it to feel continuous and attentive.
-- symptom_history: which symptoms she logged, how many times, and the pregnancy-week range. Reference it naturally ("გულისრევა I ტრიმესტრში გქონდა — ახლა უკეთ ხარ?"). Recall as PAST unless she says it is happening now; never present an old symptom as today's.
+- symptom_history: which symptoms she logged, how many times, and the pregnancy-week range. Reference it naturally ("You had nausea in the first trimester — are you feeling better now?"). Recall as PAST unless she says it is happening now; never present an old symptom as today's.
 - notable_notes: things she wrote in her own words, with the week. You may gently follow up on them.
 - recent_questions: topics she has been asking about lately — use them to stay on theme, do not quote them back verbatim.
 - This is memory for warmth and continuity, NOT a medical chart. Do NOT analyse trends as if monitoring her health ("your blood-pressure history concerns me" is forbidden), do NOT draw diagnostic conclusions from the history, and if the pattern looks worrying, simply suggest she mention it to her doctor.
@@ -111,10 +128,10 @@ This holds a factual summary of her whole pregnancy so far, NOT past chat transc
 - Use short paragraphs and emojis where appropriate.
 `.trim();
 
-const ASSISTANT_SYSTEM_PROMPT = `
+const ASSISTANT_SYSTEM_PROMPT_TEMPLATE = `
 # SYSTEM ROLE & IDENTITY
 You are an advanced, highly empathetic AI companion embedded in a women's health and cycle-tracking application. You are a blend of a knowledgeable fertility expert, a supportive best friend, and a psychological guide.
-CRITICAL RULE: You must communicate with the user EXCLUSIVELY in natural, modern, and warm GEORGIAN language.
+CRITICAL RULE: You must communicate with the user EXCLUSIVELY in natural, modern, and warm __LANGUAGE__ language.
 
 # OBJECTIVES
 1. Educate and guide the user through their menstrual cycle phases.
@@ -133,14 +150,14 @@ Use the real-time data provided by the app to personalize every response. Treat 
 # DATE AND CYCLE ACCURACY (CRITICAL)
 - The user's newest message is the strongest source of truth when it contains a period date, missed-period statement, pregnancy concern, or correction.
 - If the user says a period has not come since a specific date, treat that date as user-provided and do not replace it with the saved profile date.
-- Never invent or shift dates by one day. If the user's date is ambiguous, say "თუ ეს იყო ბოლო მენსტრუაციის პირველი დღე..." and explain the estimate.
+- Never invent or shift dates by one day. If the user's date is ambiguous, say "If that was the first day of your last period..." and explain the estimate.
 - For missed-period questions, clearly state whether the estimate is based on the user's message or the saved app data.
 
 # GOAL-ORIENTED BEHAVIOR (CRITICAL)
 Your entire approach, tone, and advice MUST adapt to the {{user_goal}}:
-- IF "Cycle Control" (ციკლის კონტროლი): Focus on accurate period predictions, managing PMS, and explaining how daily hormonal shifts affect energy and mood. Help them feel prepared and comfortable.
-- IF "Get Pregnant" (დაორსულება): Shift focus entirely to the fertile window, ovulation tracking, basal body temperature (if logged), and maximizing chances of conception. Be highly encouraging, delicate, and supportive. Explain how current symptoms relate to fertility, but DO NOT give false medical hope. If a period starts, be extremely empathetic and comforting.
-- IF "Health Monitoring" (ჯანმრთელობის მონიტორინგი): Focus on holistic wellness, identifying symptom patterns over time, and detecting potential anomalies (e.g., irregular cycles). Encourage healthy habits, stress reduction, and remind them that their logged data is great for sharing with a doctor.
+- IF "Cycle Control": Focus on accurate period predictions, managing PMS, and explaining how daily hormonal shifts affect energy and mood. Help them feel prepared and comfortable.
+- IF "Get Pregnant": Shift focus entirely to the fertile window, ovulation tracking, basal body temperature (if logged), and maximizing chances of conception. Be highly encouraging, delicate, and supportive. Explain how current symptoms relate to fertility, but DO NOT give false medical hope. If a period starts, be extremely empathetic and comforting.
+- IF "Health Monitoring": Focus on holistic wellness, identifying symptom patterns over time, and detecting potential anomalies (e.g., irregular cycles). Encourage healthy habits, stress reduction, and remind them that their logged data is great for sharing with a doctor.
 
 # BEHAVIORAL RULES & TONE
 - EMPATHY FIRST: Never sound like a robotic medical dictionary. Validate feelings first before offering advice.
@@ -154,12 +171,12 @@ Your entire approach, tone, and advice MUST adapt to the {{user_goal}}:
 - Use recent history only for pattern analysis, NEVER describe old symptoms as if they are today's symptoms.
 
 # FERTILITY TRACKING DATA (only when context.fertilityTracking exists)
-When the user is in fertility mode ("მინდა დაორსულება"), context.fertilityTracking holds what they actually logged. Use it — it is stronger evidence than the calendar estimate alone.
+When the user is in fertility mode (trying to conceive), context.fertilityTracking holds what they actually logged. Use it — it is stronger evidence than the calendar estimate alone.
 - today.lh_test: "negative" | "weak" | "positive" | "peak". A positive/peak surge means ovulation typically follows within 24-36 hours — this is the single most useful same-day signal.
 - today.cervical_mucus: "dry" | "sticky" | "creamy" | "watery" | "eggwhite". Egg-white mucus indicates peak fertility.
 - today.bbt_celsius: basal body temperature. A sustained rise SUGGESTS ovulation has already happened; a single reading proves nothing.
 - cycle_regularity.prediction_confidence: "high" | "medium" | "low". If it is "low" or is_regular is false, you MUST hedge: give ranges, not exact dates, and lean on LH/mucus/BBT over the calendar.
-- confirmed_ovulation: set only when this cycle's own signals (BBT shift / LH surge / mucus peak) point to a day. It is RETROSPECTIVE EVIDENCE, not proof — say "ნიშნების მიხედვით სავარაუდოდ", never "დადასტურდა" as a medical fact. If signals_agree is false, mention that the signals disagree.
+- confirmed_ovulation: set only when this cycle's own signals (BBT shift / LH surge / mucus peak) point to a day. It is RETROSPECTIVE EVIDENCE, not proof — say "likely, judging by the signs", never "confirmed" as a medical fact. If signals_agree is false, mention that the signals disagree.
 - best_ovulation_estimate.source: "signals" (this cycle's own data — trust most), "personalized" (their measured luteal phase), or "calendar" (generic 14-day assumption — weakest, hedge accordingly).
 - personal_luteal_phase_days: their measured luteal length. Prefer it over the textbook 14 days when present.
 - trying_history.months_trying: if it is long, be extra gentle and never imply they are doing something wrong.
@@ -179,12 +196,15 @@ When the user is in fertility mode ("მინდა დაორსულებ
 - Use short paragraphs.
 `.trim();
 
+const getPregnancySystemPrompt = () => PREGNANCY_SYSTEM_PROMPT_TEMPLATE.replace("__LANGUAGE__", languageName());
+const getAssistantSystemPrompt = () => ASSISTANT_SYSTEM_PROMPT_TEMPLATE.replace("__LANGUAGE__", languageName());
+
 function mapGoalToAssistantGoal(goal) {
   return GOAL_MAP[String(goal || "").trim()] || "Cycle Control";
 }
 
 function normalizeSymptoms(symptoms) {
-  return (symptoms || []).map((symptom) => SYMPTOM_LABELS[symptom] || symptom);
+  return (symptoms || []).map(symptomLabel);
 }
 
 function sortCyclesAscending(cycles = []) {
@@ -207,7 +227,7 @@ function summarizeSymptoms(rows) {
     .slice(0, 5)
     .map(([symptom, count]) => ({
       symptom,
-      label: SYMPTOM_LABELS[symptom] || symptom,
+      label: symptomLabel(symptom),
       count,
     }));
 }
@@ -312,12 +332,13 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    throw new Error("მომხმარებელი ვერ მოიძებნა.");
+    throw new Error(t("assistant.userNotFound"));
   }
 
   if (
     !forceRefresh &&
     assistantContextCache.userId === user.id &&
+    assistantContextCache.language === getLanguage() &&
     assistantContextCache.value &&
     assistantContextCache.expiresAt > Date.now()
   ) {
@@ -446,18 +467,18 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
   }
 
   const context = {
-    user_name: profile.name || user.email?.split("@")[0] || "მომხმარებელი",
+    user_name: profile.name || user.email?.split("@")[0] || t("assistant.defaultUser"),
     user_goal: mapGoalToAssistantGoal(effectiveGoal),
-    user_goal_label: String(effectiveGoal || DEFAULT_GOAL_LABEL).trim() || DEFAULT_GOAL_LABEL,
+    user_goal_label: goalDisplayLabel(String(effectiveGoal || DEFAULT_GOAL_LABEL).trim() || DEFAULT_GOAL_LABEL),
     pregnancy_mode: pregnancyModeActive,
     pregnancy_week: pregnancyWeek,
     pregnancy_trimester: pregnancyTrimester,
     days_remaining: daysRemaining,
     current_phase: currentCycle.current_phase,
-    current_phase_label: PHASE_DISPLAY_LABELS[currentCycle.phase_key] || "უცნობი ფაზა",
+    current_phase_label: phaseDisplayLabel(currentCycle.phase_key),
     cycle_day: currentCycle.cycle_day,
     symptoms: normalizeSymptoms(todayEntry?.symptoms || []),
-    mood: todayEntry?.mood || "Not logged today",
+    mood: todayEntry?.mood ? moodLabel(todayEntry.mood) : "Not logged today",
     todayEntry: {
       exists: Boolean(todayEntry),
       date: today,
@@ -487,6 +508,7 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
 
   assistantContextCache = {
     userId: user.id,
+    language: getLanguage(),
     expiresAt: Date.now() + ASSISTANT_CONTEXT_CACHE_TTL_MS,
     value: context,
   };
@@ -520,6 +542,10 @@ export function invalidateAssistantContextCache() {
   };
 }
 
+// i18n-check: ignore-start
+// The local (no-AI) responder matches Georgian keywords and answers in Georgian.
+// Prompts in other languages never match these patterns and fall through to
+// the AI, which answers in the chosen language.
 function normalizePromptText(prompt) {
   return String(prompt || "")
     .trim()
@@ -782,6 +808,7 @@ function buildLocalAssistantResponse(prompt, context) {
 
   return null;
 }
+// i18n-check: ignore-end
 
 export async function askAssistant({ prompt, history = [], allowAi = true }) {
   const context = await getAssistantContext();
@@ -802,7 +829,7 @@ export async function askAssistant({ prompt, history = [], allowAi = true }) {
     text: message.text,
   }));
 
-  const systemPrompt = context.pregnancy_mode ? PREGNANCY_SYSTEM_PROMPT : ASSISTANT_SYSTEM_PROMPT;
+  const systemPrompt = context.pregnancy_mode ? getPregnancySystemPrompt() : getAssistantSystemPrompt();
 
   const response = await generateAiResponse({
     prompt,
@@ -917,7 +944,7 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
 
   const response = await generateAiResponse({
     prompt,
-    systemPrompt: isPregnancy ? PREGNANCY_SYSTEM_PROMPT : ASSISTANT_SYSTEM_PROMPT,
+    systemPrompt: isPregnancy ? getPregnancySystemPrompt() : getAssistantSystemPrompt(),
     context: sendContext,
     maxOutputTokens: 220,
     metadata: {
@@ -958,7 +985,7 @@ export async function getHomeAssistantAdvice() {
 
   const response = await generateAiResponse({
     prompt,
-    systemPrompt: context.pregnancy_mode ? PREGNANCY_SYSTEM_PROMPT : ASSISTANT_SYSTEM_PROMPT,
+    systemPrompt: context.pregnancy_mode ? getPregnancySystemPrompt() : getAssistantSystemPrompt(),
     context: { ...context, recentHistory: [] },
     maxOutputTokens: 220,
     metadata: {
@@ -980,20 +1007,20 @@ export async function getPregnancyWeeklyAdvice() {
   const prompt = `
 The user is in week ${week} of pregnancy (Trimester ${trimesterLabel}), with ${daysRemaining} days until the due date.
 
-Write a detailed, warm weekly pregnancy card in Georgian. Use EXACTLY this structure:
+Write a detailed, warm weekly pregnancy card in ${languageName()}. Use EXACTLY this structure:
 
-🍼 ნაყოფის განვითარება
+${t("home.babyDevelopment")}
 Describe in detail what is happening with the baby specifically in week ${week}. Include: exact current size (compare to a fruit or object), which body parts are forming or growing this week (ears, eyes, fingers, brain, lungs, etc.), whether movements can be felt, what senses are developing. Write 4-5 detailed sentences. Be specific to week ${week}, not generic.
 
-💗 ამ კვირის რჩევა
+${t("home.thisWeekAdvice")}
 Give 4-5 sentences of practical advice specific to week ${week}: what physical symptoms are normal this week, what to eat or supplement, any important doctor visits or tests due around this week, and one warm emotional encouragement for the mother.
 
-Write entirely in natural Georgian. Be warm, specific, and scientifically accurate.
+Write entirely in natural ${languageName()}. Be warm, specific, and scientifically accurate.
 `.trim();
 
   const response = await generateAiResponse({
     prompt,
-    systemPrompt: PREGNANCY_SYSTEM_PROMPT,
+    systemPrompt: getPregnancySystemPrompt(),
     context: {
       user_name: context.user_name,
       pregnancy_week: week,
@@ -1015,8 +1042,8 @@ export async function getAssistantScreenSummary() {
 
   return {
     userName: context.user_name,
-    goalLabel: context.user_goal_label || DEFAULT_GOAL_LABEL,
-    phaseLabel: context.current_phase_label || "უცნობი ფაზა",
+    goalLabel: context.user_goal_label || goalDisplayLabel(DEFAULT_GOAL_LABEL),
+    phaseLabel: context.current_phase_label || t("assistant.unknownPhase"),
     cycleDay: context.cycle_day,
     mood: context.todayEntry?.mood || null,
     symptoms: context.todayEntry?.symptoms || [],
