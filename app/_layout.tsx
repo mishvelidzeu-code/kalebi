@@ -9,6 +9,7 @@ import { PregnancyProvider } from "../context/PregnancyContext";
 import { FertilityProvider } from "../context/FertilityContext";
 import { LanguageProvider } from "../context/LanguageContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
+import { useOtaUpdatePrompt } from "../hooks/useOtaUpdatePrompt";
 import { initializeMetaAppEvents } from "../services/metaAppEvents";
 import { registerPushTokenForCurrentUser } from "../services/notifications";
 import { syncProfileEmailForCurrentUser, syncProfileEmailForUser } from "../services/profileSync";
@@ -25,6 +26,7 @@ Notifications.setNotificationHandler({
 
 function LayoutContent() {
   const { isDark, navigationTheme, colors } = useTheme();
+  useOtaUpdatePrompt();
 
   useEffect(() => {
     initializeMetaAppEvents();

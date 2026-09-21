@@ -1254,4 +1254,10 @@ export default {
     diaryTitle: "Pregnancy diary 📔",
     diaryBody: "Log today's symptoms and mood",
   },
+  update: {
+    title: "Update ready ✨",
+    body: "A new version of the app has been downloaded. Update now? It only takes a few seconds.",
+    now: "Update",
+    later: "Later",
+  },
 };
