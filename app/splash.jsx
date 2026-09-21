@@ -9,6 +9,7 @@ import { TEMP_LANGUAGE_PICKER_ENABLED } from "../constants/tempFlags";
 import { useLanguage } from "../context/LanguageContext";
 import { fixFutureCycleDatesForCurrentUser } from "../services/cycleDataMigration";
 import { syncCycleRemindersForUser } from "../services/notifications";
+import { translate } from "../services/i18n";
 import { supabase } from "../services/supabase";
 
 const { width, height } = Dimensions.get("window");
@@ -26,6 +27,24 @@ export default function Splash() {
   const pendingRouteRef = useRef("/onboarding/name");
   const languageStateRef = useRef({ hasChosenLanguage, isLanguageLoaded });
   languageStateRef.current = { hasChosenLanguage, isLanguageLoaded };
+
+  // A fresh install (no session, no stored language) is about to be asked for
+  // its language, so the splash copy itself is shown in English rather than
+  // Georgian. Signed-in users keep their language. The session read is a local
+  // storage lookup and resolves long before the title fades in.
+  const [hasSession, setHasSession] = useState(null);
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth
+      .getSession()
+      .then(({ data }) => mounted && setHasSession(Boolean(data?.session)))
+      .catch(() => mounted && setHasSession(false));
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  const freshInstall = TEMP_LANGUAGE_PICKER_ENABLED && hasSession === false && !hasChosenLanguage;
+  const splashText = (key) => (freshInstall ? translate("en", key) : t(key));
 
   // --- ანიმაციების სტეიტები ---
   const mainOpacity = useRef(new Animated.Value(1)).current;
@@ -258,13 +277,13 @@ export default function Splash() {
           </View>
 
           <Animated.View style={{ opacity: textOpacity, transform: [{ translateY: textTranslateY }], alignItems: "center" }}>
-            <Text style={styles.title}>{t("splash.title")}</Text>
-            <Text style={styles.subtitle}>{t("splash.subtitle")}</Text>
+            <Text style={styles.title}>{splashText("splash.title")}</Text>
+            <Text style={styles.subtitle}>{splashText("splash.subtitle")}</Text>
           </Animated.View>
 
           {showLanguagePicker && (
             <Animated.View style={[styles.languagePicker, { opacity: pickerOpacity }]}>
-              <Text style={styles.languageTitle}>{t("language.title")}</Text>
+              <Text style={styles.languageTitle}>{splashText("language.title")}</Text>
               <View style={styles.languageRow}>
                 {languages.map((item) => (
                   <TouchableOpacity
@@ -278,7 +297,7 @@ export default function Splash() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.languageSubtitle}>{t("language.subtitle")}</Text>
+              <Text style={styles.languageSubtitle}>{splashText("language.subtitle")}</Text>
             </Animated.View>
           )}
         </View>
