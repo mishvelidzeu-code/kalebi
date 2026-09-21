@@ -4,11 +4,13 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { Alert, Animated, Dimensions, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { OnboardingContext } from "../../components/OnboardingContext";
+import { useLanguage } from "../../context/LanguageContext";
 
 const { width } = Dimensions.get("window");
 
 export default function Name() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { data, setData } = useContext(OnboardingContext);
   const scrollViewRef = useRef(null);
 
@@ -68,7 +70,7 @@ export default function Name() {
     }
 
     if (!trimmedPhoneNumber) {
-      Alert.alert("შეავსე ნომერი", "ტელეფონის ნომერი სავალდებულოა.");
+      Alert.alert(t("common.phoneRequiredTitle"), t("common.phoneRequiredBody"));
       return;
     }
 
@@ -102,8 +104,8 @@ export default function Name() {
               <View style={styles.iconBox}>
                 <Text style={styles.emoji}>👋</Text>
               </View>
-              <Text style={styles.title}>რა გქვია?</Text>
-              <Text style={styles.subtitle}>გვითხარი შენი სახელი და ტელეფონის ნომერი, რომ პროფილი სრულად და სწორად შევქმნათ.</Text>
+              <Text style={styles.title}>{t("onboarding.name.title")}</Text>
+              <Text style={styles.subtitle}>{t("onboarding.name.subtitle")}</Text>
             </View>
 
             <View
@@ -114,7 +116,7 @@ export default function Name() {
             >
               <TextInput
                 style={[styles.input, isFocused && styles.inputFocused]}
-                placeholder="შეიყვანე სახელი..."
+                placeholder={t("onboarding.name.namePlaceholder")}
                 placeholderTextColor="#aaa"
                 value={name}
                 onChangeText={setName}
@@ -130,11 +132,11 @@ export default function Name() {
                 returnKeyType="next"
               />
 
-              <Text style={styles.inputHint}>ტელეფონის ნომერი სავალდებულოა.</Text>
+              <Text style={styles.inputHint}>{t("common.phoneRequiredBody")}</Text>
 
               <TextInput
                 style={[styles.input, styles.secondaryInput, isPhoneFocused && styles.inputFocused]}
-                placeholder="ტელეფონის ნომერი"
+                placeholder={t("onboarding.name.phonePlaceholder")}
                 placeholderTextColor="#aaa"
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
@@ -154,7 +156,7 @@ export default function Name() {
 
           <Animated.View style={[styles.footer, keyboardVisible ? styles.footerOpen : styles.footerClosed, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
             <TouchableOpacity style={[styles.button, isNextDisabled && styles.buttonDisabled]} disabled={isNextDisabled} onPress={handleNext} activeOpacity={0.8}>
-              <Text style={styles.buttonText}>შემდეგი ნაბიჯი ✨</Text>
+              <Text style={styles.buttonText}>{t("onboarding.name.nextButton")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -166,7 +168,7 @@ export default function Name() {
               activeOpacity={0.7}
             >
               <Text style={styles.loginLinkText}>
-                უკვე გაქვს ანგარიში? <Text style={styles.loginLinkHighlight}>შესვლა</Text>
+                {t("onboarding.name.haveAccount")}<Text style={styles.loginLinkHighlight}>{t("common.login")}</Text>
               </Text>
             </TouchableOpacity>
           </Animated.View>

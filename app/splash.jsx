@@ -3,8 +3,10 @@ import * as Haptics from "expo-haptics"; // 👈 დამატებული�
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
-import { Animated, Dimensions, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { TEMP_LANGUAGE_PICKER_ENABLED } from "../constants/tempFlags";
+import { useLanguage } from "../context/LanguageContext";
 import { fixFutureCycleDatesForCurrentUser } from "../services/cycleDataMigration";
 import { syncCycleRemindersForUser } from "../services/notifications";
 import { supabase } from "../services/supabase";
@@ -14,6 +16,16 @@ const SPLASH_IMAGE = require("../assets/images/splash-hero.png");
 
 export default function Splash() {
   const router = useRouter();
+  const { t, languages, setLanguage, hasChosenLanguage, isLanguageLoaded } = useLanguage();
+
+  // The language picker shows once, to fresh installs only (no session and no
+  // stored choice). Signed-in users never see it — they keep Georgian unless
+  // they change it in the profile. Behind TEMP_LANGUAGE_PICKER_ENABLED.
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
+  const pickerOpacity = useRef(new Animated.Value(0)).current;
+  const pendingRouteRef = useRef("/onboarding/name");
+  const languageStateRef = useRef({ hasChosenLanguage, isLanguageLoaded });
+  languageStateRef.current = { hasChosenLanguage, isLanguageLoaded };
 
   // --- ანიმაციების სტეიტები ---
   const mainOpacity = useRef(new Animated.Value(1)).current;
@@ -87,13 +99,30 @@ export default function Splash() {
         }
       }
 
-      // 3. ნელი გაქრობა სხვა ეკრანზე გადასვლამდე
+      const shouldAskLanguage =
+        TEMP_LANGUAGE_PICKER_ENABLED &&
+        !sessionData?.session &&
+        languageStateRef.current.isLanguageLoaded &&
+        !languageStateRef.current.hasChosenLanguage;
+
+      if (shouldAskLanguage) {
+        pendingRouteRef.current = nextRoute;
+        setShowLanguagePicker(true);
+        Animated.timing(pickerOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+        return;
+      }
+
+      leaveTo(nextRoute);
+    };
+
+    // 3. ნელი გაქრობა სხვა ეკრანზე გადასვლამდე
+    const leaveTo = (route) => {
       Animated.timing(mainOpacity, {
         toValue: 0,
         duration: 800,
         useNativeDriver: true,
       }).start(() => {
-        router.replace(nextRoute);
+        router.replace(route);
       });
     };
 
@@ -163,7 +192,15 @@ export default function Splash() {
         Animated.timing(floatAnim2, { toValue: 0, duration: 5000, useNativeDriver: true }),
       ])
     ).start();
-  }, [floatAnim1, floatAnim2, glowAnim, imageZoom, logoScale, magicAnim, mainOpacity, router, starPulse, textOpacity, textTranslateY]);
+  }, [floatAnim1, floatAnim2, glowAnim, imageZoom, logoScale, magicAnim, mainOpacity, pickerOpacity, router, starPulse, textOpacity, textTranslateY]);
+
+  const handlePickLanguage = async (code) => {
+    await setLanguage(code);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.timing(mainOpacity, { toValue: 0, duration: 600, useNativeDriver: true }).start(() => {
+      router.replace(pendingRouteRef.current);
+    });
+  };
 
   // --- მაგიური ანიმაციის გამოთვლები ---
   const starLeft = magicAnim.interpolate({ inputRange: [0, 1, 2], outputRange: [0, 240, 240] });
@@ -221,9 +258,29 @@ export default function Splash() {
           </View>
 
           <Animated.View style={{ opacity: textOpacity, transform: [{ translateY: textTranslateY }], alignItems: "center" }}>
-            <Text style={styles.title}>შენი რიტმი</Text>
-            <Text style={styles.subtitle}>აღმოაჩინე შენი სხეულის ჰარმონია</Text>
+            <Text style={styles.title}>{t("splash.title")}</Text>
+            <Text style={styles.subtitle}>{t("splash.subtitle")}</Text>
           </Animated.View>
+
+          {showLanguagePicker && (
+            <Animated.View style={[styles.languagePicker, { opacity: pickerOpacity }]}>
+              <Text style={styles.languageTitle}>{t("language.title")}</Text>
+              <View style={styles.languageRow}>
+                {languages.map((item) => (
+                  <TouchableOpacity
+                    key={item.code}
+                    style={styles.languageButton}
+                    onPress={() => handlePickLanguage(item.code)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.languageFlag}>{item.flag}</Text>
+                    <Text style={styles.languageLabel}>{item.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.languageSubtitle}>{t("language.subtitle")}</Text>
+            </Animated.View>
+          )}
         </View>
       </LinearGradient>
     </Animated.View>
@@ -247,6 +304,13 @@ const styles = StyleSheet.create({
   logo: { fontSize: 50 },
   title: { fontSize: 42, fontWeight: "900", color: "#ff4d88", letterSpacing: 1, textShadowColor: "rgba(255, 77, 136, 0.2)", textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 10 },
   subtitle: { marginTop: 12, fontSize: 16, color: "#7A5C6A", fontWeight: "600", textAlign: "center", letterSpacing: 0.5 },
+  languagePicker: { marginTop: 28, alignItems: "center", width: width - 60 },
+  languageTitle: { fontSize: 15, fontWeight: "800", color: "#ff4d88", letterSpacing: 0.5, marginBottom: 14 },
+  languageRow: { flexDirection: "row", justifyContent: "center", gap: 10 },
+  languageButton: { flex: 1, backgroundColor: "#fff", borderRadius: 18, paddingVertical: 12, alignItems: "center", borderWidth: 2, borderColor: "#FFD6E7", elevation: 6, shadowColor: "#ff4d88", shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
+  languageFlag: { fontSize: 26, marginBottom: 4 },
+  languageLabel: { fontSize: 13, fontWeight: "700", color: "#7A5C6A" },
+  languageSubtitle: { marginTop: 12, fontSize: 12, color: "#A08494", fontWeight: "500", textAlign: "center" },
   blurCircle: { position: "absolute", borderRadius: width, opacity: 0.6 },
   circle1: { width: width * 1.2, height: width * 1.2, backgroundColor: "#FFEAF2", top: -width * 0.5, right: -width * 0.3 },
   circle2: { width: width, height: width, backgroundColor: "#FFF0F5", bottom: -width * 0.4, left: -width * 0.3 },

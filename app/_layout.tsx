@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { OnboardingProvider } from "../components/OnboardingContext";
 import { PregnancyProvider } from "../context/PregnancyContext";
 import { FertilityProvider } from "../context/FertilityContext";
+import { LanguageProvider } from "../context/LanguageContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { initializeMetaAppEvents } from "../services/metaAppEvents";
 import { registerPushTokenForCurrentUser } from "../services/notifications";
@@ -67,14 +68,16 @@ function LayoutContent() {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <PregnancyProvider>
-        <FertilityProvider>
-          <OnboardingProvider>
-            <LayoutContent />
-          </OnboardingProvider>
-        </FertilityProvider>
-      </PregnancyProvider>
-    </ThemeProvider>
+    <LanguageProvider>
+      <ThemeProvider>
+        <PregnancyProvider>
+          <FertilityProvider>
+            <OnboardingProvider>
+              <LayoutContent />
+            </OnboardingProvider>
+          </FertilityProvider>
+        </PregnancyProvider>
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }

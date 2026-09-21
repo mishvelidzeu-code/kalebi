@@ -10,3 +10,9 @@ export const TEMP_FERTILITY_COMING_SOON = false;
 // portrait image), leaving only the safe-area spacing. Flip to false to bring
 // it back exactly as it was.
 export const TEMP_HIDE_ASSISTANT_HEADER = true;
+
+// Language picker on the splash screen (and the language row in the profile).
+// While false the app behaves exactly as before: every user gets Georgian and
+// never sees a language choice, even though the dictionaries are already wired
+// in. Flip to true once the English and Russian dictionaries are complete.
+export const TEMP_LANGUAGE_PICKER_ENABLED = false;

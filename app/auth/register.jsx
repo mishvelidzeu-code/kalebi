@@ -4,11 +4,13 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Animated, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { OnboardingContext } from "../../components/OnboardingContext";
+import { useLanguage } from "../../context/LanguageContext";
 import { setNotificationsEnabled, syncCycleRemindersForUser } from "../../services/notifications";
 import { supabase } from "../../services/supabase";
 
 export default function Register() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { data: onboardingData } = useContext(OnboardingContext);
 
   const [email, setEmail] = useState("");
@@ -30,12 +32,12 @@ export default function Register() {
     let postRegistrationNotice = null;
 
     if (!email || !password) {
-      Alert.alert("შეცდომა", "გთხოვთ შეიყვანოთ ელ-ფოსტა და პაროლი");
+      Alert.alert(t("common.error"), t("auth.register.fillFields"));
       return;
     }
 
     if (!trimmedPhoneNumber) {
-      Alert.alert("შეავსე ნომერი", "ტელეფონის ნომერი სავალდებულოა.");
+      Alert.alert(t("common.phoneRequiredTitle"), t("common.phoneRequiredBody"));
       return;
     }
 
@@ -95,8 +97,7 @@ export default function Register() {
 
           if (cycleError) {
             console.error("Initial cycle insert failed during registration:", cycleError);
-            postRegistrationNotice =
-              "ანგარიში შეიქმნა, მაგრამ საწყისი ციკლის ჩანაწერი სრულად ვერ შეინახა. აპი მაინც იმუშავებს პროფილის მონაცემებით.";
+            postRegistrationNotice = t("auth.register.cycleInsertNotice");
           }
         }
 
@@ -108,8 +109,8 @@ export default function Register() {
         }
 
         if (postRegistrationNotice) {
-          Alert.alert("რეგისტრაცია დასრულდა", postRegistrationNotice, [
-            { text: "გაგრძელება", onPress: () => router.replace("/(tabs)") },
+          Alert.alert(t("auth.register.completedTitle"), postRegistrationNotice, [
+            { text: t("common.continue"), onPress: () => router.replace("/(tabs)") },
           ]);
           return;
         }
@@ -117,7 +118,7 @@ export default function Register() {
         router.replace("/(tabs)");
       }
     } catch (error) {
-      Alert.alert("რეგისტრაცია ვერ მოხერხდა", error.message);
+      Alert.alert(t("auth.register.failedTitle"), error.message);
     } finally {
       setLoading(false);
     }
@@ -131,13 +132,13 @@ export default function Register() {
             <View style={styles.iconBox}>
               <Text style={styles.emoji}>✨</Text>
             </View>
-            <Text style={styles.title}>დასასრული და დასაწყისი</Text>
-            <Text style={styles.subtitle}>შექმენი ანგარიში, რომ შენი მონაცემები ყოველთვის დაცული და შენახული იყოს.</Text>
+            <Text style={styles.title}>{t("auth.register.title")}</Text>
+            <Text style={styles.subtitle}>{t("auth.register.subtitle")}</Text>
           </View>
 
           <View style={styles.form}>
             <TextInput
-              placeholder="ელ-ფოსტა"
+              placeholder={t("common.email")}
               value={email}
               onChangeText={setEmail}
               style={styles.input}
@@ -146,15 +147,15 @@ export default function Register() {
               placeholderTextColor="#aaa"
             />
 
-            <TextInput placeholder="პაროლი" secureTextEntry value={password} onChangeText={setPassword} style={styles.input} placeholderTextColor="#aaa" />
+            <TextInput placeholder={t("common.password")} secureTextEntry value={password} onChangeText={setPassword} style={styles.input} placeholderTextColor="#aaa" />
 
             <TouchableOpacity style={[styles.button, loading && { opacity: 0.7 }]} onPress={handleRegister} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>რეგისტრაციის დასრულება 🚀</Text>}
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t("auth.register.button")}</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => router.push("/auth/login")} style={styles.link}>
               <Text style={styles.linkText}>
-                უკვე გაქვს ანგარიში? <Text style={styles.linkHighlight}>შესვლა</Text>
+                {t("auth.register.haveAccount")}<Text style={styles.linkHighlight}>{t("common.login")}</Text>
               </Text>
             </TouchableOpacity>
           </View>

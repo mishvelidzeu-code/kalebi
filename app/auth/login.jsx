@@ -17,10 +17,12 @@ import {
   View
 } from "react-native";
 
+import { useLanguage } from "../../context/LanguageContext";
 import { supabase } from "../../services/supabase";
 
 export default function Login() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,7 +53,7 @@ export default function Login() {
 
   const login = async () => {
     if (!email || !password) {
-      Alert.alert("შეცდომა", "გთხოვთ შეიყვანოთ ელფოსტა და პაროლი");
+      Alert.alert(t("common.error"), t("auth.login.fillFields"));
       return;
     }
 
@@ -64,7 +66,7 @@ export default function Login() {
 
       if (error) {
         setLoading(false);
-        Alert.alert("შეცდომა", error.message);
+        Alert.alert(t("common.error"), error.message);
         return;
       }
 
@@ -76,7 +78,7 @@ export default function Login() {
       router.replace("/(tabs)");
     } catch (e) {
       setLoading(false);
-      Alert.alert("შეცდომა", "სისტემური ხარვეზი ლოგინისას");
+      Alert.alert(t("common.error"), t("auth.login.systemError"));
     }
   };
 
@@ -88,7 +90,7 @@ export default function Login() {
       const savedPassword = await SecureStore.getItemAsync("saved_password");
 
       if (!savedEmail || !savedPassword) {
-        Alert.alert("ყურადღება", "ბიომეტრიის გასააქტიურებლად, ჯერ ერთხელ უნდა შეხვიდეთ პაროლით.");
+        Alert.alert(t("common.attention"), t("auth.login.biometricNeedsPassword"));
         return;
       }
 
@@ -99,10 +101,10 @@ export default function Login() {
       // 3. პირდაპირ გამოვიძახოთ სკანერი (ყოველგვარი წინასწარი ალერტის გარეშე)
       // ალერტმა შეიძლება დააბნიოს iOS-ის Face ID ინტერფეისი
       const authResult = await LocalAuthentication.authenticateAsync({
-        promptMessage: "შესვლა Face ID-ით",
-        fallbackLabel: "გამოიყენეთ პინ-კოდი", 
+        promptMessage: t("auth.login.faceIdPrompt"),
+        fallbackLabel: t("auth.login.faceIdFallback"),
         disableDeviceFallback: false, // მივცეთ უფლება პინ-კოდი გამოიყენოს, თუ სახე ვერ იცნო
-        cancelLabel: "გაუქმება"
+        cancelLabel: t("common.cancel")
       });
 
       if (authResult.success) {
@@ -114,7 +116,7 @@ export default function Login() {
 
         if (error) {
           setLoading(false);
-          Alert.alert("შეცდომა", "ავტორიზაცია ვერ მოხერხდა.");
+          Alert.alert(t("common.error"), t("auth.login.authFailed"));
         } else {
           setLoading(false);
           router.replace("/(tabs)");
@@ -139,13 +141,13 @@ export default function Login() {
             <View style={styles.iconBox}>
               <Text style={styles.emoji}>🔐</Text>
             </View>
-            <Text style={styles.title}>შესვლა</Text>
-            <Text style={styles.subtitle}>შეიყვანე შენი ელ-ფოსტა და პაროლი რომ შეხვიდე ანგარიშში.</Text>
+            <Text style={styles.title}>{t("auth.login.title")}</Text>
+            <Text style={styles.subtitle}>{t("auth.login.subtitle")}</Text>
           </View>
 
           <View style={styles.form}>
             <TextInput
-              placeholder="ელ-ფოსტა"
+              placeholder={t("common.email")}
               value={email}
               onChangeText={setEmail}
               style={styles.input}
@@ -155,7 +157,7 @@ export default function Login() {
             />
 
             <TextInput
-              placeholder="პაროლი"
+              placeholder={t("common.password")}
               secureTextEntry
               value={password}
               onChangeText={setPassword}
@@ -168,16 +170,16 @@ export default function Login() {
               onPress={login}
               disabled={loading}
             >
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>შესვლა</Text>}
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t("common.login")}</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => router.replace("/onboarding/name")} style={styles.link}>
-              <Text style={styles.linkText}>არ გაქვს ანგარიში? <Text style={styles.linkHighlight}>რეგისტრაცია</Text></Text>
+              <Text style={styles.linkText}>{t("auth.login.noAccount")}<Text style={styles.linkHighlight}>{t("common.register")}</Text></Text>
             </TouchableOpacity>
 
             {isBiometricSupported && (
               <View style={styles.biometricContainer}>
-                <Text style={styles.biometricText}>ან სწრაფად შესვლა</Text>
+                <Text style={styles.biometricText}>{t("auth.login.quickLogin")}</Text>
                 <TouchableOpacity
                   style={styles.biometricButtonBottom}
                   onPress={handleBiometricAuth}
