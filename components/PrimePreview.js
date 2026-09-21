@@ -4,17 +4,20 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { useLanguage } from "../context/LanguageContext";
 import { useTheme } from "../context/ThemeContext";
 
 export default function PrimePreview({
   children,
   style,
   minHeight = 120,
-  message = "სრული შინაარსის სანახავად გახსენი Prime",
+  message,
   buttonLabel = "Prime",
   concealCompletely = false,
 }) {
   const router = useRouter();
+  const { t } = useLanguage();
+  const resolvedMessage = message ?? t("primePreview.defaultMessage");
   const { isDark, isPremium } = useTheme();
 
   if (isPremium) {
@@ -55,7 +58,7 @@ export default function PrimePreview({
             </View>
 
             <Text style={[styles.message, { color: isDark ? "#FFFFFF" : "#34212A" }]}>
-              {message}
+              {resolvedMessage}
             </Text>
 
             <TouchableOpacity
@@ -90,7 +93,7 @@ export default function PrimePreview({
             </View>
 
             <Text style={[styles.message, { color: isDark ? "#FFFFFF" : "#34212A" }]}>
-              {message}
+              {resolvedMessage}
             </Text>
 
             <TouchableOpacity

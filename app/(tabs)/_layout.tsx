@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
 import { runAdminQuery } from "../../services/adminQuery";
 
@@ -185,6 +186,7 @@ function AdminAssistant({ colors, isDark, stats }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function TabLayout() {
+  const { t } = useLanguage();
   const { colors, isDark, isAdmin } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 10);
@@ -229,7 +231,7 @@ export default function TabLayout() {
           name="index"
           options={{
             href: isAdmin ? null : undefined,
-            title: "მთავარი",
+            title: t("tabs.home"),
             tabBarIcon: ({ color, focused }) => (
               <TabIcon name="home" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
             ),
@@ -240,7 +242,7 @@ export default function TabLayout() {
           name="calendar"
           options={{
             href: isAdmin ? null : undefined,
-            title: "კალენდარი",
+            title: t("tabs.calendar"),
             tabBarIcon: ({ color, focused }) => (
               <TabIcon name="calendar" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
             ),
@@ -251,7 +253,7 @@ export default function TabLayout() {
           name="symptoms"
           options={{
             href: isAdmin ? null : undefined,
-            title: "ასისტენტი",
+            title: t("tabs.assistant"),
             tabBarIcon: ({ color, focused }) => (
               <TabIcon name="chatbubble-ellipses" color={color} focused={focused} primary={colors.primary} isDark={isDark} isAssistant />
             ),
@@ -262,7 +264,7 @@ export default function TabLayout() {
           name="statistics"
           options={{
             href: isAdmin ? null : undefined,
-            title: "სტატისტიკა",
+            title: t("tabs.statistics"),
             tabBarIcon: ({ color, focused }) => (
               <TabIcon name="stats-chart" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
             ),
@@ -272,7 +274,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="profile"
           options={{
-            title: "პროფილი",
+            title: t("tabs.profile"),
             tabBarIcon: ({ color, focused }) => (
               <TabIcon name="person" color={color} focused={focused} primary={colors.primary} isDark={isDark} />
             ),

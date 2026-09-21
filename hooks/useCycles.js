@@ -8,6 +8,7 @@ import { Alert, DeviceEventEmitter } from "react-native";
 import { invalidateAssistantContextCache } from "../services/assistantOrchestrator";
 import { syncCycleRemindersForUser } from "../services/notifications";
 import { supabase } from "../services/supabase";
+import { useLanguage } from "../context/LanguageContext";
 import { getCycleWindowDates } from "../utils/cycleEngine";
 import {
   getPreferredCycleLength,
@@ -19,6 +20,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 export const useCycles = () => {
+  const { t } = useLanguage();
   const [rawCycles, setRawCycles] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -135,10 +137,10 @@ export const useCycles = () => {
       DeviceEventEmitter.emit("cycleUpdated");
       await loadData();
 
-      Alert.alert("წარმატება", "მონაცემები წარმატებით წაიშალა ✨");
+      Alert.alert(t("cycles.deletedTitle"), t("cycles.deletedBody"));
     } catch (error) {
       console.error("Error deleting cycle:", error);
-      Alert.alert("შეცდომა", "წაშლა ვერ მოხერხდა.");
+      Alert.alert(t("common.error"), t("cycles.deleteFailed"));
     }
   };
 

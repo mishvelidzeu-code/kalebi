@@ -39,6 +39,13 @@ const MIGRATED_FILES = [
   "app/(tabs)/symptoms.js",
   "app/premium.jsx",
   "app/pregnancy-premium.jsx",
+  "app/privacy.js",
+  "components/DiaryAvatar.js",
+  "components/PrimePreview.js",
+  "hooks/useCycles.js",
+  // app/(tabs)/_layout.tsx: tab titles are translated, but the AdminAssistant
+  // widget in the same file is admin-only and stays Georgian on purpose, so
+  // the file is not listed here. Same for app/admin.jsx and services/adminQuery.js.
 ];
 
 // Georgian literals that are allowed to stay in code because they are stored

@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Linking, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useLanguage } from "../context/LanguageContext";
 import { useTheme } from "../context/ThemeContext";
 
 export default function PrivacyScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { isDark } = useTheme();
 
   const theme = {
@@ -21,61 +23,38 @@ export default function PrivacyScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>კონფიდენციალურობა</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>{t("privacy.title")}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={[styles.card, { backgroundColor: theme.card }]}>
 
-          <Text style={[styles.title, { color: theme.primary }]}>მონაცემთა დაცვა</Text>
-          <Text style={[styles.body, { color: theme.text }]}>
-            ჩვენთვის თქვენი პირადი ინფორმაციის უსაფრთხოება პრიორიტეტია. თქვენი ჯანმრთელობის მონაცემები ინახება დაცულად და არ გადაეცემა მესამე პირებს.
-          </Text>
+          <Text style={[styles.title, { color: theme.primary }]}>{t("privacy.s1Title")}</Text>
+          <Text style={[styles.body, { color: theme.text }]}>{t("privacy.s1Body")}</Text>
 
-          <Text style={[styles.title, { color: theme.primary }]}>რა ინფორმაციას ვაგროვებთ?</Text>
-          <Text style={[styles.body, { color: theme.text }]}>
-            აპლიკაცია ინახავს მხოლოდ იმ მონაცემებს, რომლებსაც თქვენ თავად უთითებთ: ციკლის თარიღები, სიმპტომები, განწყობა და პირადი მიზნები.
-            ასევე შეიძლება შევინახოთ თქვენი ელფოსტა ავტორიზაციისთვის.
-          </Text>
+          <Text style={[styles.title, { color: theme.primary }]}>{t("privacy.s2Title")}</Text>
+          <Text style={[styles.body, { color: theme.text }]}>{t("privacy.s2Body")}</Text>
 
-          <Text style={[styles.title, { color: theme.primary }]}>როგორ ვიყენებთ ინფორმაციას</Text>
-          <Text style={[styles.body, { color: theme.text }]}>
-            მონაცემები გამოიყენება მხოლოდ აპის ფუნქციონირებისთვის: ციკლის პროგნოზი, ოვულაციის გამოთვლა,
-            ნაყოფიერი დღეების განსაზღვრა და შეტყობინებების გაგზავნა.
-          </Text>
+          <Text style={[styles.title, { color: theme.primary }]}>{t("privacy.s3Title")}</Text>
+          <Text style={[styles.body, { color: theme.text }]}>{t("privacy.s3Body")}</Text>
 
-          <Text style={[styles.title, { color: theme.primary }]}>შეტყობინებები</Text>
-          <Text style={[styles.body, { color: theme.text }]}>
-            აპი შეიძლება გამოგიგზავნოთ შეტყობინებები ციკლის პროგნოზთან დაკავშირებით
-            (პერიოდი, ოვულაცია, ნაყოფიერი დღეები). სურვილის შემთხვევაში შეგიძლიათ გამორთოთ
-            შეტყობინებები ტელეფონის პარამეტრებიდან.
-          </Text>
+          <Text style={[styles.title, { color: theme.primary }]}>{t("privacy.s4Title")}</Text>
+          <Text style={[styles.body, { color: theme.text }]}>{t("privacy.s4Body")}</Text>
 
-          <Text style={[styles.title, { color: theme.primary }]}>მესამე მხარის სერვისები</Text>
-          <Text style={[styles.body, { color: theme.text }]}>
-            აპი იყენებს უსაფრთხო სერვისებს როგორიცაა Supabase (მონაცემების შენახვა),
-            RevenueCat (გამოწერები) და Expo სერვისები აპის ფუნქციონირებისთვის.
-          </Text>
+          <Text style={[styles.title, { color: theme.primary }]}>{t("privacy.s5Title")}</Text>
+          <Text style={[styles.body, { color: theme.text }]}>{t("privacy.s5Body")}</Text>
 
-          <Text style={[styles.title, { color: theme.primary }]}>მონაცემების მართვა</Text>
-          <Text style={[styles.body, { color: theme.text }]}>
-            თქვენ ნებისმიერ დროს შეგიძლიათ წაშალოთ თქვენი მონაცემები ან შეწყვიტოთ
-            აპის გამოყენება. ჩვენ არ ვიყენებთ თქვენს ინფორმაციას სარეკლამო მიზნებისთვის.
-          </Text>
+          <Text style={[styles.title, { color: theme.primary }]}>{t("privacy.s6Title")}</Text>
+          <Text style={[styles.body, { color: theme.text }]}>{t("privacy.s6Body")}</Text>
 
-          <Text style={[styles.title, { color: theme.primary }]}>კონტაქტი</Text>
-          <Text style={[styles.body, { color: theme.text }]}>
-            თუ გაქვთ კითხვები კონფიდენციალურობის პოლიტიკასთან დაკავშირებით,
-            დაგვიკავშირდით: mishvelidze.u@gmail.com
-          </Text>
+          <Text style={[styles.title, { color: theme.primary }]}>{t("privacy.s7Title")}</Text>
+          <Text style={[styles.body, { color: theme.text }]}>{t("privacy.s7Body")}</Text>
 
           {/* დამატებული Privacy Policy ლინკი */}
           <Text
             style={[styles.link, { color: theme.primary }]}
             onPress={() => Linking.openURL("https://sites.google.com/view/cycle-care-privacy")}
-          >
-            სრული კონფიდენციალურობის პოლიტიკა
-          </Text>
+          >{t("privacy.fullPolicy")}</Text>
 
         </View>
 

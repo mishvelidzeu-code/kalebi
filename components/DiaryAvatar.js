@@ -6,6 +6,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { useLanguage } from "../context/LanguageContext";
 import { supabase } from "../services/supabase";
 
 const AVATAR_BUCKET = "avatars";
@@ -49,6 +50,7 @@ export default function DiaryAvatar({
   showHint = true,
   style,
 }) {
+  const { t } = useLanguage();
   const [userId, setUserId] = useState("");
   const [avatarUri, setAvatarUri] = useState("");
   const [loading, setLoading] = useState(true);
@@ -102,7 +104,7 @@ export default function DiaryAvatar({
 
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("წვდომა საჭიროა", "პროფილის სურათის ასარჩევად ჩართე ფოტოებზე წვდომა.");
+        Alert.alert(t("avatar.permissionTitle"), t("avatar.permissionBody"));
         return;
       }
 
@@ -141,7 +143,7 @@ export default function DiaryAvatar({
       await loadAvatar();
     } catch (error) {
       console.log("Diary avatar save error:", error);
-      Alert.alert("შეცდომა", "სურათის ატვირთვა ვერ მოხერხდა.");
+      Alert.alert(t("common.error"), t("avatar.uploadFailed"));
     } finally {
       setSaving(false);
     }
@@ -178,7 +180,7 @@ export default function DiaryAvatar({
         <Ionicons name={avatarUri ? "pencil" : "camera"} size={10} color="#FFFFFF" />
       </View>
 
-      {!avatarUri && !loading && showHint && <Text style={[styles.uploadHint, { color: accent }]}>ფოტო</Text>}
+      {!avatarUri && !loading && showHint && <Text style={[styles.uploadHint, { color: accent }]}>{t("avatar.photo")}</Text>}
     </TouchableOpacity>
   );
 }
