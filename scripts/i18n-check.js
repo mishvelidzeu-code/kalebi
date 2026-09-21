@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* eslint-env node */
+/* global __dirname */
 // Localisation guard. Run with `node scripts/i18n-check.js`. Checks three things:
 //
 //  1. Key parity — every key in locales/ka.js exists in en.js and ru.js, and the
