@@ -1,5 +1,3 @@
-import dayjs from "dayjs";
-import "dayjs/locale/ka";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -24,6 +22,7 @@ import { Calendar, LocaleConfig } from "react-native-calendars";
 import DiaryAvatar from "../../components/DiaryAvatar";
 import PrimePreview from "../../components/PrimePreview";
 import { getDiaryAssistantSupport, invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
+import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { useFertility } from "../../context/FertilityContext";
@@ -34,62 +33,58 @@ import { SUPPLEMENT_OPTIONS } from "../../utils/fertilityPlan";
 import { buildFertilityRecommendations } from "../../utils/fertilityInsights";
 import { calculateCycleState } from "../../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../../utils/cyclePrediction";
-
-dayjs.locale("ka");
+import dayjs from "../../utils/dayjs";
 
 const ASSISTANT_GUIDE_IMAGE = require("../../assets/images/assistant-guide.png");
 
-LocaleConfig.locales["ka"] = {
-  monthNames: ["იანვარი","თებერვალი","მარტი","აპრილი","მაისი","ივნისი","ივლისი","აგვისტო","სექტემბერი","ოქტომბერი","ნოემბერი","დეკემბერი"],
-  monthNamesShort: ["იან.","თებ.","მარ.","აპრ.","მაი.","ივნ.","ივლ.","აგვ.","სექ.","ოქტ.","ნოე.","დეკ."],
-  dayNames: ["კვირა","ორშაბათი","სამშაბათი","ოთხშაბათი","ხუთშაბათი","პარასკევი","შაბათი"],
-  dayNamesShort: ["კვი","ორშ","სამ","ოთხ","ხუთ","პარ","შაბ"],
-  today: "დღეს",
-};
-LocaleConfig.defaultLocale = "ka";
+// react-native-calendars keeps its own locale table. Built from the dayjs
+// locale so month/day names match the rest of the app; the Georgian short
+// month names keep their trailing dot, as before. Applied on every render of
+// a calendar screen (cheap) so the picker follows the chosen language.
+function applyCalendarLocale(language, t) {
+  if (!LocaleConfig.locales[language]) {
+    const base = dayjs().locale(language);
+    const months = Array.from({ length: 12 }, (_, index) => base.month(index).date(1));
+    const days = Array.from({ length: 7 }, (_, index) => base.day(index));
+    LocaleConfig.locales[language] = {
+      monthNames: months.map((d) => d.format("MMMM")),
+      monthNamesShort: months.map((d) => (language === "ka" ? `${d.format("MMM")}.` : d.format("MMM"))),
+      dayNames: days.map((d) => d.format("dddd")),
+      dayNamesShort: days.map((d) => d.format("ddd")),
+      today: t("common.today"),
+    };
+  }
+  LocaleConfig.defaultLocale = language;
+}
 
-const shortMonths = ["იან","თებ","მარ","აპრ","მაი","ივნ","ივლ","აგვ","სექ","ოქტ","ნოე","დეკ"];
+const getShortMonths = (language) =>
+  Array.from({ length: 12 }, (_, index) => dayjs().locale(language).month(index).date(1).format("MMM"));
 
-const symptomLabels = {
-  headache: "თავის ტკივილი 🤕",
-  cramps: "მუცლის ტკივილი 😫",
-  fatigue: "დაღლილობა 🥱",
-  bloating: "შეშუპება 🎈",
-  backache: "წელის ტკივილი ⚡",
-  irritable: "გაღიზიანება 💢",
-  sad: "სევდა 😢",
-  anxious: "შფოთვა 😰",
-  happy: "ბედნიერი ✨",
+// Symptom ids are what gets stored in symptoms.symptoms; labels come from
+// locales/*.calendar.symptoms. Pregnancy uses its own label for backache.
+const SYMPTOM_ICONS = {
+  headache: "🤕", cramps: "😫", fatigue: "🥱", bloating: "🎈", backache: "⚡",
+  irritable: "💢", sad: "😢", anxious: "😰", happy: "✨",
+  nausea: "🤢", heartburn: "🔥", movement: "👶", urination: "🚿",
 };
+
+const symptomItem = (id, labelKey = `calendar.symptoms.${id}`) => ({ id, labelKey, icon: SYMPTOM_ICONS[id] });
+
+const symptomLabel = (t, id) => (SYMPTOM_ICONS[id] ? `${t(`calendar.symptoms.${id}`)} ${SYMPTOM_ICONS[id]}` : id);
 
 const symptomCategories = [
-  {
-    title: "ფიზიკური სიმპტომები",
-    items: [
-      { id: "headache", label: "თავის ტკივილი", icon: "🤕" },
-      { id: "cramps", label: "მუცლის ტკივილი", icon: "😫" },
-      { id: "fatigue", label: "დაღლილობა", icon: "🥱" },
-      { id: "bloating", label: "შეშუპება", icon: "🎈" },
-      { id: "backache", label: "წელის ტკივილი", icon: "⚡" },
-    ],
-  },
-  {
-    title: "ემოციური ფონი",
-    items: [
-      { id: "irritable", label: "გაღიზიანება", icon: "💢" },
-      { id: "sad", label: "სევდა", icon: "😢" },
-      { id: "anxious", label: "შფოთვა", icon: "😰" },
-      { id: "happy", label: "ბედნიერი", icon: "✨" },
-    ],
-  },
+  { titleKey: "calendar.physical", items: ["headache", "cramps", "fatigue", "bloating", "backache"].map((id) => symptomItem(id)) },
+  { titleKey: "calendar.emotional", items: ["irritable", "sad", "anxious", "happy"].map((id) => symptomItem(id)) },
 ];
 
+// `value` is the stored symptoms.mood string (kept Georgian so existing rows
+// still match); `key` picks the displayed label.
 const moodOptions = [
-  { emoji: "🤩", label: "არაჩვეულებრივი" },
-  { emoji: "😊", label: "კარგი" },
-  { emoji: "😐", label: "ნორმალური" },
-  { emoji: "😔", label: "ცუდი" },
-  { emoji: "😫", label: "საშინელი" },
+  { emoji: "🤩", value: "არაჩვეულებრივი", key: "amazing" },
+  { emoji: "😊", value: "კარგი", key: "good" },
+  { emoji: "😐", value: "ნორმალური", key: "normal" },
+  { emoji: "😔", value: "ცუდი", key: "bad" },
+  { emoji: "😫", value: "საშინელი", key: "terrible" },
 ];
 
 const hasDiaryContent = ({ symptoms = [], mood = null, note = "" } = {}) =>
@@ -106,43 +101,22 @@ const TRIMESTER_COLORS = { 1: "#06d6a0", 2: "#ffd166", 3: "#ff4d88" };
 
 const pregnancySymptomCategories = [
   {
-    title: "ფიზიკური სიმპტომები",
+    titleKey: "calendar.physical",
     items: [
-      { id: "nausea", label: "გულისრევა", icon: "🤢" },
-      { id: "heartburn", label: "გულძმარვა", icon: "🔥" },
-      { id: "fatigue", label: "დაღლილობა", icon: "🥱" },
-      { id: "backache", label: "ზურგის ტკივილი", icon: "⚡" },
-      { id: "bloating", label: "შეშუპება", icon: "🎈" },
-      { id: "headache", label: "თავის ტკივილი", icon: "🤕" },
-      { id: "movement", label: "ბავშვი იძრვის", icon: "👶" },
-      { id: "urination", label: "ხშირი შარდვა", icon: "🚿" },
+      symptomItem("nausea"),
+      symptomItem("heartburn"),
+      symptomItem("fatigue"),
+      symptomItem("backache", "calendar.pregnancySymptoms.backache"),
+      symptomItem("bloating"),
+      symptomItem("headache"),
+      symptomItem("movement"),
+      symptomItem("urination"),
     ],
   },
-  {
-    title: "ემოციური ფონი",
-    items: [
-      { id: "happy", label: "ბედნიერი", icon: "✨" },
-      { id: "anxious", label: "შფოთვა", icon: "😰" },
-      { id: "sad", label: "სევდა", icon: "😢" },
-      { id: "irritable", label: "გაღიზიანება", icon: "💢" },
-    ],
-  },
+  { titleKey: "calendar.emotional", items: ["happy", "anxious", "sad", "irritable"].map((id) => symptomItem(id)) },
 ];
-const MILESTONES = {
-  6:  "პირველი გულისცემა 🫀",
-  8:  "ყველა ძირითადი ორგანო ვითარდება",
-  12: "I ტრიმესტრი დასრულდა 🎉",
-  13: "II ტრიმესტრი იწყება",
-  16: "სქესის გაგება შეიძლება 👶",
-  18: "პირველი მოძრაობა შეიძლება იგრძნო",
-  20: "ანატომიური USG დროა 🔬",
-  24: "ვიაბილობის ზღვარი",
-  28: "III ტრიმესტრი იწყება 🌟",
-  32: "ნაყოფი თითქმის მზადაა",
-  36: "სრული ვადის მიახლოება",
-  37: "სრული ვადა ✨",
-  40: "მშობიარობის სავარაუდო თარიღი 🎊",
-};
+// Weeks that have a milestone text in locales/*.calendar.milestones.
+const MILESTONE_TEXT_WEEKS = [6, 8, 12, 13, 16, 18, 20, 24, 28, 32, 36, 37, 40];
 
 const MILESTONE_WEEKS = new Set([6, 8, 12, 16, 20, 24, 28, 32, 36, 37, 40]);
 
@@ -178,6 +152,9 @@ function buildPregnancyMarks(pregnancyStartDate) {
 }
 
 function PregnancyCalendarScreen() {
+  const { t, language } = useLanguage();
+  applyCalendarLocale(language, t);
+  const shortMonths = getShortMonths(language);
   const { isDark } = useTheme();
   const { pregnancyStartDate } = usePregnancy();
 
@@ -237,7 +214,7 @@ function PregnancyCalendarScreen() {
   };
 
   const selectedWeek = getWeekForDay(selectedDay);
-  const milestone = selectedWeek ? MILESTONES[selectedWeek] : null;
+  const milestone = selectedWeek && MILESTONE_TEXT_WEEKS.includes(selectedWeek) ? t(`calendar.milestones.w${selectedWeek}`) : null;
   const trimesterColor = selectedWeek
     ? selectedWeek <= 12 ? TRIMESTER_COLORS[1] : selectedWeek <= 27 ? TRIMESTER_COLORS[2] : TRIMESTER_COLORS[3]
     : "#ff4d88";
@@ -276,7 +253,7 @@ function PregnancyCalendarScreen() {
 
     try {
       const response = await getDiaryAssistantSupport(entry);
-      const text = response.text || "ასისტენტი ახლა ვერ პასუხობს. სცადე ცოტა ხანში.";
+      const text = response.text || t("calendar.assistantUnavailable");
       lastAdviceSignatureRef.current = signature;
       lastAdviceTextRef.current = text;
       setAssistantSupport({ loading: false, text, signature, error: null });
@@ -286,10 +263,11 @@ function PregnancyCalendarScreen() {
         ...prev,
         loading: false,
         // Keep whatever text we had; if none, show fallback so card stays visible
-        text: prev.text || "ასისტენტი ახლა ვერ პასუხობს. სცადე ცოტა ხანში.",
+        text: prev.text || t("calendar.assistantUnavailable"),
       }));
     }
-  }, []); // stable — deduplication via refs, not state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // stable — deduplication via refs, not state (t only feeds the fallback text)
 
   const loadTodaySymptoms = useCallback(async () => {
     setSymptomsLoading(true);
@@ -329,10 +307,10 @@ function PregnancyCalendarScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       await supabase.from("symptoms").upsert({ user_id: user.id, date: todayStr, symptoms: selectedSymptoms, mood, note, updated_at: new Date().toISOString() }, { onConflict: "user_id,date" });
-      Alert.alert("წარმატება", "დღიური შენახულია ✨");
+      Alert.alert(t("calendar.savedTitle"), t("calendar.diarySaved"));
       setDiaryEverSaved(true);
       loadPregnancyAssistantSupport({ symptoms: selectedSymptoms, mood, note }, { force: true });
-    } catch { Alert.alert("შეცდომა", "შენახვა ვერ მოხერხდა"); }
+    } catch { Alert.alert(t("common.error"), t("calendar.saveFailed")); }
     finally { setSaving(false); }
   };
 
@@ -350,8 +328,8 @@ function PregnancyCalendarScreen() {
           <View style={styles.pageHeader}>
             <View>
               <Text style={styles.pageEyebrow}>MATERNITY CALENDAR</Text>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>ორსულობის კალენდარი</Text>
-              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>თვალი ადევნე კვირებს და მნიშვნელოვან ეტაპებს</Text>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>{t("calendar.pregnancyTitle")}</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>{t("calendar.pregnancySubtitle")}</Text>
             </View>
           </View>
 
@@ -388,11 +366,11 @@ function PregnancyCalendarScreen() {
           </LinearGradient>
 
           <View style={[styles.legend, { backgroundColor: theme.glass, borderWidth: 1, borderColor: theme.border }]}>
-            <LegendItem color={TRIMESTER_COLORS[1]} label="I ტრიმ." textColor={theme.text} />
-            <LegendItem color={TRIMESTER_COLORS[2]} label="II ტრიმ." textColor={theme.text} />
-            <LegendItem color={TRIMESTER_COLORS[3]} label="III ტრიმ." textColor={theme.text} />
-            <LegendItem color={theme.accent} label="დღეს" textColor={theme.text} />
-            <LegendItem color="#ff4d88" label="მშობ. თარ." textColor={theme.text} />
+            <LegendItem color={TRIMESTER_COLORS[1]} label={t("calendar.legendTrimester1")} textColor={theme.text} />
+            <LegendItem color={TRIMESTER_COLORS[2]} label={t("calendar.legendTrimester2")} textColor={theme.text} />
+            <LegendItem color={TRIMESTER_COLORS[3]} label={t("calendar.legendTrimester3")} textColor={theme.text} />
+            <LegendItem color={theme.accent} label={t("common.today")} textColor={theme.text} />
+            <LegendItem color="#ff4d88" label={t("calendar.legendDueDate")} textColor={theme.text} />
           </View>
 
           <View style={styles.sectionContainer}>
@@ -401,11 +379,11 @@ function PregnancyCalendarScreen() {
               {selectedWeek ? (
                 <>
                   <View style={styles.statusRow}>
-                    <Text style={[styles.statusLabel, { color: theme.subText }]}>ორსულობის კვირა:</Text>
-                    <Text style={[styles.statusValue, { color: trimesterColor }]}>{selectedWeek}-ე კვირა</Text>
+                    <Text style={[styles.statusLabel, { color: theme.subText }]}>{t("calendar.pregnancyWeekLabel")}</Text>
+                    <Text style={[styles.statusValue, { color: trimesterColor }]}>{t("home.weekOrdinal", { week: selectedWeek })}</Text>
                   </View>
                   <View style={styles.statusRow}>
-                    <Text style={[styles.statusLabel, { color: theme.subText }]}>ტრიმესტრი:</Text>
+                    <Text style={[styles.statusLabel, { color: theme.subText }]}>{t("calendar.trimesterLabel")}</Text>
                     <Text style={[styles.statusValue, { color: trimesterColor }]}>
                       {selectedWeek <= 12 ? "I" : selectedWeek <= 27 ? "II" : "III"}
                     </Text>
@@ -417,14 +395,14 @@ function PregnancyCalendarScreen() {
                   )}
                 </>
               ) : (
-                <Text style={[styles.emptyText, { color: theme.subText, borderTopWidth: 0 }]}>ეს თარიღი ორსულობამდეა.</Text>
+                <Text style={[styles.emptyText, { color: theme.subText, borderTopWidth: 0 }]}>{t("calendar.beforePregnancy")}</Text>
               )}
             </LinearGradient>
 
             {/* Assistant advice — shown after diary is ever saved */}
             {diaryEverSaved && (
               <View style={[styles.assistantBox, { backgroundColor: theme.glass, borderColor: theme.border, marginTop: 16 }]}>
-                <Text style={[styles.assistantTitle, { color: theme.text }]}>ასისტენტის რჩევა 🤰✨</Text>
+                <Text style={[styles.assistantTitle, { color: theme.text }]}>{t("calendar.pregnancyAdviceTitle")}</Text>
                 <View style={styles.assistantHeader}>
                   <View style={styles.assistantIconBubble}>
                     <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.assistantGuideImage} resizeMode="cover" />
@@ -433,12 +411,12 @@ function PregnancyCalendarScreen() {
                 {assistantSupport.loading && !assistantSupport.text ? (
                   <View style={styles.assistantLoadingRow}>
                     <ActivityIndicator color={theme.accent} size="small" />
-                    <Text style={[styles.assistantText, { color: theme.subText }]}>ასისტენტი ამზადებს შენზე მორგებულ რჩევას...</Text>
+                    <Text style={[styles.assistantText, { color: theme.subText }]}>{t("calendar.preparingAdvice")}</Text>
                   </View>
                 ) : (
                   <Text style={[styles.assistantText, { color: theme.text }]}>{assistantSupport.text}</Text>
                 )}
-                <Text style={{ fontSize: 11, color: "#aaa", textAlign: "right", marginTop: 8, opacity: 0.7 }}>ასისტენტი შეიძლება შეცდეს</Text>
+                <Text style={{ fontSize: 11, color: "#aaa", textAlign: "right", marginTop: 8, opacity: 0.7 }}>{t("home.assistantMayErr")}</Text>
               </View>
             )}
           </View>
@@ -449,29 +427,29 @@ function PregnancyCalendarScreen() {
             <View style={styles.sectionContainer}>
               <View style={styles.diaryHeading}>
                 <View style={styles.diaryHeadingCopy}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი დღიური</Text>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>{t("calendar.todayDiary")}</Text>
                   <Text style={[styles.dateSubtitle, { color: theme.accent }]}>{dayjs().format("dddd, D MMMM")}</Text>
                 </View>
                 <DiaryAvatar accent={theme.accent} isDark={isDark} />
               </View>
 
               <LinearGradient colors={theme.cardGradient} style={[styles.card, { borderColor: theme.border, borderWidth: 1, marginTop: 16 }]}>
-                <Text style={[styles.cardLabel, { color: theme.text }]}>როგორ გრძნობ თავს</Text>
+                <Text style={[styles.cardLabel, { color: theme.text }]}>{t("calendar.howDoYouFeel")}</Text>
                 <View style={styles.moodGrid}>
                   {moodOptions.map((m) => {
-                    const active = mood === m.label;
+                    const active = mood === m.value;
                     return (
                       <TouchableOpacity
-                        key={m.label}
+                        key={m.value}
                         style={[
                           styles.moodItem,
                           { backgroundColor: active ? theme.activeSoft : "transparent", borderColor: active ? theme.activeBorder : "transparent" },
                           active && styles.activeMood,
                         ]}
-                        onPress={() => setMood(m.label)}
+                        onPress={() => setMood(m.value)}
                       >
                         <Text style={styles.moodEmoji}>{m.emoji}</Text>
-                        <Text style={[styles.moodLabel, { color: theme.subText }, active && { color: theme.accent, fontWeight: "700" }]}>{m.label}</Text>
+                        <Text style={[styles.moodLabel, { color: theme.subText }, active && { color: theme.accent, fontWeight: "700" }]}>{t(`calendar.moods.${m.key}`)}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -480,7 +458,7 @@ function PregnancyCalendarScreen() {
 
               {pregnancySymptomCategories.map((cat, idx) => (
                 <View key={idx} style={{ marginTop: 24 }}>
-                  <Text style={[styles.cardLabel, { color: theme.text }]}>{cat.title}</Text>
+                  <Text style={[styles.cardLabel, { color: theme.text }]}>{t(cat.titleKey)}</Text>
                   <View style={styles.chipGrid}>
                     {cat.items.map((item) => {
                       const active = selectedSymptoms.includes(item.id);
@@ -497,7 +475,7 @@ function PregnancyCalendarScreen() {
                           onPress={() => toggleSymptom(item.id)}
                         >
                           <Text style={styles.chipIcon}>{item.icon}</Text>
-                          <Text style={[styles.chipText, { color: theme.text }, active && styles.activeChipText]}>{item.label}</Text>
+                          <Text style={[styles.chipText, { color: theme.text }, active && styles.activeChipText]}>{t(item.labelKey)}</Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -506,10 +484,10 @@ function PregnancyCalendarScreen() {
               ))}
 
               <View style={{ marginTop: 24 }}>
-                <Text style={[styles.cardLabel, { color: theme.text }]}>დღევანდელი ჩანაწერი</Text>
+                <Text style={[styles.cardLabel, { color: theme.text }]}>{t("calendar.todayNote")}</Text>
                 <TextInput
                   style={[styles.noteInput, { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text }]}
-                  placeholder="როგორ ჩაიარა დღემ..."
+                  placeholder={t("calendar.notePlaceholder")}
                   placeholderTextColor={theme.subText}
                   multiline
                   value={note}
@@ -518,7 +496,7 @@ function PregnancyCalendarScreen() {
               </View>
 
               <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.accent }]} onPress={saveSymptoms} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>დღიურის შენახვა</Text>}
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{t("calendar.saveDiary")}</Text>}
               </TouchableOpacity>
             </View>
           )}
@@ -544,7 +522,7 @@ function PregnancyCalendarScreen() {
               })}
             </View>
             <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowMonthPicker(false)}>
-              <Text style={styles.closeModalBtnText}>დახურვა</Text>
+              <Text style={styles.closeModalBtnText}>{t("common.close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -558,6 +536,9 @@ function PregnancyCalendarScreen() {
 }
 
 function RegularCalendarScreen() {
+  const { t, language } = useLanguage();
+  applyCalendarLocale(language, t);
+  const shortMonths = getShortMonths(language);
   const { isDark, isPremium } = useTheme();
   const { markedDates, loadData, addCycle, deleteCycle, rawCycles } = useCycles();
 
@@ -845,7 +826,7 @@ function RegularCalendarScreen() {
       );
       if (error) throw error;
       invalidateAssistantContextCache();
-      Alert.alert("წარმატება", "დღიური შენახულია ✨");
+      Alert.alert(t("calendar.savedTitle"), t("calendar.diarySaved"));
       const savedDiary = {
         symptoms: selectedSymptoms,
         mood,
@@ -861,7 +842,7 @@ function RegularCalendarScreen() {
       // Refresh calendar details if today is selected
       if (selectedDay === todayStr) fetchDayDetails(todayStr);
     } catch {
-      Alert.alert("შეცდომა", "დღიურის შენახვა ვერ მოხერხდა");
+      Alert.alert(t("common.error"), t("calendar.diarySaveFailed"));
     } finally {
       setSaving(false);
     }
@@ -896,9 +877,9 @@ function RegularCalendarScreen() {
           {/* --------------- CALENDAR --------------- */}
           <View style={styles.pageHeader}>
             <View>
-              <Text style={styles.pageEyebrow}>ციკლის კალენდარი</Text>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>შენი კალენდარი</Text>
-              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>მართე ციკლი და დღიური ერთ სივრცეში</Text>
+              <Text style={styles.pageEyebrow}>{t("calendar.regularEyebrow")}</Text>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>{t("calendar.regularTitle")}</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>{t("calendar.regularSubtitle")}</Text>
             </View>
           </View>
 
@@ -944,9 +925,9 @@ function RegularCalendarScreen() {
 
           {/* Legend */}
           <View style={[styles.legend, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
-            <LegendItem color={theme.accent} label="პერიოდი" textColor={theme.text} />
-            <LegendItem color={theme.ovulation} label="ოვულაცია" textColor={theme.text} />
-            <LegendItem color={theme.fertile} label="ნაყოფიერი" textColor={theme.text} />
+            <LegendItem color={theme.accent} label={t("home.phases.period")} textColor={theme.text} />
+            <LegendItem color={theme.ovulation} label={t("home.legendOvulation")} textColor={theme.text} />
+            <LegendItem color={theme.fertile} label={t("home.legendFertile")} textColor={theme.text} />
           </View>
 
           {/* Selected-day details */}
@@ -960,29 +941,29 @@ function RegularCalendarScreen() {
                   <TouchableOpacity
                     style={[styles.actionBtn, { backgroundColor: isDark ? "rgba(255,50,50,0.1)" : "#ffe5e5" }]}
                     onPress={() =>
-                      Alert.alert("წაშლა", "ნამდვილად გინდა ამ ჩანაწერის წაშლა?", [
-                        { text: "გაუქმება", style: "cancel" },
-                        { text: "წაშლა", style: "destructive", onPress: () => deleteCycle(activeCycle) },
+                      Alert.alert(t("common.delete"), t("calendar.deleteConfirm"), [
+                        { text: t("common.cancel"), style: "cancel" },
+                        { text: t("common.delete"), style: "destructive", onPress: () => deleteCycle(activeCycle) },
                       ])
                     }
                   >
-                    <Text style={{ color: "#ff3333", fontWeight: "700" }}>წაშლა</Text>
+                    <Text style={{ color: "#ff3333", fontWeight: "700" }}>{t("common.delete")}</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
                     style={[styles.actionBtn, { backgroundColor: isDark ? "rgba(233,69,96,0.15)" : "#FFF0F5" }]}
                     onPress={() =>
                       Alert.alert(
-                        "დამატება",
-                        `${dayjs(selectedDay).format("D MMMM")}-ს დავიწყოთ პერიოდის ჩანაწერი?`,
+                        t("common.add"),
+                        t("calendar.addPeriodPrompt", { date: dayjs(selectedDay).format("D MMMM") }),
                         [
-                          { text: "გაუქმება", style: "cancel" },
-                          { text: "დამატება", onPress: async () => { await addCycle(selectedDay); } },
+                          { text: t("common.cancel"), style: "cancel" },
+                          { text: t("common.add"), onPress: async () => { await addCycle(selectedDay); } },
                         ]
                       )
                     }
                   >
-                    <Text style={[styles.actionBtnText, { color: theme.accent }]}>+ დამატება</Text>
+                    <Text style={[styles.actionBtnText, { color: theme.accent }]}>{t("calendar.addButton")}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -993,15 +974,15 @@ function RegularCalendarScreen() {
             ) : (
               <LinearGradient colors={theme.cardGradient} style={[styles.card, { borderColor: theme.border, borderWidth: 1 }]}>
                 <View style={styles.statusRow}>
-                  <Text style={[styles.statusLabel, { color: theme.subText }]}>სტატუსი:</Text>
+                  <Text style={[styles.statusLabel, { color: theme.subText }]}>{t("calendar.statusLabel")}</Text>
                   <Text style={[styles.statusValue, { color: theme.text }]}>
-                    {activeCycle ? "პერიოდის დღე" : "თავისუფალი დღე"}
+                    {activeCycle ? t("calendar.periodDay") : t("calendar.freeDay")}
                   </Text>
                 </View>
 
                 {activeCycle && !activeCycle.isPrediction && (
                   <View style={[styles.statusRow, { alignItems: "center", marginTop: 5, marginBottom: 15 }]}>
-                    <Text style={[styles.statusLabel, { color: theme.subText }]}>ხანგრძლივობა:</Text>
+                    <Text style={[styles.statusLabel, { color: theme.subText }]}>{t("calendar.durationLabel")}</Text>
                     <View style={{ flexDirection: "row", alignItems: "center" }}>
                       <TouchableOpacity
                         onPress={() => adjustPeriodLength(activeCycle, -1)}
@@ -1010,7 +991,7 @@ function RegularCalendarScreen() {
                         <Text style={{ color: theme.text, fontWeight: "bold", fontSize: 16 }}>-</Text>
                       </TouchableOpacity>
                       <Text style={{ color: theme.text, fontWeight: "bold", marginHorizontal: 15 }}>
-                        {activeCycle.period_length} დღე
+                        {t("home.daysValue", { count: activeCycle.period_length })}
                       </Text>
                       <TouchableOpacity
                         onPress={() => adjustPeriodLength(activeCycle, 1)}
@@ -1024,7 +1005,7 @@ function RegularCalendarScreen() {
 
                 {dayDetails.mood && (
                   <View style={styles.statusRow}>
-                    <Text style={[styles.statusLabel, { color: theme.subText }]}>განწყობა:</Text>
+                    <Text style={[styles.statusLabel, { color: theme.subText }]}>{t("calendar.moodLabel")}</Text>
                     <Text style={[styles.statusValue, { color: theme.text }]}>{dayDetails.mood}</Text>
                   </View>
                 )}
@@ -1034,15 +1015,13 @@ function RegularCalendarScreen() {
                     {dayDetails.symptoms.map((s, i) => (
                       <View key={i} style={[styles.symptomPill, { backgroundColor: theme.pill }]}>
                         <Text style={[styles.symptomPillText, { color: theme.text }]}>
-                          {symptomLabels[s] || s}
+                          {symptomLabel(t, s)}
                         </Text>
                       </View>
                     ))}
                   </View>
                 ) : (
-                  <Text style={[styles.emptyText, { borderTopColor: theme.divider, color: theme.subText }]}>
-                    ამ დღეს სიმპტომები არ ჩაგიწერია.
-                  </Text>
+                  <Text style={[styles.emptyText, { borderTopColor: theme.divider, color: theme.subText }]}>{t("calendar.noSymptoms")}</Text>
                 )}
 
                 {dayDetails.note && (
@@ -1069,13 +1048,11 @@ function RegularCalendarScreen() {
                         <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.assistantGuideImage} resizeMode="cover" />
                       </View>
                       <View style={styles.assistantCopy}>
-                        <Text style={styles.assistantEyebrow}>AI ასისტენტი</Text>
-                        <Text style={[styles.assistantTitle, { color: theme.text }]}>როგორ ხარ დღეს?</Text>
+                        <Text style={styles.assistantEyebrow}>{t("calendar.aiAssistant")}</Text>
+                        <Text style={[styles.assistantTitle, { color: theme.text }]}>{t("calendar.howAreYouToday")}</Text>
                       </View>
                     </View>
-                    <Text style={[styles.assistantText, { color: theme.subText }]}>
-                      შეავსე დღიური და მიიღე შენზე მორგებული მოკლე რჩევა.
-                    </Text>
+                    <Text style={[styles.assistantText, { color: theme.subText }]}>{t("calendar.fillDiaryHint")}</Text>
                   </LinearGradient>
                 )}
               </LinearGradient>
@@ -1092,7 +1069,7 @@ function RegularCalendarScreen() {
             <View style={styles.sectionContainer}>
               <View style={styles.diaryHeading}>
                 <View style={styles.diaryHeadingCopy}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>დღევანდელი დღიური</Text>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>{t("calendar.todayDiary")}</Text>
                   <Text style={[styles.dateSubtitle, { color: theme.accent }]}>
                     {dayjs().format("dddd, D MMMM")}
                   </Text>
@@ -1115,8 +1092,8 @@ function RegularCalendarScreen() {
                       <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.assistantGuideImage} resizeMode="cover" />
                     </View>
                     <View style={styles.assistantCopy}>
-                      <Text style={styles.assistantEyebrow}>დღიური AI</Text>
-                      <Text style={[styles.assistantTitle, { color: theme.text }]}>ასისტენტის რჩევა</Text>
+                      <Text style={styles.assistantEyebrow}>{t("calendar.diaryAi")}</Text>
+                      <Text style={[styles.assistantTitle, { color: theme.text }]}>{t("calendar.assistantAdvice")}</Text>
                     </View>
                   </View>
 
@@ -1124,17 +1101,15 @@ function RegularCalendarScreen() {
                     <PrimePreview
                       minHeight={128}
                       concealCompletely
-                      message="სრული რჩევისთვის გახსენი Prime"
-                      buttonLabel="გახსნა"
+                      message={t("home.primeAdviceMessage")}
+                      buttonLabel={t("home.unlock")}
                     >
                       <View style={styles.assistantHiddenPreview} />
                     </PrimePreview>
                   ) : assistantSupport.loading ? (
                     <View style={styles.assistantLoadingRow}>
                       <ActivityIndicator color={theme.accent} size="small" />
-                      <Text style={[styles.assistantText, { color: theme.subText }]}>
-                        ასისტენტი ამზადებს შენზე მორგებულ რჩევას...
-                      </Text>
+                      <Text style={[styles.assistantText, { color: theme.subText }]}>{t("calendar.preparingAdvice")}</Text>
                     </View>
                   ) : (
                     <Text style={[styles.assistantText, { color: theme.text }]}>
@@ -1142,22 +1117,22 @@ function RegularCalendarScreen() {
                     </Text>
                   )}
                   {isPremium && !assistantSupport.loading && assistantSupport.text ? (
-                    <Text style={[styles.assistantDisclaimer, { color: theme.subText }]}>ასისტენტი შეიძლება შეცდეს</Text>
+                    <Text style={[styles.assistantDisclaimer, { color: theme.subText }]}>{t("home.assistantMayErr")}</Text>
                   ) : null}
                 </LinearGradient>
               )}
 
               {/* Mood */}
               <LinearGradient colors={theme.cardGradient} style={[styles.card, { borderColor: theme.border, borderWidth: 1, marginTop: 16 }]}>
-                <Text style={[styles.cardLabel, { color: theme.text }]}>როგორ გრძნობ თავს</Text>
+                <Text style={[styles.cardLabel, { color: theme.text }]}>{t("calendar.howDoYouFeel")}</Text>
                 <View style={styles.moodGrid}>
                   {moodOptions.map((m) => {
-                    const active = mood === m.label;
+                    const active = mood === m.value;
                     return (
                       <TouchableOpacity
-                        key={m.label}
+                        key={m.value}
                         style={[styles.moodItem, active && styles.activeMood]}
-                        onPress={() => setMood(m.label)}
+                        onPress={() => setMood(m.value)}
                       >
                         <Text style={styles.moodEmoji}>{m.emoji}</Text>
                         <Text
@@ -1167,7 +1142,7 @@ function RegularCalendarScreen() {
                             active && { color: theme.accent, fontWeight: "700" },
                           ]}
                         >
-                          {m.label}
+                          {t(`calendar.moods.${m.key}`)}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -1178,7 +1153,7 @@ function RegularCalendarScreen() {
               {/* Symptom categories */}
               {symptomCategories.map((cat, idx) => (
                 <View key={idx} style={{ marginTop: 24 }}>
-                  <Text style={[styles.cardLabel, { color: theme.text }]}>{cat.title}</Text>
+                  <Text style={[styles.cardLabel, { color: theme.text }]}>{t(cat.titleKey)}</Text>
                   <View style={styles.chipGrid}>
                     {cat.items.map((item) => {
                       const active = selectedSymptoms.includes(item.id);
@@ -1200,7 +1175,7 @@ function RegularCalendarScreen() {
                               active && styles.activeChipText,
                             ]}
                           >
-                            {item.label}
+                            {t(item.labelKey)}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -1211,10 +1186,10 @@ function RegularCalendarScreen() {
 
               {/* Note */}
               <View style={{ marginTop: 24 }}>
-                <Text style={[styles.cardLabel, { color: theme.text }]}>დღევანდელი ჩანაწერი</Text>
+                <Text style={[styles.cardLabel, { color: theme.text }]}>{t("calendar.todayNote")}</Text>
                 <TextInput
                   style={[styles.noteInput, { backgroundColor: theme.inputBg, color: theme.text }]}
-                  placeholder="როგორ ჩაიარა დღემ..."
+                  placeholder={t("calendar.notePlaceholder")}
                   placeholderTextColor={theme.subText}
                   multiline
                   value={note}
@@ -1231,7 +1206,7 @@ function RegularCalendarScreen() {
                 {saving ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.saveBtnText}>დღიურის შენახვა</Text>
+                  <Text style={styles.saveBtnText}>{t("calendar.saveDiary")}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1276,7 +1251,7 @@ function RegularCalendarScreen() {
             </View>
 
             <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowMonthPicker(false)}>
-              <Text style={styles.closeModalBtnText}>დახურვა</Text>
+              <Text style={styles.closeModalBtnText}>{t("common.close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1291,37 +1266,38 @@ function RegularCalendarScreen() {
 // ================= FERTILITY ("მინდა დაორსულება") =================
 
 const LH_TEST_OPTIONS = [
-  { id: "negative", label: "უარყოფითი", icon: "➖" },
-  { id: "weak", label: "სუსტი დადებითი", icon: "🌗" },
-  { id: "positive", label: "დადებითი", icon: "➕" },
-  { id: "peak", label: "პიკი", icon: "🔥" },
+  { id: "negative", icon: "➖" },
+  { id: "weak", icon: "🌗" },
+  { id: "positive", icon: "➕" },
+  { id: "peak", icon: "🔥" },
 ];
 
 const MUCUS_OPTIONS = [
-  { id: "dry", label: "მშრალი", icon: "🍂" },
-  { id: "sticky", label: "წებოვანი", icon: "🩹" },
-  { id: "creamy", label: "კრემისებრი", icon: "🥛" },
-  { id: "watery", label: "წყლიანი", icon: "💧" },
-  { id: "eggwhite", label: "კვერცხის ცილა", icon: "🥚" },
+  { id: "dry", icon: "🍂" },
+  { id: "sticky", icon: "🩹" },
+  { id: "creamy", icon: "🥛" },
+  { id: "watery", icon: "💧" },
+  { id: "eggwhite", icon: "🥚" },
 ];
 
 const OVULATION_SYMPTOMS = [
-  { id: "cramps", label: "მუცლის ტკივილი", icon: "😣" },
-  { id: "breast", label: "მკერდის მგრძნობელობა", icon: "🌸" },
-  { id: "libido", label: "ლიბიდოს ცვლილება", icon: "💗" },
-  { id: "fatigue", label: "დაღლილობა", icon: "🥱" },
-  { id: "nausea", label: "გულისრევა", icon: "🤢" },
-  { id: "energy", label: "ენერგიის მომატება", icon: "⚡" },
+  { id: "cramps", icon: "😣" },
+  { id: "breast", icon: "🌸" },
+  { id: "libido", icon: "💗" },
+  { id: "fatigue", icon: "🥱" },
+  { id: "nausea", icon: "🤢" },
+  { id: "energy", icon: "⚡" },
 ];
 
+// Texts live in locales/*.calendar.guide.<id>
 const FERTILITY_GUIDE = [
-  { id: "marks", icon: "🗓️", title: "კალენდრის ფერები", text: "წითელი — მენსტრუაცია, მწვანე — ნაყოფიერი დღეები, ყვითელი — ოვულაცია. მწვანე წერტილი ნიშნავს, რომ იმ დღეს რაღაც უკვე ჩაწერე." },
-  { id: "pick", icon: "👆", title: "აირჩიე დღე", text: "დააჭირე კალენდარში ნებისმიერ დღეს და ქვემოთ გამოჩნდება იმ დღის ჩანაწერები. ჩაწერა შეგიძლია ნებისმიერ დღეზე — არა მხოლოდ დღევანდელზე." },
-  { id: "lh", icon: "🧪", title: "ოვულაციის ტესტი", text: "ოვულაციამდე ~5 დღით ადრე დაიწყე ტესტირება, დღეში ერთხელ. დადებითის შემდეგ ოვულაცია ჩვეულებრივ 24–36 საათში ხდება." },
-  { id: "bbt", icon: "🌡️", title: "ბაზალური ტემპერატურა", text: "გაზომე დილით, ლოგინიდან ადგომამდე, ყოველდღე ერთსა და იმავე დროს. 9+ დღის შემდეგ აპი ტემპერატურის ახტომას ამოიცნობს და ოვულაციას დაადასტურებს." },
-  { id: "mucus", icon: "💧", title: "ლორწო", text: "კვერცხის ცილის მსგავსი ან წყლიანი ლორწო ყველაზე ნაყოფიერი ნიშანია — ოვულაცია ახლოსაა." },
-  { id: "sex", icon: "❤️", title: "ურთიერთობა", text: "ნაყოფიერ ფანჯარაში ყოველ მეორე დღეს ურთიერთობა ოპტიმალურია. აპი ავტომატურად აღნიშნავს, დაემთხვა თუ არა ნაყოფიერ დღეს." },
-  { id: "stats", icon: "📊", title: "სად ვნახო შედეგები", text: "სტატისტიკის გვერდზე ნახავ ოვულაციის დადასტურებას, პროგნოზის ხარისხს, ტესტის სწორ დროს და ექიმისთვის გასაზიარებელ ანგარიშს." },
+  { id: "marks", icon: "🗓️" },
+  { id: "pick", icon: "👆" },
+  { id: "lh", icon: "🧪" },
+  { id: "bbt", icon: "🌡️" },
+  { id: "mucus", icon: "💧" },
+  { id: "sex", icon: "❤️" },
+  { id: "stats", icon: "📊" },
 ];
 
 // A day is fertile if the base cycle marks paint it as fertile (green) or
@@ -1332,6 +1308,9 @@ function isFertileDayFromMarks(marks, dateStr) {
 }
 
 function FertilityCalendarScreen() {
+  const { t, language } = useLanguage();
+  applyCalendarLocale(language, t);
+  const shortMonths = getShortMonths(language);
   const { isDark } = useTheme();
   const { markedDates, loadData, rawCycles } = useCycles();
 
@@ -1498,10 +1477,10 @@ function FertilityCalendarScreen() {
           { force: true }
         );
       } else {
-        Alert.alert("შენახულია ✨", "კომენტარი შენახულია.");
+        Alert.alert(t("calendar.noteSavedTitle"), t("calendar.noteSaved"));
       }
     } catch {
-      Alert.alert("შეცდომა", "კომენტარის შენახვა ვერ მოხერხდა.");
+      Alert.alert(t("common.error"), t("calendar.noteSaveFailed"));
     } finally {
       setNoteSaving(false);
     }
@@ -1590,7 +1569,7 @@ function FertilityCalendarScreen() {
     if (!clean) { saveLog(FERTILITY_LOG_TYPES.bbt, null); return; }
     const temp = Number(clean);
     if (Number.isNaN(temp) || temp < 34 || temp > 43) {
-      Alert.alert("არასწორი ტემპერატურა", "შეიყვანე ბაზალური ტემპერატურა 34–43 °C შუალედში.");
+      Alert.alert(t("calendar.badTempTitle"), t("calendar.badTempBody"));
       return;
     }
     saveLog(FERTILITY_LOG_TYPES.bbt, { temp });
@@ -1611,9 +1590,9 @@ function FertilityCalendarScreen() {
         >
           <View style={styles.pageHeader}>
             <View>
-              <Text style={[styles.pageEyebrow, { color: theme.accent }]}>დაორსულების კალენდარი</Text>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>ნაყოფიერების ტრეკერი 🌿</Text>
-              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>აღრიცხე ტესტები, ტემპერატურა და ნიშნები</Text>
+              <Text style={[styles.pageEyebrow, { color: theme.accent }]}>{t("calendar.fertilityEyebrow")}</Text>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>{t("calendar.fertilityTitle")}</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.subText }]}>{t("calendar.fertilitySubtitle")}</Text>
             </View>
             <TouchableOpacity
               activeOpacity={0.8}
@@ -1658,9 +1637,9 @@ function FertilityCalendarScreen() {
           </LinearGradient>
 
           <View style={[styles.legend, { backgroundColor: theme.softCard, borderColor: theme.border }]}>
-            <LegendItem color={theme.period} label="პერიოდი" textColor={theme.text} />
-            <LegendItem color={theme.ovulation} label="ოვულაცია" textColor={theme.text} />
-            <LegendItem color={theme.fertile} label="ნაყოფიერი" textColor={theme.text} />
+            <LegendItem color={theme.period} label={t("home.phases.period")} textColor={theme.text} />
+            <LegendItem color={theme.ovulation} label={t("home.legendOvulation")} textColor={theme.text} />
+            <LegendItem color={theme.fertile} label={t("home.legendFertile")} textColor={theme.text} />
           </View>
 
           {/* Selected-day fertility logging */}
@@ -1669,7 +1648,7 @@ function FertilityCalendarScreen() {
               <Text style={[styles.sectionTitle, { color: theme.text }]}>{dayjs(selectedDay).format("D MMMM")}</Text>
               {selectedIsFertile && (
                 <View style={[styles.fertBadge, { backgroundColor: theme.fertile + "22", borderColor: theme.fertile }]}>
-                  <Text style={[styles.fertBadgeText, { color: theme.accent }]}>ნაყოფიერი დღე 🌿</Text>
+                  <Text style={[styles.fertBadgeText, { color: theme.accent }]}>{t("calendar.fertileDayBadge")}</Text>
                 </View>
               )}
             </View>
@@ -1680,29 +1659,29 @@ function FertilityCalendarScreen() {
               <>
                 {/* Intercourse */}
                 <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>❤️ ინტიმური ურთიერთობა</Text>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>{t("calendar.intercourseTitle")}</Text>
                   <View style={styles.fertRow}>
                     <FertChip
-                      label="დაცული" active={intercourseLog?.protected === true} theme={theme}
+                      label={t("calendar.protectedChip")} active={intercourseLog?.protected === true} theme={theme}
                       onPress={() => saveLog(FERTILITY_LOG_TYPES.intercourse, intercourseLog?.protected === true ? null : { protected: true })}
                     />
                     <FertChip
-                      label="დაუცველი" active={intercourseLog?.protected === false} theme={theme}
+                      label={t("calendar.unprotectedChip")} active={intercourseLog?.protected === false} theme={theme}
                       onPress={() => saveLog(FERTILITY_LOG_TYPES.intercourse, intercourseLog?.protected === false ? null : { protected: false })}
                     />
                   </View>
                   {intercourseLog && selectedIsFertile && (
-                    <Text style={[styles.fertHint, { color: theme.accent }]}>✓ დაემთხვა ნაყოფიერ დღეს</Text>
+                    <Text style={[styles.fertHint, { color: theme.accent }]}>{t("calendar.matchedFertileDay")}</Text>
                   )}
                 </View>
 
                 {/* LH test */}
                 <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>🧪 ოვულაციის ტესტი</Text>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>{t("calendar.lhTitle")}</Text>
                   <View style={styles.fertWrap}>
                     {LH_TEST_OPTIONS.map((opt) => (
                       <FertChip
-                        key={opt.id} label={`${opt.icon} ${opt.label}`} active={lhResult === opt.id} theme={theme}
+                        key={opt.id} label={`${opt.icon} ${t(`calendar.lh.${opt.id}`)}`} active={lhResult === opt.id} theme={theme}
                         onPress={() => saveLog(FERTILITY_LOG_TYPES.lhTest, lhResult === opt.id ? null : { result: opt.id })}
                       />
                     ))}
@@ -1711,7 +1690,7 @@ function FertilityCalendarScreen() {
 
                 {/* BBT */}
                 <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>🌡️ ბაზალური ტემპერატურა</Text>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>{t("calendar.bbtTitle")}</Text>
                   <View style={styles.fertRow}>
                     <TextInput
                       value={bbtInput}
@@ -1723,18 +1702,18 @@ function FertilityCalendarScreen() {
                     />
                     <Text style={[styles.bbtUnit, { color: theme.subText }]}>°C</Text>
                     <TouchableOpacity style={[styles.bbtSaveBtn, { backgroundColor: theme.accent }]} onPress={saveBbt}>
-                      <Text style={styles.bbtSaveText}>შენახვა</Text>
+                      <Text style={styles.bbtSaveText}>{t("common.save")}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
 
                 {/* Cervical mucus */}
                 <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>💧 საშვილოსნოს ყელის ლორწო</Text>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>{t("calendar.mucusTitle")}</Text>
                   <View style={styles.fertWrap}>
                     {MUCUS_OPTIONS.map((opt) => (
                       <FertChip
-                        key={opt.id} label={`${opt.icon} ${opt.label}`} active={mucusValue === opt.id} theme={theme}
+                        key={opt.id} label={`${opt.icon} ${t(`calendar.mucus.${opt.id}`)}`} active={mucusValue === opt.id} theme={theme}
                         onPress={() => saveLog(FERTILITY_LOG_TYPES.cervicalMucus, mucusValue === opt.id ? null : { mucus: opt.id })}
                       />
                     ))}
@@ -1743,11 +1722,11 @@ function FertilityCalendarScreen() {
 
                 {/* Ovulation symptoms */}
                 <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>🌸 ოვულაციის ნიშნები</Text>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>{t("calendar.ovulationSignsTitle")}</Text>
                   <View style={styles.fertWrap}>
                     {OVULATION_SYMPTOMS.map((opt) => (
                       <FertChip
-                        key={opt.id} label={`${opt.icon} ${opt.label}`} active={ovSymptoms.includes(opt.id)} theme={theme}
+                        key={opt.id} label={`${opt.icon} ${t(`calendar.ovulationSigns.${opt.id}`)}`} active={ovSymptoms.includes(opt.id)} theme={theme}
                         onPress={() => toggleOvSymptom(opt.id)}
                       />
                     ))}
@@ -1756,11 +1735,11 @@ function FertilityCalendarScreen() {
 
                 {/* Supplements */}
                 <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>💊 ვიტამინები და დამატებები</Text>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>{t("calendar.supplementsTitle")}</Text>
                   <View style={styles.fertWrap}>
                     {SUPPLEMENT_OPTIONS.map((opt) => (
                       <FertChip
-                        key={opt.id} label={`${opt.icon} ${opt.label}`} active={takenSupplements.includes(opt.id)} theme={theme}
+                        key={opt.id} label={`${opt.icon} ${t(`fertility.supplements.${opt.id}`)}`} active={takenSupplements.includes(opt.id)} theme={theme}
                         onPress={() => toggleSupplement(opt.id)}
                       />
                     ))}
@@ -1769,11 +1748,11 @@ function FertilityCalendarScreen() {
 
                 {/* Comment */}
                 <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>📝 კომენტარი</Text>
+                  <Text style={[styles.fertBlockTitle, { color: theme.text }]}>{t("calendar.commentTitle")}</Text>
                   <TextInput
                     value={note}
                     onChangeText={setNote}
-                    placeholder="როგორ ჩაიარა დღემ, რას შეამჩნევდი..."
+                    placeholder={t("calendar.commentPlaceholder")}
                     placeholderTextColor={theme.subText}
                     multiline
                     style={[styles.fertNoteInput, { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text }]}
@@ -1783,7 +1762,7 @@ function FertilityCalendarScreen() {
                     onPress={saveNote}
                     disabled={noteSaving}
                   >
-                    {noteSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.fertNoteBtnText}>კომენტარის შენახვა</Text>}
+                    {noteSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.fertNoteBtnText}>{t("calendar.saveComment")}</Text>}
                   </TouchableOpacity>
                 </View>
 
@@ -1795,23 +1774,19 @@ function FertilityCalendarScreen() {
                         <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.fertAdviceImage} resizeMode="cover" />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.fertAdviceEyebrow, { color: theme.accent }]}>დღიური AI</Text>
-                        <Text style={[styles.fertBlockTitle, { color: theme.text, marginBottom: 0 }]}>ასისტენტის რჩევა</Text>
+                        <Text style={[styles.fertAdviceEyebrow, { color: theme.accent }]}>{t("calendar.diaryAi")}</Text>
+                        <Text style={[styles.fertBlockTitle, { color: theme.text, marginBottom: 0 }]}>{t("calendar.assistantAdvice")}</Text>
                       </View>
                     </View>
                     {assistantSupport.loading ? (
                       <View style={styles.fertAdviceLoading}>
                         <ActivityIndicator color={theme.accent} size="small" />
-                        <Text style={[styles.fertTipText, { color: theme.subText, flex: 1 }]}>
-                          ასისტენტი ამზადებს შენზე მორგებულ რჩევას...
-                        </Text>
+                        <Text style={[styles.fertTipText, { color: theme.subText, flex: 1 }]}>{t("calendar.preparingAdvice")}</Text>
                       </View>
                     ) : (
                       <>
                         <Text style={[styles.fertAdviceText, { color: theme.text }]}>{assistantSupport.text}</Text>
-                        <Text style={[styles.fertDisclaimer, { color: theme.subText, marginTop: 10, textAlign: "left" }]}>
-                          ასისტენტი შეიძლება შეცდეს
-                        </Text>
+                        <Text style={[styles.fertDisclaimer, { color: theme.subText, marginTop: 10, textAlign: "left" }]}>{t("home.assistantMayErr")}</Text>
                       </>
                     )}
                   </View>
@@ -1819,7 +1794,7 @@ function FertilityCalendarScreen() {
 
                 {recommendations.length > 0 && (
                   <View style={[styles.fertBlock, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                    <Text style={[styles.fertBlockTitle, { color: theme.text }]}>💡 დღევანდელი რეკომენდაციები</Text>
+                    <Text style={[styles.fertBlockTitle, { color: theme.text }]}>{t("calendar.todayRecommendations")}</Text>
                     {recommendations.map((tip) => (
                       <View key={tip.id} style={styles.fertTipRow}>
                         <Text style={styles.fertTipIcon}>{tip.icon}</Text>
@@ -1832,9 +1807,7 @@ function FertilityCalendarScreen() {
                   </View>
                 )}
 
-                <Text style={[styles.fertDisclaimer, { color: theme.subText }]}>
-                  ℹ️ ეს მონაცემები ინფორმაციული დანიშნულებისაა და არ ცვლის ექიმის კონსულტაციას.
-                </Text>
+                <Text style={[styles.fertDisclaimer, { color: theme.subText }]}>{t("calendar.fertilityDisclaimer")}</Text>
               </>
             )}
           </View>
@@ -1868,7 +1841,7 @@ function FertilityCalendarScreen() {
               })}
             </View>
             <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowMonthPicker(false)}>
-              <Text style={styles.closeModalBtnText}>დახურვა</Text>
+              <Text style={styles.closeModalBtnText}>{t("common.close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1877,23 +1850,21 @@ function FertilityCalendarScreen() {
       <Modal visible={showGuide} transparent animationType="slide" onRequestClose={() => setShowGuide(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.guideSheet, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.guideTitle, { color: theme.text }]}>როგორ გამოვიყენო ეს გვერდი 🌿</Text>
+            <Text style={[styles.guideTitle, { color: theme.text }]}>{t("calendar.guideTitle")}</Text>
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
               {FERTILITY_GUIDE.map((item) => (
                 <View key={item.id} style={styles.guideRow}>
                   <Text style={styles.guideIcon}>{item.icon}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.guideItemTitle, { color: theme.text }]}>{item.title}</Text>
-                    <Text style={[styles.guideItemText, { color: theme.subText }]}>{item.text}</Text>
+                    <Text style={[styles.guideItemTitle, { color: theme.text }]}>{t(`calendar.guide.${item.id}.title`)}</Text>
+                    <Text style={[styles.guideItemText, { color: theme.subText }]}>{t(`calendar.guide.${item.id}.text`)}</Text>
                   </View>
                 </View>
               ))}
-              <Text style={[styles.guideFootnote, { color: theme.subText }]}>
-                ℹ️ რაც მეტ დღეს შეავსებ, მით ზუსტდება ოვულაციის შეფასება. ეს ინფორმაციული ხელსაწყოა და არ ცვლის ექიმის კონსულტაციას.
-              </Text>
+              <Text style={[styles.guideFootnote, { color: theme.subText }]}>{t("calendar.guideFootnote")}</Text>
             </ScrollView>
             <TouchableOpacity style={[styles.guideCloseBtn, { backgroundColor: theme.accent }]} onPress={() => setShowGuide(false)}>
-              <Text style={styles.guideCloseText}>გასაგებია</Text>
+              <Text style={styles.guideCloseText}>{t("calendar.gotIt")}</Text>
             </TouchableOpacity>
           </View>
         </View>

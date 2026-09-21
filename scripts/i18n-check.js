@@ -34,6 +34,7 @@ const MIGRATED_FILES = [
   "app/onboarding/notifications.jsx",
   "app/(tabs)/profile.js",
   "app/(tabs)/index.js",
+  "app/(tabs)/calendar.js",
 ];
 
 // Georgian literals that are allowed to stay in code because they are stored
@@ -46,6 +47,8 @@ const DB_VALUE_LITERALS = new Set([
   "არა", "ჰორმონალური პრობლემა", "ინფექციური პრობლემა", "არ ვიცი",
   // profiles.goal
   "ციკლის კონტროლი", "დაორსულება", "ჯანმრთელობის მონიტორინგი",
+  // symptoms.mood
+  "არაჩვეულებრივი", "კარგი", "ნორმალური", "ცუდი", "საშინელი",
 ]);
 
 // Georgian strings that were in code on main but are now produced by a
@@ -53,6 +56,10 @@ const DB_VALUE_LITERALS = new Set([
 const MOVED_TO_LIBRARY = new Set([
   "იანვარი", "თებერვალი", "მარტი", "აპრილი", "მაისი", "ივნისი",
   "ივლისი", "აგვისტო", "სექტემბერი", "ოქტომბერი", "ნოემბერი", "დეკემბერი",
+  "იან.", "თებ.", "მარ.", "აპრ.", "მაი.", "ივნ.", "ივლ.", "აგვ.", "სექ.", "ოქტ.", "ნოე.", "დეკ.",
+  "იან", "თებ", "მარ", "აპრ", "მაი", "ივნ", "ივლ", "აგვ", "სექ", "ოქტ", "ნოე", "დეკ",
+  "კვირა", "ორშაბათი", "სამშაბათი", "ოთხშაბათი", "ხუთშაბათი", "პარასკევი", "შაბათი",
+  "კვი", "ორშ", "სამ", "ოთხ", "ხუთ", "პარ", "შაბ",
 ]);
 
 const GEORGIAN = /[Ⴀ-ჿ]/;
@@ -163,6 +170,10 @@ for (const file of MIGRATED_FILES) {
     const normalised = text.trim();
     if (DB_VALUE_LITERALS.has(text) || MOVED_TO_LIBRARY.has(text)) continue;
     if (kaValues.has(text) || kaValues.has(normalised) || kaJoined.includes(normalised)) continue;
+    // "თავის ტკივილი 🤕" is now label + icon joined at runtime — compare without
+    // the trailing emoji.
+    const withoutEmoji = normalised.replace(/[\s\p{Extended_Pictographic}️]+$/u, "");
+    if (withoutEmoji && kaJoined.includes(withoutEmoji)) continue;
     // Template literals: `კვირა ${currentWeek}` became "კვირა {{week}}" — every
     // Georgian fragment between the ${…} holes must still exist somewhere.
     // Quoted inserts ("\"მინდა დაორსულება\" რეჟიმი…" → "\"{{mode}}\" რეჟიმი…")
