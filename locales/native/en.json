@@ -1,0 +1,5 @@
+{
+  "NSFaceIDUsageDescription": "Face ID is used to sign in to the app quickly and securely.",
+  "NSUserTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you and measure app install campaigns.",
+  "NSPhotoLibraryUsageDescription": "Photo access is needed to choose a profile picture."
+}
