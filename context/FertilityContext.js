@@ -4,6 +4,7 @@ import { AppState } from "react-native";
 import { supabase } from "../services/supabase";
 import { isAdminEmail, isTestAccountEmail } from "../services/adminAccess";
 import { resolvePregnancyAccessFromProfile } from "../services/purchases";
+import { usePregnancy } from "./PregnancyContext";
 
 const FertilityContext = createContext(null);
 
@@ -91,9 +92,15 @@ export function FertilityProvider({ children }) {
     return () => subscription?.unsubscribe?.();
   }, [loadFertilityData]);
 
+  // Pregnancy wins the moment it is switched on. The flag above is only
+  // recomputed on load, and several screens turn pregnancy on without
+  // reloading this context (profile, the pregnancy paywall), which used to
+  // leave fertility styling on screen until the app went to the background.
+  const { pregnancyMode } = usePregnancy();
+
   return (
     <FertilityContext.Provider value={{
-      fertilityMode,
+      fertilityMode: fertilityMode && !pregnancyMode,
       hasAccess,
       loading,
       reload: loadFertilityData,

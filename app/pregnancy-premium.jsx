@@ -85,10 +85,19 @@ export default function PregnancyPremiumScreen() {
       return;
     }
 
+    // The store could not be reached (no internet, RevenueCat outage) — never
+    // hand out the paid mode for free. Retry in the background so the next tap
+    // works once the connection is back. Same rule as profile.js.
+    if (!storeConfigured && !__DEV__) {
+      Alert.alert(t("profile.unavailableTitle"), t("profile.unavailableBody"));
+      loadPaywall();
+      return;
+    }
+
     setPurchasing(true);
     try {
       if (!storeConfigured) {
-        // Dev/simulator bypass
+        // Dev/simulator bypass (development builds only, see the guard above)
         await enablePregnancyMode(lmpDateStr);
         Alert.alert(t("pregnancyPremium.successTitle"), t("pregnancyPremium.modeEnabled"), [
           { text: t("common.ok"), onPress: () => router.replace("/(tabs)") },
@@ -254,8 +263,12 @@ export default function PregnancyPremiumScreen() {
 
           {!storeConfigured && (
             <View style={styles.warningBox}>
-              <Text style={styles.warningTitle}>{t("premium.rcNotLinked")}</Text>
-              <Text style={styles.warningText}>{t("pregnancyPremium.rcNotLinkedBody")}</Text>
+              <Text style={styles.warningTitle}>
+                {__DEV__ ? t("premium.rcNotLinked") : t("profile.unavailableTitle")}
+              </Text>
+              <Text style={styles.warningText}>
+                {__DEV__ ? t("pregnancyPremium.rcNotLinkedBody") : t("profile.unavailableBody")}
+              </Text>
             </View>
           )}
 

@@ -14,8 +14,12 @@ const ADMIN_EMAILS = ["mishvelidze.u@gmail.com"];
 
 // Chat limits mirror the client UI in app/(tabs)/symptoms.js.
 const CHAT_FREE_DAILY_LIMIT = 1;
+// The shared "pregnancy" subscription: pregnancy mode and fertility mode alike.
 const CHAT_PREGNANCY_DAILY_LIMIT = 10;
 const CHAT_PRIME_DAILY_LIMIT = 20;
+
+// profiles.goal value of fertility ("მინდა დაორსულება") mode — a stored DB value.
+const FERTILITY_GOAL = "დაორსულება";
 
 // Non-chat features are cached client-side and called a few times per day at most;
 // these caps exist only to bound abuse, real users never reach them.
@@ -229,7 +233,7 @@ Deno.serve(async (request) => {
         const { data: profile, error: profileError } = await supabaseAdmin
           .from("profiles")
           .select(
-            "is_premium, premium_override, premium_until, pregnancy_mode, has_pregnancy_subscription, pregnancy_until"
+            "is_premium, premium_override, premium_until, pregnancy_mode, goal, has_pregnancy_subscription, pregnancy_until"
           )
           .eq("id", user.id)
           .maybeSingle();
@@ -241,11 +245,15 @@ Deno.serve(async (request) => {
           // The pregnancy allowance follows the subscription, not the mode flag.
           // pregnancy_mode alone used to be enough, so a lapsed subscriber — or
           // anyone who set the flag on their own row — kept the larger budget.
-          const pregnancyActive = Boolean(profile?.pregnancy_mode) && hasPregnancyAccess(profile);
+          // One subscription unlocks both modes, so fertility mode (the
+          // fertility goal) gets the same allowance as pregnancy mode.
+          const pregnancyAllowance =
+            hasPregnancyAccess(profile)
+            && (Boolean(profile?.pregnancy_mode) || profile?.goal === FERTILITY_GOAL);
 
           dailyLimit = isPremiumProfile(profile)
             ? CHAT_PRIME_DAILY_LIMIT
-            : pregnancyActive
+            : pregnancyAllowance
             ? CHAT_PREGNANCY_DAILY_LIMIT
             : CHAT_FREE_DAILY_LIMIT;
           limitResolved = true;
