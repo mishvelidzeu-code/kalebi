@@ -50,6 +50,8 @@ const EMPTY_SUMMARY = {
 
 const FREE_DAILY_QUESTION_LIMIT = 1;
 const PRIME_DAILY_QUESTION_LIMIT = 20;
+// The shared "pregnancy" subscription — pregnancy mode and fertility mode alike.
+const PREGNANCY_DAILY_QUESTION_LIMIT = 10;
 const DAILY_LIMIT_STORAGE_KEY_PREFIX = "@cycle-care/assistant-daily-limit";
 
 function getAssistantDailyLimitStorageKey(userId) {
@@ -166,11 +168,14 @@ export default function AssistantScreen() {
         composerBg: isDark ? "rgba(55,40,58,0.86)" : "rgba(255,255,255,0.74)",
       };
 
+  // One $2.99 subscription unlocks both pregnancy and fertility mode, so both
+  // get the same chat allowance (mirrors supabase/functions/ai-assistant).
+  const hasPregnancyChatAllowance = pregnancyMode || fertilityMode;
   const dailyQuestionLimit = isAdmin
     ? 999999
     : isPremium
     ? PRIME_DAILY_QUESTION_LIMIT
-    : pregnancyMode ? 10 : FREE_DAILY_QUESTION_LIMIT;
+    : hasPregnancyChatAllowance ? PREGNANCY_DAILY_QUESTION_LIMIT : FREE_DAILY_QUESTION_LIMIT;
   const remainingQuestions = Math.max(
     0,
     dailyQuestionLimit - questionsUsedToday
@@ -278,10 +283,12 @@ export default function AssistantScreen() {
           ? t("assistant.limitPrime")
           : pregnancyMode
             ? t("assistant.limitPregnancy")
-            : t("assistant.limitFree"),
+            : fertilityMode
+              ? t("assistant.limitFertility")
+              : t("assistant.limitFree"),
         [
           { text: t("common.ok"), style: "cancel" },
-          ...(!isPremium && !pregnancyMode ? [{ text: "Prime", onPress: () => router.push("/premium") }] : []),
+          ...(!isPremium && !hasPregnancyChatAllowance ? [{ text: "Prime", onPress: () => router.push("/premium") }] : []),
         ]
       );
       return;
@@ -606,8 +613,8 @@ export default function AssistantScreen() {
             </Text>
           ) : (
             <TouchableOpacity
-              onPress={() => !pregnancyMode && !isPremium && router.push("/premium")}
-              activeOpacity={pregnancyMode || isPremium ? 1 : 0.8}
+              onPress={() => !hasPregnancyChatAllowance && !isPremium && router.push("/premium")}
+              activeOpacity={hasPregnancyChatAllowance || isPremium ? 1 : 0.8}
               style={styles.limitTextButton}
             >
               <Text style={[styles.limitText, styles.limitTextAction, { color: theme.primary }]}>
@@ -615,14 +622,14 @@ export default function AssistantScreen() {
                   ? t("assistant.limitAdmin")
                   : isPremium
                   ? t("assistant.usedPrimeShort")
-                  : pregnancyMode
+                  : hasPregnancyChatAllowance
                     ? t("assistant.usedPregnancyShort")
                     : t("assistant.usedFreeShort")}
               </Text>
             </TouchableOpacity>
           )}
 
-          {!isPremium && !pregnancyMode && !hasQuestionLeft ? (
+          {!isPremium && !hasPregnancyChatAllowance && !hasQuestionLeft ? (
             <TouchableOpacity onPress={() => router.push("/premium")}>
               <Text style={[styles.limitLink, { color: theme.primary }]}>
                 Prime

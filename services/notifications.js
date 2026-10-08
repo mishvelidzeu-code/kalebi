@@ -465,7 +465,7 @@ export async function syncCycleRemindersForUser() {
         .limit(1),
       supabase
         .from("profiles")
-        .select("last_period, cycle_length, pregnancy_mode, goal, has_pregnancy_subscription, pregnancy_until")
+        .select("last_period, cycle_length, pregnancy_mode, pregnancy_start_date, goal, has_pregnancy_subscription, pregnancy_until")
         .eq("id", user.id)
         .maybeSingle(),
     ]);
@@ -481,9 +481,14 @@ export async function syncCycleRemindersForUser() {
       || isTestAccountEmail(user.email)
       || resolvePregnancyAccessFromProfile(profile);
 
-    // Pregnancy mode: schedule pregnancy-specific notifications
-    if (profile?.pregnancy_mode && pregnancyAccess && profile?.last_period) {
-      return schedulePregnancyNotifications(profile.last_period);
+    // Pregnancy mode: schedule pregnancy-specific notifications. Weeks count
+    // from pregnancy_start_date — the LMP picked when the mode was turned on,
+    // the same date PregnancyContext schedules from. last_period is only a
+    // fallback for rows without it; using it first used to shift the weekly
+    // reminders whenever this sync ran (every profile-tab visit).
+    const pregnancyLmp = profile?.pregnancy_start_date || profile?.last_period;
+    if (profile?.pregnancy_mode && pregnancyAccess && pregnancyLmp) {
+      return schedulePregnancyNotifications(pregnancyLmp);
     }
 
     const lastPeriodDate = latestCycle?.start_date || profile?.last_period;
