@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { AppState, Platform } from "react-native";
 
 import { isAdminEmail, isTestAccountEmail } from "../services/adminAccess";
+import { getSignedInUser, isOfflineQueryResult, retryWhenOnline } from "../services/networkRecovery";
 import { supabase } from "../services/supabase";
 import { schedulePregnancyNotifications, syncCycleRemindersForUser } from "../services/notifications";
 import {
@@ -21,13 +22,24 @@ export function PregnancyProvider({ children }) {
   // normal mode instead of silently changing under her.
   const [accessLapsed, setAccessLapsed] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Bumped after every load that read the profile — i.e. after the store
+  // refresh below has written the latest expiry. FertilityContext re-reads on
+  // it, since it shares this subscription but does not ask the store itself.
+  const [syncVersion, setSyncVersion] = useState(0);
   // Whose data is currently in state. Used to tell a real account switch apart
   // from a routine token refresh, so the screens are not reset for no reason.
   const loadedUserIdRef = useRef(null);
 
   const loadPregnancyData = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { user, offline } = await getSignedInUser();
+      if (offline) {
+        // No internet is not a sign-out: keep what is on screen and load again
+        // once the server is reachable.
+        retryWhenOnline("pregnancy", loadPregnancyData);
+        return;
+      }
+
       if (!user) {
         loadedUserIdRef.current = null;
         setPregnancyMode(false);
@@ -53,11 +65,17 @@ export function PregnancyProvider({ children }) {
         }
       }
 
-      const { data } = await supabase
+      const profileResult = await supabase
         .from("profiles")
         .select("pregnancy_mode, pregnancy_start_date, has_pregnancy_subscription, pregnancy_until")
         .eq("id", user.id)
         .single();
+      const { data } = profileResult;
+
+      if (!data && isOfflineQueryResult(profileResult)) {
+        retryWhenOnline("pregnancy", loadPregnancyData);
+        return;
+      }
 
       if (data) {
         // Access comes from the store (or a free-mode account) and never from
@@ -75,6 +93,7 @@ export function PregnancyProvider({ children }) {
         setPregnancyMode(Boolean(data.pregnancy_mode) && access);
         setAccessLapsed(Boolean(data.pregnancy_mode) && !access);
         setPregnancyStartDate(data.pregnancy_start_date ?? null);
+        setSyncVersion((version) => version + 1);
       }
     } catch (error) {
       console.error("PregnancyContext load error:", error);
@@ -199,6 +218,7 @@ export function PregnancyProvider({ children }) {
       hasSubscription,
       accessLapsed,
       loading,
+      syncVersion,
       currentWeek,
       currentTrimester,
       daysRemaining,

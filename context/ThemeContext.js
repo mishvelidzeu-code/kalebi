@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { isAdminEmail, isTestAccountEmail } from "../services/adminAccess";
+import { getSignedInUser, isOfflineQueryResult, retryWhenOnline } from "../services/networkRecovery";
 import {
   resolvePremiumAccessFromProfile,
   syncPremiumStatusFromPurchases,
@@ -56,9 +57,14 @@ export const ThemeProvider = ({ children }) => {
 
   const checkPremiumStatus = useCallback(async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { user, offline } = await getSignedInUser();
+
+      if (offline) {
+        // No internet is not a sign-out: keep the current tier and check again
+        // once the server is reachable.
+        retryWhenOnline("premium", checkPremiumStatus);
+        return;
+      }
 
       if (!user) {
         setIsPremium(false);
@@ -87,11 +93,17 @@ export const ThemeProvider = ({ children }) => {
         return;
       }
 
-      const { data, error } = await supabase
+      const profileResult = await supabase
         .from("profiles")
         .select("is_premium, premium_override, premium_until")
         .eq("id", user.id)
         .maybeSingle();
+      const { data, error } = profileResult;
+
+      if (error && isOfflineQueryResult(profileResult)) {
+        retryWhenOnline("premium", checkPremiumStatus);
+        return;
+      }
 
       if (error) throw error;
 
