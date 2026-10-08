@@ -1095,7 +1095,9 @@ export default function HomeScreen() {
         </TouchableOpacity>
       )}
 
-      {!isPremium && !pregnancyMode && (
+      {/* Not for someone already in fertility mode (it would advertise the mode
+          she is paying for), nor next to the "subscription ended" card. */}
+      {!isPremium && !pregnancyMode && !fertilityMode && !accessLapsed && (
         <TouchableOpacity
           activeOpacity={0.82}
           style={[styles.pregnancyBanner, styles.fertilityBannerShell]}

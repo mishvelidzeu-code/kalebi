@@ -8,6 +8,7 @@ import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from "
 import { TEMP_LANGUAGE_PICKER_ENABLED } from "../constants/tempFlags";
 import { useLanguage } from "../context/LanguageContext";
 import { fixFutureCycleDatesForCurrentUser } from "../services/cycleDataMigration";
+import { isOfflineQueryResult, isOfflineSessionError } from "../services/networkRecovery";
 import { syncCycleRemindersForUser } from "../services/notifications";
 import { translate } from "../services/i18n";
 import { supabase } from "../services/supabase";
@@ -90,10 +91,13 @@ export default function Splash() {
       // 1. ვაყოვნებთ 4.5 წამი, რომ მთელი ეს მაგია კარგად გამოჩნდეს
       await new Promise((resolve) => setTimeout(resolve, 4500));
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      // Signed in, but the expired token could not be refreshed offline —
+      // getSession() answers "no session" then, which is not a sign-out.
+      const offlineWithSession = !sessionData?.session && isOfflineSessionError(sessionError);
 
       // დეფოლტად (თუ არ არის სესია) მიდის ონბორდინგზე
-      let nextRoute = "/onboarding/name";
+      let nextRoute = offlineWithSession ? "/(tabs)" : "/onboarding/name";
 
       // 2. ვამოწმებთ, აქვს თუ არა სესია და გავლილი ონბორდინგი
       if (sessionData?.session) {
@@ -107,20 +111,27 @@ export default function Splash() {
           console.log("Cycle date migration failed:", migrationError);
         }
 
-        const { data: profile } = await supabase
+        const profileResult = await supabase
           .from("profiles")
           .select("onboarding_completed")
           .eq("id", user.id)
           .single();
+        const profile = profileResult.data;
 
         if (profile?.onboarding_completed) {
           nextRoute = "/(tabs)"; // თუ ყველაფერი გავლილი აქვს, მიდის მთავარ ეკრანზე
+        } else if (!profile && isOfflineQueryResult(profileResult)) {
+          // Offline: the profile could not be read at all. Someone with a
+          // session has signed in before (login itself goes straight to the
+          // tabs), so do not send them back through onboarding.
+          nextRoute = "/(tabs)";
         }
       }
 
       const shouldAskLanguage =
         TEMP_LANGUAGE_PICKER_ENABLED &&
         !sessionData?.session &&
+        !offlineWithSession &&
         languageStateRef.current.isLanguageLoaded &&
         !languageStateRef.current.hasChosenLanguage;
 
