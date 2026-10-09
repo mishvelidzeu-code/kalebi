@@ -9,6 +9,7 @@ import { PregnancyProvider } from "../context/PregnancyContext";
 import { FertilityProvider } from "../context/FertilityContext";
 import { LanguageProvider } from "../context/LanguageContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
+import { WeightProvider } from "../context/WeightContext";
 import { useOtaUpdatePrompt } from "../hooks/useOtaUpdatePrompt";
 import { initializeMetaAppEvents } from "../services/metaAppEvents";
 import { registerPushTokenForCurrentUser } from "../services/notifications";
@@ -74,9 +75,11 @@ export default function RootLayout() {
       <ThemeProvider>
         <PregnancyProvider>
           <FertilityProvider>
-            <OnboardingProvider>
-              <LayoutContent />
-            </OnboardingProvider>
+            <WeightProvider>
+              <OnboardingProvider>
+                <LayoutContent />
+              </OnboardingProvider>
+            </WeightProvider>
           </FertilityProvider>
         </PregnancyProvider>
       </ThemeProvider>

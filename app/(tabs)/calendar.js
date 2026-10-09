@@ -26,6 +26,8 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { useFertility } from "../../context/FertilityContext";
+import { useWeight } from "../../context/WeightContext";
+import WeightDayRow from "../../components/weight/WeightDayRow";
 import { useCycles } from "../../hooks/useCycles";
 import { supabase } from "../../services/supabase";
 import { FERTILITY_LOG_TYPES, getFertilityLogsForDay, getFertilityLogsRange, upsertFertilityLog } from "../../services/fertilityLogs";
@@ -546,6 +548,7 @@ function RegularCalendarScreen() {
   applyCalendarLocale(language, t);
   const shortMonths = getShortMonths(language);
   const { isDark, isPremium } = useTheme();
+  const { weightMode } = useWeight();
   const { markedDates, loadData, addCycle, deleteCycle, rawCycles } = useCycles();
 
   // -- Calendar state ----------------------------------------------
@@ -1008,6 +1011,8 @@ function RegularCalendarScreen() {
                     </View>
                   </View>
                 )}
+
+                {weightMode && <WeightDayRow date={selectedDay} />}
 
                 {dayDetails.mood && (
                   <View style={styles.statusRow}>

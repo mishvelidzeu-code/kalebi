@@ -2,8 +2,9 @@ import dayjs from "dayjs";
 
 import { calculateCycleState, getPregnancyChanceKey } from "../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../utils/cyclePrediction";
-import { buildFertilityAiContext } from "../utils/fertilityInsights";
+import { buildFertilityAiContext, getAgeFromBirthDate } from "../utils/fertilityInsights";
 import { buildPregnancyMemory } from "../utils/pregnancyMemory";
+import { buildWeightAiContext, normalizeWeightLogs } from "../utils/weightStats";
 import {
   analyzeCycleRegularity,
   buildFertileWindows,
@@ -22,6 +23,7 @@ import { getLanguage, t } from "./i18n";
 import { getFertilityLogsForDay, getFertilityLogsRange } from "./fertilityLogs";
 import { resolvePregnancyAccessFromProfile } from "./purchases";
 import { supabase } from "./supabase";
+import { getWeightLogsRange, isWeightModeActive, WEIGHT_PROFILE_FIELDS } from "./weightLogs";
 
 const DEFAULT_GOAL_LABEL = "ციკლის კონტროლი";
 
@@ -187,6 +189,21 @@ When the user is in fertility mode (trying to conceive), context.fertilityTracki
 - Advise a pregnancy test only from ~11 days past ovulation, and note that earlier tests are often falsely negative.
 - Do not diagnose infertility. If they have been trying 12+ months (or 6+ if 35 or older), gently suggest a specialist as a routine next step, not as alarming news.
 
+# WEIGHT-LOSS MODE (only when context.weightTracking exists)
+The user turned on weight-loss mode, which sits on top of her cycle tracking. context.weightTracking holds her logged weigh-ins and the app's own safe plan. Use these numbers; never invent others.
+- Read weight against the cycle: a gain of up to ~2.5 kg in the luteal phase or during the period is usually water retention, not fat. When latest_change.kind is "waterLikely", reassure her and say it usually passes after the period.
+- Judge progress by seven_day_average_kg and this_cycle_vs_last, never by a single weigh-in.
+- In the luteal phase appetite naturally rises: normalise it and suggest filling, protein- and fibre-rich food. Never shame her for hunger or cravings.
+- If cycle_warning is set ("late" or "changed"), gently explain that too large a calorie deficit can disrupt the cycle, suggest easing the pace and eating more, and recommend a doctor if the delay continues.
+- If a value is null, say it is not logged yet instead of guessing.
+
+# WEIGHT-LOSS SAFETY (STRICT)
+- daily_calorie_target_kcal is already floored for safety. NEVER suggest eating less than it, and never below 1200 kcal a day.
+- NEVER suggest fasting for days, skipping meals, detoxes or cleanses, diet pills, laxatives, diuretics or "burning off" food with exercise.
+- Never encourage a target below healthy_weight_range_kg.min or losing faster than safe_weekly_loss_kg. Do not celebrate rapid loss.
+- If she mentions bingeing, purging, fear of eating, extreme restriction or strong guilt about food, do not give diet advice: respond with care and encourage her to talk to a doctor or an eating-disorder specialist.
+- Be body-positive and non-judgmental. Never comment on her appearance or call her body "fat".
+
 # SAFETY & BOUNDARIES (STRICT)
 - You are an AI assistant, NOT a certified doctor. You cannot diagnose diseases or prescribe medication.
 - If the user reports severe, acute, or dangerous symptoms (e.g., unbearable pain, excessive bleeding), you MUST kindly but firmly advise them to consult a healthcare professional.
@@ -195,6 +212,13 @@ When the user is in fertility mode (trying to conceive), context.fertilityTracki
 - Keep responses concise, engaging, and scannable for mobile screens.
 - Use short paragraphs.
 `.trim();
+
+// Appended to the home advice prompt when weight mode is on (context.weightTracking).
+const WEIGHT_ADVICE_INSTRUCTIONS = [
+  "She also has weight-loss mode on (context.weightTracking).",
+  "Add one short, practical weight tip that fits today's cycle phase, using her real numbers — for example today's calorie target, or that a gain in the luteal phase or during the period is likely water.",
+  "Never suggest eating less than her plan, and keep it kind and body-positive.",
+];
 
 const getPregnancySystemPrompt = () => PREGNANCY_SYSTEM_PROMPT_TEMPLATE.replace("__LANGUAGE__", languageName());
 const getAssistantSystemPrompt = () => ASSISTANT_SYSTEM_PROMPT_TEMPLATE.replace("__LANGUAGE__", languageName());
@@ -335,10 +359,13 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
     throw new Error(t("assistant.userNotFound"));
   }
 
+  const weightModeActive = isWeightModeActive();
+
   if (
     !forceRefresh &&
     assistantContextCache.userId === user.id &&
     assistantContextCache.language === getLanguage() &&
+    assistantContextCache.weightModeActive === weightModeActive &&
     assistantContextCache.value &&
     assistantContextCache.expiresAt > Date.now()
   ) {
@@ -466,6 +493,36 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
     }
   }
 
+  // Weight-loss mode: weigh-ins read against the cycle, plus the app's safe
+  // plan. Only when the screens show weight mode (WeightContext decides), and
+  // never next to pregnancy or the fertility goal. Own query on purpose — the
+  // base profile select above stays untouched, so nothing here can break it.
+  let weightTracking = null;
+  if (weightModeActive && !pregnancyModeActive && profile.goal !== "დაორსულება") {
+    try {
+      const [weightProfileResponse, weightRows] = await Promise.all([
+        supabase.from("profiles").select(WEIGHT_PROFILE_FIELDS).eq("id", user.id).maybeSingle(),
+        getWeightLogsRange(dayjs().subtract(90, "day").format("YYYY-MM-DD"), today),
+      ]);
+      const weightProfile = weightProfileResponse.data || {};
+      const chronological = [...cycles].sort((a, b) => dayjs(a.start_date).diff(dayjs(b.start_date)));
+      const cycleRows = chronological.length
+        ? chronological
+        : currentCycle.last_period ? [{ start_date: currentCycle.last_period }] : [];
+
+      weightTracking = buildWeightAiContext({
+        logs: normalizeWeightLogs(weightRows),
+        cycles: cycleRows,
+        profile: weightProfile,
+        age: getAgeFromBirthDate(weightProfile.birth_date || profile.birth_date),
+        cycleLength: currentCycle.cycle_length,
+        periodLength: currentCycle.period_length,
+      });
+    } catch (error) {
+      console.log("Weight AI context skipped:", error);
+    }
+  }
+
   const context = {
     user_name: profile.name || user.email?.split("@")[0] || t("assistant.defaultUser"),
     user_goal: mapGoalToAssistantGoal(effectiveGoal),
@@ -504,11 +561,13 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
     },
     ...(fertilityTracking ? { fertilityTracking } : {}),
     ...(pregnancyMemory ? { pregnancyMemory } : {}),
+    ...(weightTracking ? { weightTracking } : {}),
   };
 
   assistantContextCache = {
     userId: user.id,
     language: getLanguage(),
+    weightModeActive,
     expiresAt: Date.now() + ASSISTANT_CONTEXT_CACHE_TTL_MS,
     value: context,
   };
@@ -890,6 +949,10 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
     "Keep it concise for a mobile card.",
   ].join(" ");
 
+  // Weight mode never coexists with pregnancy or fertility (WeightContext), so
+  // this only extends the plain diary prompt.
+  const weight = !isPregnancy && !fertility ? context.weightTracking || null : null;
+
   const prompt = isPregnancy
     ? [
         `The user is pregnant (week ${context.pregnancy_week || "?"}, trimester ${context.pregnancy_trimester || "?"}).`,
@@ -909,6 +972,13 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
         "Reflect today's state gently and naturally.",
         "If there is a note, briefly acknowledge what it suggests emotionally.",
         "Offer one or two small self-care or grounding suggestions for today.",
+        ...(weight
+          ? [
+              "She also has weight-loss mode on (weight_today).",
+              "If it fits today's entry, add one gentle, cycle-aware weight note — for example that bloating or a higher scale reading in the luteal phase or during the period is usually water.",
+              "If she feels low, anxious or guilty about food, put comfort first and do not push the diet.",
+            ]
+          : []),
         "Do not diagnose and keep it concise for a mobile card.",
       ].join(" ");
 
@@ -938,6 +1008,18 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
               best_ovulation_estimate: fertility.best_ovulation_estimate,
               confirmed_ovulation: fertility.confirmed_ovulation,
               cycle_regularity: fertility.cycle_regularity,
+            }
+          : {}),
+        // Only the weight facts a short diary card can use.
+        ...(weight
+          ? {
+              weight_today: {
+                latest_weight_kg: weight.latest_weight_kg,
+                seven_day_average_kg: weight.seven_day_average_kg,
+                latest_change: weight.latest_change,
+                daily_calorie_target_kcal: weight.daily_calorie_target_kcal,
+                cycle_warning: weight.cycle_warning,
+              },
             }
           : {}),
       };
@@ -980,6 +1062,7 @@ export async function getHomeAssistantAdvice() {
         "If today's diary is not logged yet, gently encourage the user to log how they feel today.",
         "If today's diary exists, personalize the advice around their current emotional and physical state.",
         "Start warmly, keep it psychologically supportive, and include one practical suggestion for today.",
+        ...(context.weightTracking ? WEIGHT_ADVICE_INSTRUCTIONS : []),
         "Keep the answer concise and mobile-friendly, with at most 2 short paragraphs.",
       ].join(" ");
 
@@ -987,7 +1070,8 @@ export async function getHomeAssistantAdvice() {
     prompt,
     systemPrompt: context.pregnancy_mode ? getPregnancySystemPrompt() : getAssistantSystemPrompt(),
     context: { ...context, recentHistory: [] },
-    maxOutputTokens: 220,
+    // A little more room when the card also carries the weight tip.
+    maxOutputTokens: context.weightTracking ? 280 : 220,
     metadata: {
       feature: context.pregnancy_mode ? "home-daily-advice-pregnancy" : "home-daily-advice",
     },

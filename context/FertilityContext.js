@@ -18,6 +18,9 @@ const FERTILITY_GOAL = "დაორსულება";
 export function FertilityProvider({ children }) {
   const [fertilityMode, setFertilityMode] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
+  // The goal alone, paid or not — weight-loss mode stays off for anyone
+  // trying to conceive.
+  const [fertilityGoal, setFertilityGoal] = useState(false);
   const [loading, setLoading] = useState(true);
   // Whose data is currently in state — see PregnancyContext for why this is
   // compared instead of clearing on every auth event.
@@ -38,6 +41,7 @@ export function FertilityProvider({ children }) {
         loadedUserIdRef.current = null;
         setFertilityMode(false);
         setHasAccess(false);
+        setFertilityGoal(false);
         return;
       }
 
@@ -62,6 +66,7 @@ export function FertilityProvider({ children }) {
         const wantsFertility = data.goal === FERTILITY_GOAL;
 
         setHasAccess(access);
+        setFertilityGoal(wantsFertility);
         setFertilityMode(wantsFertility && access && !isPregnant);
       }
     } catch (error) {
@@ -108,6 +113,7 @@ export function FertilityProvider({ children }) {
       loadedUserIdRef.current = nextUserId;
       setFertilityMode(false);
       setHasAccess(false);
+      setFertilityGoal(false);
 
       if (nextUserId) {
         loadFertilityData();
@@ -125,6 +131,7 @@ export function FertilityProvider({ children }) {
   return (
     <FertilityContext.Provider value={{
       fertilityMode: fertilityMode && !pregnancyMode,
+      fertilityGoal,
       hasAccess,
       loading,
       reload: loadFertilityData,
