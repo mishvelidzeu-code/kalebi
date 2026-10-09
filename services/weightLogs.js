@@ -9,6 +9,20 @@ import dayjs from "../utils/dayjs";
 export const WEIGHT_PROFILE_FIELDS =
   "weight_mode, height_cm, weight_start_kg, weight_target_kg, activity_level, weight_started_at, birth_date, cycle_length, period_length, last_period";
 
+// Whether weight mode is on right now, as decided by WeightContext (Prime,
+// fertility goal, pregnancy, release flag). Kept here so the assistant
+// orchestrator — a plain service without React — includes weight data exactly
+// when the screens show weight mode, never otherwise.
+let weightModeActiveForAssistant = false;
+
+export function setWeightModeActiveForAssistant(active) {
+  weightModeActiveForAssistant = Boolean(active);
+}
+
+export function isWeightModeActiveForAssistant() {
+  return weightModeActiveForAssistant;
+}
+
 async function getUserId() {
   const { data: { user } } = await supabase.auth.getUser();
   return user?.id || null;

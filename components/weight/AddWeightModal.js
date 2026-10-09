@@ -3,6 +3,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, St
 
 import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
+import { invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { upsertWeightLog } from "../../services/weightLogs";
 import dayjs from "../../utils/dayjs";
 import { WEIGHT_LIMITS } from "../../utils/weightStats";
@@ -40,6 +41,8 @@ export default function AddWeightModal({ visible, initialKg, onClose, onSaved })
       setError(t("weight.saveFailed"));
       return;
     }
+    // The assistant caches its context for 45 s — let it see this weigh-in now.
+    invalidateAssistantContextCache();
     onSaved?.();
     onClose?.();
   };

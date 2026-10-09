@@ -2,8 +2,9 @@ import dayjs from "dayjs";
 
 import { calculateCycleState, getPregnancyChanceKey } from "../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../utils/cyclePrediction";
-import { buildFertilityAiContext } from "../utils/fertilityInsights";
+import { buildFertilityAiContext, getAgeFromBirthDate } from "../utils/fertilityInsights";
 import { buildPregnancyMemory } from "../utils/pregnancyMemory";
+import { buildWeightAiContext, normalizeWeightLogs } from "../utils/weightStats";
 import {
   analyzeCycleRegularity,
   buildFertileWindows,
@@ -22,6 +23,7 @@ import { getLanguage, t } from "./i18n";
 import { getFertilityLogsForDay, getFertilityLogsRange } from "./fertilityLogs";
 import { resolvePregnancyAccessFromProfile } from "./purchases";
 import { supabase } from "./supabase";
+import { getWeightLogsRange, isWeightModeActiveForAssistant, WEIGHT_PROFILE_FIELDS } from "./weightLogs";
 
 const DEFAULT_GOAL_LABEL = "ციკლის კონტროლი";
 
@@ -187,6 +189,21 @@ When the user is in fertility mode (trying to conceive), context.fertilityTracki
 - Advise a pregnancy test only from ~11 days past ovulation, and note that earlier tests are often falsely negative.
 - Do not diagnose infertility. If they have been trying 12+ months (or 6+ if 35 or older), gently suggest a specialist as a routine next step, not as alarming news.
 
+# WEIGHT-LOSS MODE (only when context.weightTracking exists)
+The user turned on weight-loss mode, which sits on top of her cycle tracking. context.weightTracking holds her logged weigh-ins and the app's own safe plan. Use these numbers; never invent others.
+- Read weight against the cycle: a gain of up to ~2.5 kg in the luteal phase or during the period is usually water retention, not fat. When latest_change.kind is "waterLikely", reassure her and say it usually passes after the period.
+- Judge progress by seven_day_average_kg and this_cycle_vs_last, never by a single weigh-in.
+- In the luteal phase appetite naturally rises: normalise it and suggest filling, protein- and fibre-rich food. Never shame her for hunger or cravings.
+- If cycle_warning is set ("late" or "changed"), gently explain that too large a calorie deficit can disrupt the cycle, suggest easing the pace and eating more, and recommend a doctor if the delay continues.
+- If a value is null, say it is not logged yet instead of guessing.
+
+# WEIGHT-LOSS SAFETY (STRICT)
+- daily_calorie_target_kcal is already floored for safety. NEVER suggest eating less than it, and never below 1200 kcal a day.
+- NEVER suggest fasting for days, skipping meals, detoxes or cleanses, diet pills, laxatives, diuretics or "burning off" food with exercise.
+- Never encourage a target below healthy_weight_range_kg.min or losing faster than safe_weekly_loss_kg. Do not celebrate rapid loss.
+- If she mentions bingeing, purging, fear of eating, extreme restriction or strong guilt about food, do not give diet advice: respond with care and encourage her to talk to a doctor or an eating-disorder specialist.
+- Be body-positive and non-judgmental. Never comment on her appearance or call her body "fat".
+
 # SAFETY & BOUNDARIES (STRICT)
 - You are an AI assistant, NOT a certified doctor. You cannot diagnose diseases or prescribe medication.
 - If the user reports severe, acute, or dangerous symptoms (e.g., unbearable pain, excessive bleeding), you MUST kindly but firmly advise them to consult a healthcare professional.
@@ -335,10 +352,13 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
     throw new Error(t("assistant.userNotFound"));
   }
 
+  const weightModeActive = isWeightModeActiveForAssistant();
+
   if (
     !forceRefresh &&
     assistantContextCache.userId === user.id &&
     assistantContextCache.language === getLanguage() &&
+    assistantContextCache.weightModeActive === weightModeActive &&
     assistantContextCache.value &&
     assistantContextCache.expiresAt > Date.now()
   ) {
@@ -466,6 +486,36 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
     }
   }
 
+  // Weight-loss mode: weigh-ins read against the cycle, plus the app's safe
+  // plan. Only when the screens show weight mode (WeightContext decides), and
+  // never next to pregnancy or the fertility goal. Own query on purpose — the
+  // base profile select above stays untouched, so nothing here can break it.
+  let weightTracking = null;
+  if (weightModeActive && !pregnancyModeActive && profile.goal !== "დაორსულება") {
+    try {
+      const [weightProfileResponse, weightRows] = await Promise.all([
+        supabase.from("profiles").select(WEIGHT_PROFILE_FIELDS).eq("id", user.id).maybeSingle(),
+        getWeightLogsRange(dayjs().subtract(90, "day").format("YYYY-MM-DD"), today),
+      ]);
+      const weightProfile = weightProfileResponse.data || {};
+      const chronological = [...cycles].sort((a, b) => dayjs(a.start_date).diff(dayjs(b.start_date)));
+      const cycleRows = chronological.length
+        ? chronological
+        : currentCycle.last_period ? [{ start_date: currentCycle.last_period }] : [];
+
+      weightTracking = buildWeightAiContext({
+        logs: normalizeWeightLogs(weightRows),
+        cycles: cycleRows,
+        profile: weightProfile,
+        age: getAgeFromBirthDate(weightProfile.birth_date || profile.birth_date),
+        cycleLength: currentCycle.cycle_length,
+        periodLength: currentCycle.period_length,
+      });
+    } catch (error) {
+      console.log("Weight AI context skipped:", error);
+    }
+  }
+
   const context = {
     user_name: profile.name || user.email?.split("@")[0] || t("assistant.defaultUser"),
     user_goal: mapGoalToAssistantGoal(effectiveGoal),
@@ -504,11 +554,13 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
     },
     ...(fertilityTracking ? { fertilityTracking } : {}),
     ...(pregnancyMemory ? { pregnancyMemory } : {}),
+    ...(weightTracking ? { weightTracking } : {}),
   };
 
   assistantContextCache = {
     userId: user.id,
     language: getLanguage(),
+    weightModeActive,
     expiresAt: Date.now() + ASSISTANT_CONTEXT_CACHE_TTL_MS,
     value: context,
   };

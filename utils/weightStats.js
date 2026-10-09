@@ -318,6 +318,51 @@ export function detectCycleDisruption({ cycles = [], weightStartedAt, fallbackCy
   return null;
 }
 
+// What the assistant gets in weight mode: facts and the app's own safe plan,
+// so the model never has to invent numbers. Plain values only (JSON-friendly).
+export function buildWeightAiContext({ logs = [], cycles = [], profile = {}, age = null, cycleLength = 28, periodLength = 5, referenceDate = dayjs() }) {
+  const annotated = annotateWeightLogs(logs, cycles, { cycleLength, periodLength });
+  const latest = annotated[annotated.length - 1] || null;
+  const heightCm = toNumber(profile.height_cm);
+  const currentKg = latest?.avg ?? toNumber(profile.weight_start_kg);
+  const insight = getLatestWeightInsight(annotated);
+  const progress = getWeightProgress({ startKg: profile.weight_start_kg, targetKg: profile.weight_target_kg, currentKg });
+  const calories = getDailyCalorieTarget({ weightKg: currentKg, heightCm, age, activity: profile.activity_level });
+  const bmi = computeBmi(currentKg, heightCm);
+  const disruption = detectCycleDisruption({ cycles, weightStartedAt: profile.weight_started_at, fallbackCycleLength: cycleLength, referenceDate });
+  const comparison = compareLastTwoCycles(logs, cycles);
+  const since = dayjs(referenceDate).subtract(30, "day");
+
+  return {
+    latest_weight_kg: latest?.weight ?? null,
+    latest_weigh_in_date: latest?.date ?? null,
+    seven_day_average_kg: latest?.avg ?? null,
+    weigh_ins_last_30_days: logs.filter((log) => !dayjs(log.date).isBefore(since, "day")).length,
+    start_weight_kg: toNumber(profile.weight_start_kg),
+    target_weight_kg: toNumber(profile.weight_target_kg),
+    started_on: profile.weight_started_at || null,
+    lost_so_far_kg: progress?.lostKg ?? null,
+    remaining_kg: progress?.remainingKg ?? null,
+    progress_percent: progress?.percent ?? null,
+    latest_change: insight
+      ? { kind: insight.key, delta_kg: insight.delta, cycle_phase: insight.phaseKey }
+      : null,
+    this_cycle_vs_last: comparison
+      ? { current_avg_kg: comparison.currentAvg, previous_avg_kg: comparison.previousAvg, delta_kg: comparison.delta }
+      : null,
+    daily_calorie_target_kcal: calories?.target ?? null,
+    calorie_target_at_safety_floor: calories?.flooredAtMinimum ?? false,
+    safe_weekly_loss_kg: calories?.weeklyLossKg ?? getSafeWeeklyLossKg(age),
+    activity_level: profile.activity_level || null,
+    age,
+    bmi,
+    bmi_category: getBmiCategoryKey(bmi),
+    healthy_weight_range_kg: getHealthyWeightRange(heightCm, age),
+    cycle_warning: disruption?.key ?? null,
+    period_days_late: disruption?.daysLate ?? null,
+  };
+}
+
 // Bar heights (20..100 %) for a small View-based chart. Weights move by a few
 // percent at most, so bars are scaled to the visible range, not from zero.
 export function scaleWeightsForChart(values = []) {

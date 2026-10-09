@@ -20,6 +20,7 @@ import { getWeightTheme } from "../components/weight/weightTheme";
 import { useLanguage } from "../context/LanguageContext";
 import { useTheme } from "../context/ThemeContext";
 import { useWeight } from "../context/WeightContext";
+import { invalidateAssistantContextCache } from "../services/assistantOrchestrator";
 import { getWeightLogsRange, getWeightProfile, saveWeightSetup } from "../services/weightLogs";
 import dayjs from "../utils/dayjs";
 import { getAgeFromBirthDate } from "../utils/fertilityInsights";
@@ -120,6 +121,7 @@ export default function WeightSetupScreen() {
       setSaveError(t("weight.saveFailed"));
       return;
     }
+    invalidateAssistantContextCache();
     await reloadWeight();
     setSaving(false);
     router.back();
