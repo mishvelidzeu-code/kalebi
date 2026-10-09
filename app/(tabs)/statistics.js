@@ -10,7 +10,11 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { useFertility } from "../../context/FertilityContext";
+import { useWeight } from "../../context/WeightContext";
 import DiaryAvatar from "../../components/DiaryAvatar";
+import WeightModeEntryCard from "../../components/weight/WeightModeEntryCard";
+import WeightStatisticsScreen from "../../components/weight/WeightStatisticsScreen";
+import WeightViewSwitch from "../../components/weight/WeightViewSwitch";
 import { getFertilityLogsRange } from "../../services/fertilityLogs";
 import { supabase } from "../../services/supabase";
 import { calculateCycleState } from "../../utils/cycleEngine";
@@ -275,7 +279,9 @@ const AnimatedBar = ({ value, maxValue, label, index, isDark, accent = "#FF4D88"
   );
 };
 
-function RegularStatisticsScreen() {
+// headerSlot: the weight-mode "Weight | Cycle" switch when this screen is shown
+// as the cycle side of weight mode. Without it the screen is unchanged.
+function RegularStatisticsScreen({ headerSlot = null }) {
   const { t } = useLanguage();
   const { isDark } = useTheme();
 
@@ -440,6 +446,7 @@ function RegularStatisticsScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: "transparent" }}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" />
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}>
+        {headerSlot}
         <View style={styles.pageHeader}>
           <View>
             <Text style={[styles.pageEyebrow, { color: theme.peach }]}>CYCLE INSIGHTS</Text>
@@ -520,6 +527,8 @@ function RegularStatisticsScreen() {
               </View>
             </View>
           </LinearGradient>
+
+          <WeightModeEntryCard />
 
           {stats.topSymptoms.length > 0 && (
             <LinearGradient colors={theme.cardGradient} style={[styles.symptomsCard, { borderColor: theme.border, borderWidth: 1 }]}>
@@ -1195,11 +1204,22 @@ const FertStatCell = ({ value, unit, label, theme }) => (
   </View>
 );
 
+// Weight mode turns this tab into the weight screen, with a switch back to the
+// regular cycle statistics — cycle tracking never goes away.
+function WeightModeStatisticsScreen() {
+  const [view, setView] = useState("weight");
+  const switcher = <WeightViewSwitch value={view} onChange={setView} />;
+  if (view === "cycle") return <RegularStatisticsScreen headerSlot={switcher} />;
+  return <WeightStatisticsScreen headerSlot={switcher} />;
+}
+
 export default function StatisticsScreen() {
   const { pregnancyMode } = usePregnancy();
   const { fertilityMode } = useFertility();
+  const { weightMode } = useWeight();
   if (pregnancyMode) return <PregnancyStatisticsScreen />;
   if (fertilityMode) return <FertilityStatisticsScreen />;
+  if (weightMode) return <WeightModeStatisticsScreen />;
   return <RegularStatisticsScreen />;
 }
 

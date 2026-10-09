@@ -8,6 +8,7 @@ import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Modal, Pressable, 
 
 import DiaryAvatar from "../../components/DiaryAvatar";
 import PrimePreview from "../../components/PrimePreview";
+import WeightHomeCard from "../../components/weight/WeightHomeCard";
 import { TEMP_FERTILITY_COMING_SOON } from "../../constants/tempFlags";
 import { getFertilityLogsForDay } from "../../services/fertilityLogs";
 import { buildDailyPlan } from "../../utils/fertilityPlan";
@@ -15,6 +16,7 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { useFertility } from "../../context/FertilityContext";
+import { useWeight } from "../../context/WeightContext";
 import { getHomeAssistantAdvice, getPregnancyWeeklyAdvice, invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { syncCycleRemindersForUser } from "../../services/notifications";
 import { supabase } from "../../services/supabase";
@@ -437,6 +439,7 @@ export default function HomeScreen() {
   const { isDark, isPremium, isAdmin, isTestAccount } = useTheme();
   const { pregnancyMode, accessLapsed } = usePregnancy();
   const { fertilityMode } = useFertility();
+  const { weightMode } = useWeight();
   const lastAdviceKeyRef = useRef("");
   const adviceRequestKeyRef = useRef("");
   const hasLoadedOnceRef = useRef(false);
@@ -866,6 +869,8 @@ export default function HomeScreen() {
             <Text style={styles.trackerCtaText}>{t("home.logPeriodToday")}</Text>
           </TouchableOpacity>
         </LinearGradient>
+
+        {weightMode && <WeightHomeCard />}
 
         {fertilityMode && (
           <TouchableOpacity

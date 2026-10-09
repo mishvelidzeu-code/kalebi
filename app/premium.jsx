@@ -18,6 +18,7 @@ import {
 
 import { useLanguage } from "../context/LanguageContext";
 import { useTheme } from "../context/ThemeContext";
+import { useWeight } from "../context/WeightContext";
 import {
   canOpenManageSubscriptions,
   getPremiumOfferings,
@@ -36,6 +37,7 @@ export default function PremiumScreen() {
   const IOS_AUTO_RENEW_COPY = t("premium.autoRenew");
   const ANDROID_CHECKOUT_COPY = t("premium.androidCheckout");
   const { refreshTheme, isPremium } = useTheme();
+  const { featureVisible: weightFeatureVisible } = useWeight();
 
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
@@ -65,6 +67,9 @@ export default function PremiumScreen() {
       title: t("premium.feature4Title"),
       desc: t("premium.feature4Desc"),
     },
+    ...(weightFeatureVisible
+      ? [{ icon: "scale-outline", title: t("premium.feature5Title"), desc: t("premium.feature5Desc") }]
+      : []),
   ];
 
   const loadPaywall = useCallback(async () => {

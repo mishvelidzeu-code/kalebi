@@ -52,6 +52,15 @@ const MIGRATED_FILES = [
   "utils/fertilityExport.js",
   "services/notifications.js",
   "services/assistantOrchestrator.js",
+  "app/weight-setup.jsx",
+  "components/weight/AddWeightModal.js",
+  "components/weight/WeightHomeCard.js",
+  "components/weight/WeightModeEntryCard.js",
+  "components/weight/WeightStatisticsScreen.js",
+  "components/weight/WeightViewSwitch.js",
+  "context/WeightContext.js",
+  "services/weightLogs.js",
+  "utils/weightStats.js",
   // app/(tabs)/_layout.tsx: tab titles are translated, but the AdminAssistant
   // widget in the same file is admin-only and stays Georgian on purpose, so
   // the file is not listed here. Same for app/admin.jsx and services/adminQuery.js.

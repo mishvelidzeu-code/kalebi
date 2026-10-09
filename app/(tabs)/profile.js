@@ -15,6 +15,7 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
 import { usePregnancy } from "../../context/PregnancyContext";
 import { useFertility } from "../../context/FertilityContext";
+import { useWeight } from "../../context/WeightContext";
 import { TEMP_FERTILITY_COMING_SOON, TEMP_LANGUAGE_PICKER_ENABLED } from "../../constants/tempFlags";
 import { invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { disableCycleReminders, getNotificationsEnabled, setNotificationsEnabled, syncCycleRemindersForUser } from "../../services/notifications";
@@ -78,9 +79,10 @@ const getFileExtension = (asset) => {
 export default function ProfileScreen() {
   const router = useRouter();
   const { openFertility } = useLocalSearchParams();
-  const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin, isTestAccount, testPrimeEnabled, setTestPrimeEnabled } = useTheme();
+  const { usePremiumTheme, setUsePremiumTheme, isDark, isAdmin, isPremium, isTestAccount, testPrimeEnabled, setTestPrimeEnabled } = useTheme();
   const { pregnancyMode, pregnancyStartDate, currentWeek, hasSubscription, enablePregnancyMode, updatePregnancyStartDate, disablePregnancyMode, reload: reloadPregnancy } = usePregnancy();
   const { reload: reloadFertility } = useFertility();
+  const { weightMode, weightModeChosen, featureVisible: weightFeatureVisible, blockedBy: weightBlockedBy, disableWeightMode } = useWeight();
   // Fertility mode reuses the "pregnancy" RevenueCat entitlement — selecting the
   // goal is free, but the tailored AI/advice content stays locked until paid.
   // Test accounts get it without paying; see services/adminAccess.js.
@@ -852,6 +854,50 @@ export default function ProfileScreen() {
     );
   };
 
+  // Weight-loss mode (Prime). Blocked while trying to conceive or pregnant; the
+  // choice itself is kept, so it resumes when that mode is switched off.
+  const weightRowSubtitle = weightBlockedBy
+    ? weightModeChosen
+      ? t(weightBlockedBy === "pregnancy" ? "weight.profile.pausedPregnancy" : "weight.profile.pausedFertility")
+      : t(weightBlockedBy === "pregnancy" ? "weight.profile.unavailablePregnancy" : "weight.profile.unavailableFertility")
+    : !isPremium
+      ? t(weightModeChosen ? "weight.profile.lapsed" : "weight.profile.locked")
+      : weightMode
+        ? t("weight.profile.tapToChange")
+        : t("weight.profile.off");
+
+  const handleWeightDisable = async () => {
+    const result = await disableWeightMode();
+    if (result.ok) {
+      Alert.alert(t("weight.profile.disabledTitle"), t("weight.profile.disabledBody"));
+    } else {
+      Alert.alert(t("common.error"), t("weight.saveFailed"));
+    }
+  };
+
+  const handleWeightRowPress = () => {
+    if (weightBlockedBy) {
+      Alert.alert(
+        t("weight.title"),
+        t(weightBlockedBy === "pregnancy" ? "weight.profile.blockedPregnancyBody" : "weight.profile.blockedFertilityBody")
+      );
+      return;
+    }
+    if (!isPremium) {
+      router.push("/premium");
+      return;
+    }
+    if (weightMode) {
+      Alert.alert(t("weight.title"), t("weight.profile.activeBody"), [
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("weight.profile.change"), onPress: () => router.push("/weight-setup") },
+        { text: t("common.disable"), style: "destructive", onPress: handleWeightDisable },
+      ]);
+      return;
+    }
+    router.push("/weight-setup");
+  };
+
   const handleManageSubscription = async () => {
     try {
       await openManageSubscriptions();
@@ -967,6 +1013,22 @@ export default function ProfileScreen() {
           <SettingRow icon="📆" bgColor={isDark ? "#3d1e2a" : "#FFF0F5"} title={t("profile.cycleAndPeriod")} value={t("profile.cycleAndPeriodValue", { cycle: cycleLength, period: periodLength })} onPress={() => setShowCycleModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
           <View style={[styles.divider, { backgroundColor: theme.divider }]} />
           <SettingRow icon="🎯" bgColor={isDark ? "#1a2a3d" : "#F0F4FF"} title={t("profile.myGoal")} value={getGoalLabel(goal)} onPress={() => setShowGoalModal(true)} isDarkTheme={isDark} primaryColor={theme.primary} />
+          {weightFeatureVisible && (
+            <>
+              <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+              <SettingRow
+                icon="⚖️"
+                bgColor={isDark ? "#2a233d" : "#F3F0FF"}
+                title={t("weight.title")}
+                value={weightMode ? t("weight.profile.on") : undefined}
+                subtitle={weightRowSubtitle}
+                onPress={handleWeightRowPress}
+                showArrow={!weightMode}
+                isDarkTheme={isDark}
+                primaryColor={theme.primary}
+              />
+            </>
+          )}
         </View>
 
         <Text style={[styles.sectionHeader, { color: theme.subText }]}>{t("profile.sectionPregnancy")}</Text>
