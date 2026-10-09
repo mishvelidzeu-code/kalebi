@@ -54,6 +54,7 @@ const MIGRATED_FILES = [
   "services/assistantOrchestrator.js",
   "app/weight-setup.jsx",
   "components/weight/AddWeightModal.js",
+  "components/weight/WeightDayRow.js",
   "components/weight/WeightHomeCard.js",
   "components/weight/WeightModeEntryCard.js",
   "components/weight/WeightStatisticsScreen.js",

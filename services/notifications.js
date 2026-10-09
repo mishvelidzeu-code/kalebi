@@ -8,6 +8,7 @@ import { isAdminEmail, isTestAccountEmail } from "./adminAccess";
 import { t } from "./i18n";
 import { resolvePregnancyAccessFromProfile } from "./purchases";
 import { supabase } from "./supabase";
+import { isWeightModeActive } from "./weightLogs";
 
 const NOTIFICATIONS_ENABLED_KEY = "@cycle-care/notifications-enabled";
 const DEFAULT_NOTIFICATION_HOUR = 10;
@@ -327,6 +328,23 @@ export async function scheduleFertilityReminders(lastPeriodDate, cycleLength) {
   }
 }
 
+// -- Weight-loss mode ----------------------------------------------
+// One repeating weekly weigh-in nudge: a single slot of iOS's 64. It is added
+// inside syncCycleRemindersForUser, after the cycle reminders, because every
+// schedule* function here starts with cancelAll and would wipe it otherwise.
+// weekday: 1 = Sunday, so 2 = Monday morning.
+async function scheduleWeeklyWeighInReminder() {
+  return Notifications.scheduleNotificationAsync({
+    content: { title: t("notifications.weighInTitle"), body: t("notifications.weighInBody"), sound: "default" },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+      weekday: 2,
+      hour: 8,
+      minute: 0,
+    },
+  });
+}
+
 export async function scheduleCycleReminders(lastPeriodDate, cycleLength) {
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
@@ -438,7 +456,19 @@ export async function schedulePregnancyNotifications(lmpDate) {
   }
 }
 
-export async function syncCycleRemindersForUser() {
+// Every schedule* function starts with cancelAll and then adds its set, so two
+// overlapping syncs can interleave and leave duplicates (e.g. the profile tab
+// syncing on mount while weight mode switches on at launch). Queue them: each
+// call still runs, one after the other.
+let reminderSyncQueue = Promise.resolve();
+
+export function syncCycleRemindersForUser() {
+  const run = reminderSyncQueue.then(syncCycleRemindersNow, syncCycleRemindersNow);
+  reminderSyncQueue = run.catch(() => {});
+  return run;
+}
+
+async function syncCycleRemindersNow() {
   try {
     const notificationsEnabled = await getNotificationsEnabled();
     if (!notificationsEnabled) {
@@ -506,7 +536,21 @@ export async function syncCycleRemindersForUser() {
       return scheduleFertilityReminders(lastPeriodDate, cycleLength);
     }
 
-    return scheduleCycleReminders(lastPeriodDate, cycleLength);
+    const scheduledIds = await scheduleCycleReminders(lastPeriodDate, cycleLength);
+
+    // Weight mode sits on top of plain cycle tracking only (never fertility or
+    // pregnancy — both returned above). A failure here must not cost the
+    // cycle reminders that are already scheduled.
+    if (isWeightModeActive()) {
+      try {
+        const id = await scheduleWeeklyWeighInReminder();
+        if (id) scheduledIds.push(id);
+      } catch (error) {
+        console.log("Schedule weigh-in reminder error:", error);
+      }
+    }
+
+    return scheduledIds;
   } catch (error) {
     console.log("Sync reminders error:", error);
     return [];

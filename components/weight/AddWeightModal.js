@@ -4,20 +4,42 @@ import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, St
 import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
 import { invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
-import { upsertWeightLog } from "../../services/weightLogs";
+import { deleteWeightLog, upsertWeightLog } from "../../services/weightLogs";
 import dayjs from "../../utils/dayjs";
 import { WEIGHT_LIMITS } from "../../utils/weightStats";
 import { getWeightTheme } from "./weightTheme";
 
-// Bottom sheet for today's weigh-in. Writing again the same day replaces it.
-export default function AddWeightModal({ visible, initialKg, onClose, onSaved }) {
+// Bottom sheet for one day's weigh-in (today unless `date` is given, e.g. from
+// the calendar). Writing the same day again replaces it; `canDelete` offers to
+// remove an existing entry.
+export default function AddWeightModal({ visible, initialKg, date, canDelete = false, onClose, onSaved }) {
   const { t } = useLanguage();
   const { isDark } = useTheme();
   const theme = getWeightTheme(isDark);
+  const todayStr = dayjs().format("YYYY-MM-DD");
+  const day = date || todayStr;
 
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const finish = () => {
+    // The assistant caches its context for 45 s — let it see this change now.
+    invalidateAssistantContextCache();
+    onSaved?.();
+    onClose?.();
+  };
+
+  const handleDelete = async () => {
+    setSaving(true);
+    const result = await deleteWeightLog(day);
+    setSaving(false);
+    if (!result.ok) {
+      setError(t("weight.saveFailed"));
+      return;
+    }
+    finish();
+  };
 
   useEffect(() => {
     if (visible) {
@@ -34,17 +56,14 @@ export default function AddWeightModal({ visible, initialKg, onClose, onSaved })
     }
 
     setSaving(true);
-    const result = await upsertWeightLog(dayjs().format("YYYY-MM-DD"), Math.round(kg * 10) / 10);
+    const result = await upsertWeightLog(day, Math.round(kg * 10) / 10);
     setSaving(false);
 
     if (!result.ok) {
       setError(t("weight.saveFailed"));
       return;
     }
-    // The assistant caches its context for 45 s — let it see this weigh-in now.
-    invalidateAssistantContextCache();
-    onSaved?.();
-    onClose?.();
+    finish();
   };
 
   return (
@@ -52,8 +71,8 @@ export default function AddWeightModal({ visible, initialKg, onClose, onSaved })
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={[styles.sheet, { backgroundColor: isDark ? "#221D33" : "#FFFFFF" }]}>
-          <Text style={[styles.title, { color: theme.text }]}>{t("weight.addTitle")}</Text>
-          <Text style={[styles.date, { color: theme.subText }]}>{dayjs().format("D MMMM, dddd")}</Text>
+          <Text style={[styles.title, { color: theme.text }]}>{day === todayStr ? t("weight.addTitle") : t("weight.viewWeight")}</Text>
+          <Text style={[styles.date, { color: theme.subText }]}>{dayjs(day).format("D MMMM, dddd")}</Text>
 
           <View style={[styles.inputRow, { borderColor: error ? theme.water : theme.accentBorder, backgroundColor: theme.inputBg }]}>
             <TextInput
@@ -78,6 +97,11 @@ export default function AddWeightModal({ visible, initialKg, onClose, onSaved })
           <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.accent }]} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{t("common.save")}</Text>}
           </TouchableOpacity>
+          {canDelete && (
+            <TouchableOpacity style={styles.cancelBtn} onPress={handleDelete} disabled={saving} activeOpacity={0.7}>
+              <Text style={[styles.cancelText, { color: theme.water }]}>{t("common.delete")}</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.cancelBtn} onPress={onClose} activeOpacity={0.7}>
             <Text style={[styles.cancelText, { color: theme.subText }]}>{t("common.cancel")}</Text>
           </TouchableOpacity>

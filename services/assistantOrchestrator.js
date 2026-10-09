@@ -23,7 +23,7 @@ import { getLanguage, t } from "./i18n";
 import { getFertilityLogsForDay, getFertilityLogsRange } from "./fertilityLogs";
 import { resolvePregnancyAccessFromProfile } from "./purchases";
 import { supabase } from "./supabase";
-import { getWeightLogsRange, isWeightModeActiveForAssistant, WEIGHT_PROFILE_FIELDS } from "./weightLogs";
+import { getWeightLogsRange, isWeightModeActive, WEIGHT_PROFILE_FIELDS } from "./weightLogs";
 
 const DEFAULT_GOAL_LABEL = "ციკლის კონტროლი";
 
@@ -352,7 +352,7 @@ async function getAssistantContext({ forceRefresh = false } = {}) {
     throw new Error(t("assistant.userNotFound"));
   }
 
-  const weightModeActive = isWeightModeActiveForAssistant();
+  const weightModeActive = isWeightModeActive();
 
   if (
     !forceRefresh &&

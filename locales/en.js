@@ -1256,6 +1256,8 @@ export default {
     doctorBody: "Week {{week}} is coming up — book your doctor's visit",
     diaryTitle: "Pregnancy diary 📔",
     diaryBody: "Log today's symptoms and mood",
+    weighInTitle: "Weekly weigh-in ⚖️",
+    weighInBody: "Weigh yourself in the morning, before breakfast — it keeps the trend accurate.",
   },
   update: {
     title: "Update ready ✨",

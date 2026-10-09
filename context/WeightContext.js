@@ -3,8 +3,9 @@ import { AppState } from "react-native";
 
 import { TEMP_WEIGHT_MODE_ENABLED } from "../constants/tempFlags";
 import { getSignedInUser, isOfflineQueryResult, retryWhenOnline } from "../services/networkRecovery";
+import { syncCycleRemindersForUser } from "../services/notifications";
 import { supabase } from "../services/supabase";
-import { setWeightModeActiveForAssistant, setWeightModeFlag } from "../services/weightLogs";
+import { setWeightModeActive, setWeightModeFlag } from "../services/weightLogs";
 import { useFertility } from "./FertilityContext";
 import { usePregnancy } from "./PregnancyContext";
 import { useTheme } from "./ThemeContext";
@@ -106,10 +107,16 @@ export function WeightProvider({ children }) {
   const blockedBy = pregnancyMode ? "pregnancy" : fertilityGoal ? "fertility" : null;
   const weightMode = featureVisible && weightModeChosen && Boolean(isPremium) && !blockedBy;
 
-  // The assistant reads this; its context cache is keyed on it, so a change
-  // here is picked up on the next question.
+  // The assistant and the reminder scheduler read this. The assistant's
+  // context cache is keyed on it; reminders are rescheduled whenever it really
+  // changes (not on the first render, where it is only the initial false).
+  const lastWeightModeRef = useRef(false);
   useEffect(() => {
-    setWeightModeActiveForAssistant(weightMode);
+    setWeightModeActive(weightMode);
+    if (lastWeightModeRef.current !== weightMode) {
+      lastWeightModeRef.current = weightMode;
+      syncCycleRemindersForUser();
+    }
   }, [weightMode]);
 
   return (
