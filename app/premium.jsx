@@ -67,10 +67,10 @@ export default function PremiumScreen() {
       title: t("premium.feature4Title"),
       desc: t("premium.feature4Desc"),
     },
-    ...(weightFeatureVisible
-      ? [{ icon: "scale-outline", title: t("premium.feature5Title"), desc: t("premium.feature5Desc") }]
-      : []),
   ];
+  // Weight loss is the newest Prime feature, so it gets its own spotlight card
+  // above the list instead of a plain row.
+  const weightBullets = ["water", "phase", "plan"].map((key) => t(`premium.weightBullets.${key}`));
 
   const loadPaywall = useCallback(async () => {
     setLoading(true);
@@ -243,6 +243,34 @@ export default function PremiumScreen() {
 
           <Text style={styles.subtitle}>{t("premium.subtitle")}</Text>
 
+          {weightFeatureVisible && (
+            <LinearGradient
+              colors={["rgba(123,97,255,0.32)", "rgba(233,69,96,0.14)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.spotlight}
+            >
+              <View style={styles.spotlightHeader}>
+                <LinearGradient colors={["#A78BFA", "#7B61FF"]} style={styles.spotlightIcon}>
+                  <Ionicons name="scale-outline" size={24} color="#FFFFFF" />
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>{t("premium.newBadge")}</Text>
+                  </View>
+                  <Text style={styles.spotlightTitle}>{t("premium.feature5Title")}</Text>
+                </View>
+              </View>
+              <Text style={styles.spotlightDesc}>{t("premium.feature5Desc")}</Text>
+              {weightBullets.map((bullet) => (
+                <View key={bullet} style={styles.spotlightBullet}>
+                  <Ionicons name="checkmark-circle" size={18} color="#C4B5FD" />
+                  <Text style={styles.spotlightBulletText}>{bullet}</Text>
+                </View>
+              ))}
+            </LinearGradient>
+          )}
+
           <View style={{ width: "100%", marginBottom: 28 }}>
             {features.map((feature) => (
               <View key={feature.title} style={styles.feature}>
@@ -392,6 +420,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     lineHeight: 22,
   },
+  spotlight: {
+    width: "100%",
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: "rgba(167,139,250,0.65)",
+    padding: 18,
+    marginBottom: 28,
+    shadowColor: "#7B61FF",
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  spotlightHeader: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 10 },
+  spotlightIcon: { width: 52, height: 52, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  newBadge: { alignSelf: "flex-start", backgroundColor: "#7B61FF", borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, marginBottom: 5 },
+  newBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900", letterSpacing: 0.6, textTransform: "uppercase" },
+  spotlightTitle: { color: "#FFFFFF", fontSize: 18, fontWeight: "900" },
+  spotlightDesc: { color: "#D6CCF5", fontSize: 13, lineHeight: 19, marginBottom: 10 },
+  spotlightBullet: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
+  spotlightBulletText: { flex: 1, color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
   feature: { flexDirection: "row", marginBottom: 22, alignItems: "center" },
   icon: {
     width: 48,

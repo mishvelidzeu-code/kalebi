@@ -472,6 +472,9 @@ function RegularStatisticsScreen({ headerSlot = null }) {
             </View>
           </LinearGradient>
 
+          {/* Right under the "days until period" hero, so it is seen without scrolling. */}
+          <WeightModeEntryCard />
+
           {stats.history.length > 0 && (
             <LinearGradient colors={theme.cardGradient} style={[styles.chartCard, { borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.cardHeaderRow}>
@@ -527,8 +530,6 @@ function RegularStatisticsScreen({ headerSlot = null }) {
               </View>
             </View>
           </LinearGradient>
-
-          <WeightModeEntryCard />
 
           {stats.topSymptoms.length > 0 && (
             <LinearGradient colors={theme.cardGradient} style={[styles.symptomsCard, { borderColor: theme.border, borderWidth: 1 }]}>

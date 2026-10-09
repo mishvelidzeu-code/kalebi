@@ -59,7 +59,7 @@ export default function WeightModeEntryCard() {
     <LinearGradient colors={theme.cardGradient} style={[styles.card, { borderColor: theme.accentBorder }]}>
       <View style={styles.headerRow}>
         <View style={[styles.icon, { backgroundColor: theme.accentSoft }]}>
-          <Ionicons name={isPremium ? "scale-outline" : "lock-closed"} size={18} color={theme.accent} />
+          <Ionicons name={isPremium || lapsed ? "scale-outline" : "lock-closed"} size={18} color={theme.accent} />
         </View>
         <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
       </View>

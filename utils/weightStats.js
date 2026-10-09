@@ -318,6 +318,51 @@ export function detectCycleDisruption({ cycles = [], weightStartedAt, fallbackCy
   return null;
 }
 
+// Where today sits inside the cycle, for the weight screen's phase card. The
+// long phases are split so the advice fits the actual day (early vs late
+// luteal behave very differently on the scale), and tipKey rotates daily so
+// the card does not repeat itself.
+export const WEIGHT_TIP_VARIANTS = 3;
+const WEIGH_IN_BY_STAGE = {
+  periodEarly: "waterHigh",
+  periodLate: "waterLeaving",
+  follicularEarly: "reliable",
+  follicularLate: "reliable",
+  fertile: "normal",
+  lutealEarly: "normal",
+  lutealLate: "waterHigh",
+};
+
+export function getWeightPhaseGuide({ cycleDay, cycleLength = 28, periodLength = 5, date = dayjs() }) {
+  const day = Number(cycleDay);
+  const length = Number(cycleLength) || 28;
+  const period = Number(periodLength) || 5;
+  if (!day || day < 1) return null;
+
+  const phaseKey = getCyclePhaseKey(day, length, period);
+  const ovulationDay = length - 13;
+  let stageKey;
+  if (phaseKey === "period") {
+    stageKey = day <= Math.min(2, period) ? "periodEarly" : "periodLate";
+  } else if (phaseKey === "follicular") {
+    const middle = period + Math.ceil((ovulationDay - 5 - period) / 2);
+    stageKey = day < middle ? "follicularEarly" : "follicularLate";
+  } else if (phaseKey === "fertile") {
+    stageKey = "fertile";
+  } else {
+    // The last five days before the period: water retention and cravings peak.
+    stageKey = day > length - 5 ? "lutealLate" : "lutealEarly";
+  }
+
+  const dayOfYear = dayjs(date).diff(dayjs(date).startOf("year"), "day");
+  return {
+    phaseKey,
+    stageKey,
+    weighInKey: WEIGH_IN_BY_STAGE[stageKey],
+    tipKey: `a${(dayOfYear % WEIGHT_TIP_VARIANTS) + 1}`,
+  };
+}
+
 // What the assistant gets in weight mode: facts and the app's own safe plan,
 // so the model never has to invent numbers. Plain values only (JSON-friendly).
 export function buildWeightAiContext({ logs = [], cycles = [], profile = {}, age = null, cycleLength = 28, periodLength = 5, referenceDate = dayjs() }) {

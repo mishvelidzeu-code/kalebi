@@ -213,6 +213,13 @@ The user turned on weight-loss mode, which sits on top of her cycle tracking. co
 - Use short paragraphs.
 `.trim();
 
+// Appended to the home advice prompt when weight mode is on (context.weightTracking).
+const WEIGHT_ADVICE_INSTRUCTIONS = [
+  "She also has weight-loss mode on (context.weightTracking).",
+  "Add one short, practical weight tip that fits today's cycle phase, using her real numbers — for example today's calorie target, or that a gain in the luteal phase or during the period is likely water.",
+  "Never suggest eating less than her plan, and keep it kind and body-positive.",
+];
+
 const getPregnancySystemPrompt = () => PREGNANCY_SYSTEM_PROMPT_TEMPLATE.replace("__LANGUAGE__", languageName());
 const getAssistantSystemPrompt = () => ASSISTANT_SYSTEM_PROMPT_TEMPLATE.replace("__LANGUAGE__", languageName());
 
@@ -942,6 +949,10 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
     "Keep it concise for a mobile card.",
   ].join(" ");
 
+  // Weight mode never coexists with pregnancy or fertility (WeightContext), so
+  // this only extends the plain diary prompt.
+  const weight = !isPregnancy && !fertility ? context.weightTracking || null : null;
+
   const prompt = isPregnancy
     ? [
         `The user is pregnant (week ${context.pregnancy_week || "?"}, trimester ${context.pregnancy_trimester || "?"}).`,
@@ -961,6 +972,13 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
         "Reflect today's state gently and naturally.",
         "If there is a note, briefly acknowledge what it suggests emotionally.",
         "Offer one or two small self-care or grounding suggestions for today.",
+        ...(weight
+          ? [
+              "She also has weight-loss mode on (weight_today).",
+              "If it fits today's entry, add one gentle, cycle-aware weight note — for example that bloating or a higher scale reading in the luteal phase or during the period is usually water.",
+              "If she feels low, anxious or guilty about food, put comfort first and do not push the diet.",
+            ]
+          : []),
         "Do not diagnose and keep it concise for a mobile card.",
       ].join(" ");
 
@@ -990,6 +1008,18 @@ export async function getDiaryAssistantSupport({ symptoms = [], mood = null, not
               best_ovulation_estimate: fertility.best_ovulation_estimate,
               confirmed_ovulation: fertility.confirmed_ovulation,
               cycle_regularity: fertility.cycle_regularity,
+            }
+          : {}),
+        // Only the weight facts a short diary card can use.
+        ...(weight
+          ? {
+              weight_today: {
+                latest_weight_kg: weight.latest_weight_kg,
+                seven_day_average_kg: weight.seven_day_average_kg,
+                latest_change: weight.latest_change,
+                daily_calorie_target_kcal: weight.daily_calorie_target_kcal,
+                cycle_warning: weight.cycle_warning,
+              },
             }
           : {}),
       };
@@ -1032,6 +1062,7 @@ export async function getHomeAssistantAdvice() {
         "If today's diary is not logged yet, gently encourage the user to log how they feel today.",
         "If today's diary exists, personalize the advice around their current emotional and physical state.",
         "Start warmly, keep it psychologically supportive, and include one practical suggestion for today.",
+        ...(context.weightTracking ? WEIGHT_ADVICE_INSTRUCTIONS : []),
         "Keep the answer concise and mobile-friendly, with at most 2 short paragraphs.",
       ].join(" ");
 
@@ -1039,7 +1070,8 @@ export async function getHomeAssistantAdvice() {
     prompt,
     systemPrompt: context.pregnancy_mode ? getPregnancySystemPrompt() : getAssistantSystemPrompt(),
     context: { ...context, recentHistory: [] },
-    maxOutputTokens: 220,
+    // A little more room when the card also carries the weight tip.
+    maxOutputTokens: context.weightTracking ? 280 : 220,
     metadata: {
       feature: context.pregnancy_mode ? "home-daily-advice-pregnancy" : "home-daily-advice",
     },

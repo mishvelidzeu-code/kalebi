@@ -533,7 +533,7 @@ export default function AssistantScreen() {
                     <Image source={ASSISTANT_GUIDE_IMAGE} style={styles.assistantAvatarImage} resizeMode="cover" />
                   </View>
                 )}
-                <View style={{ maxWidth: "80%" }}>
+                <View style={[styles.messageColumn, isUser ? styles.messageColumnUser : styles.messageColumnAssistant]}>
                 <View
                   style={[
                     styles.messageBubble,
@@ -793,8 +793,14 @@ const styles = StyleSheet.create({
   },
   userMessageAvatarImage: { width: "100%", height: "100%" },
   userMessageAvatarInitial: { fontSize: 14, fontWeight: "900" },
+  // The column alone caps the width. The bubble used to carry its own
+  // maxWidth: "84%" as well — a percentage of a column that is itself sized by
+  // the text — so every bubble came out 16% narrower than its own text and
+  // short words broke mid-word ("წო/ნა").
+  messageColumn: { maxWidth: "80%", flexShrink: 1 },
+  messageColumnUser: { alignItems: "flex-end" },
+  messageColumnAssistant: { alignItems: "flex-start" },
   messageBubble: {
-    maxWidth: "84%",
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 13,

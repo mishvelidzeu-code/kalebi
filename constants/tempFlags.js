@@ -17,7 +17,7 @@ export const TEMP_HIDE_ASSISTANT_HEADER = true;
 // in. Flip to true once the English and Russian dictionaries are complete.
 export const TEMP_LANGUAGE_PICKER_ENABLED = true;
 
-// Weight-loss mode (a Prime feature). While false it is hidden everywhere —
-// statistics card, profile row, paywall line — except on test accounts, so it
-// can be checked on a real phone before release. Flip to true to launch.
-export const TEMP_WEIGHT_MODE_ENABLED = false;
+// Weight-loss mode (a Prime feature). Kill switch: false hides it everywhere —
+// statistics card, profile row, paywall spotlight, home Prime chip — except on
+// test accounts; users' data and settings stay in the database untouched.
+export const TEMP_WEIGHT_MODE_ENABLED = true;

@@ -24,6 +24,7 @@ import {
   getHealthyWeightRange,
   getLatestWeightInsight,
   getSafeWeeklyLossKg,
+  getWeightPhaseGuide,
   getWeightProgress,
   normalizeWeightLogs,
   scaleWeightsForChart,
@@ -33,6 +34,8 @@ import { getWeightTheme } from "./weightTheme";
 
 const CHART_BARS = 10;
 const WATER_PHASES = new Set(["luteal", "period"]);
+// Same phase colors as the home screen.
+const PHASE_COLORS = { period: "#FF4D88", follicular: "#48CAE4", fertile: "#06D6A0", luteal: "#C8B6FF" };
 
 const INSIGHT_STYLE = {
   waterLikely: { icon: "water-outline", tone: "water" },
@@ -85,6 +88,7 @@ export default function WeightStatisticsScreen({ headerSlot }) {
       const weeklyLossKg = calories?.weeklyLossKg ?? getSafeWeeklyLossKg(age);
       const bmi = computeBmi(currentKg, heightCm);
       const lastStart = cycleRows.length ? cycleRows[cycleRows.length - 1].start_date : null;
+      const forecast = calculateCycleState({ lastStartDate: lastStart, cycleLength, periodLength });
 
       setData({
         latest,
@@ -100,7 +104,13 @@ export default function WeightStatisticsScreen({ headerSlot }) {
         bmiCategory: getBmiCategoryKey(bmi),
         healthy: getHealthyWeightRange(heightCm, age),
         disruption: detectCycleDisruption({ cycles: cycleRows, weightStartedAt: profile.weight_started_at, fallbackCycleLength: cycleLength }),
-        todayPhase: calculateCycleState({ lastStartDate: lastStart, cycleLength, periodLength })?.phaseKey || null,
+        today: forecast
+          ? {
+              cycleDay: forecast.cycleDay,
+              daysLeft: forecast.daysLeft,
+              guide: getWeightPhaseGuide({ cycleDay: forecast.cycleDay, cycleLength, periodLength }),
+            }
+          : null,
         ageMissing: age == null,
       });
     } catch (error) {
@@ -264,11 +274,38 @@ export default function WeightStatisticsScreen({ headerSlot }) {
             )}
           </LinearGradient>
 
-          {data?.todayPhase && (
+          {/* Today's phase: stage-specific advice that changes daily, what the
+              scale is likely to do today, and today's calorie target. */}
+          {data?.today?.guide && (
             <LinearGradient colors={theme.cardGradient} style={[styles.card, { borderColor: theme.border }]}>
               <Text style={[styles.cardEyebrow, { color: theme.water }]}>{t("weight.phaseTipEyebrow")}</Text>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>{phaseName(data.todayPhase)}</Text>
-              <Text style={[styles.cardNote, { color: theme.subText }]}>{t(`weight.phaseTips.${data.todayPhase}`)}</Text>
+              <View style={styles.phaseTitleRow}>
+                <View style={[styles.phaseDot, { backgroundColor: PHASE_COLORS[data.today.guide.phaseKey] }]} />
+                <Text style={[styles.cardTitle, styles.phaseTitle, { color: theme.text }]}>{phaseName(data.today.guide.phaseKey)}</Text>
+              </View>
+              <Text style={[styles.phaseMeta, { color: theme.subText }]}>
+                {t("weight.phaseCard.dayOfCycle", { day: data.today.cycleDay })}
+                {data.today.guide.phaseKey !== "period" ? ` · ${t("weight.phaseCard.periodIn", { count: data.today.daysLeft })}` : ""}
+              </Text>
+              <Text style={[styles.cardNote, { color: theme.text }]}>
+                {t(`weight.stageTips.${data.today.guide.stageKey}.${data.today.guide.tipKey}`)}
+              </Text>
+              <View style={[styles.phaseFacts, { borderTopColor: theme.divider }]}>
+                <View style={styles.phaseFact}>
+                  <Ionicons name="scale-outline" size={16} color={WATER_PHASES.has(data.today.guide.phaseKey) ? theme.water : theme.accent} />
+                  <Text style={[styles.phaseFactText, { color: theme.subText }]}>
+                    {t(`weight.weighInNotes.${data.today.guide.weighInKey}`)}
+                  </Text>
+                </View>
+                {data.calories && (
+                  <View style={styles.phaseFact}>
+                    <Ionicons name="flame-outline" size={16} color={theme.accent} />
+                    <Text style={[styles.phaseFactText, { color: theme.subText }]}>
+                      {t("weight.phaseCard.todayCalories", { kcal: data.calories.target })}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </LinearGradient>
           )}
 
@@ -390,6 +427,13 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 17, fontWeight: "900", marginBottom: 8 },
   cardNote: { fontSize: 13, lineHeight: 19, fontWeight: "600" },
   compareDelta: { fontSize: 28, fontWeight: "900", marginBottom: 4 },
+  phaseTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  phaseDot: { width: 10, height: 10, borderRadius: 5 },
+  phaseTitle: { marginBottom: 2 },
+  phaseMeta: { fontSize: 12, fontWeight: "700", marginBottom: 10 },
+  phaseFacts: { borderTopWidth: 1, marginTop: 12, paddingTop: 10, gap: 8 },
+  phaseFact: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  phaseFactText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
 
   chartRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 8, marginBottom: 14 },
   barColumn: { flex: 1, alignItems: "center" },

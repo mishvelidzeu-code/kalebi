@@ -979,6 +979,12 @@ export default {
     buttonAndroid: "Open Prime checkout",
     buttonBuy: "Get Prime",
     manage: "Manage / cancel subscription",
+    newBadge: "New",
+    weightBullets: {
+      water: "Know whether a gain is water or real",
+      phase: "Daily advice for your cycle phase",
+      plan: "A safe plan for your age and activity",
+    },
   },
   pregnancyPremium: {
     fallbackPrice: "$2.99 / month",
@@ -1018,6 +1024,11 @@ export default {
   },
   primePreview: {
     defaultMessage: "Unlock Prime to see the full content",
+    highlights: {
+      advice: "Full AI advice",
+      chat: "20 questions a day",
+      weight: "Weight loss",
+    },
   },
   avatar: {
     permissionTitle: "Permission needed",
@@ -1303,11 +1314,56 @@ export default {
     legendWater: "Luteal phase and period — water retention is common",
     legendOther: "Other cycle days",
     phaseTipEyebrow: "Today's phase",
-    phaseTips: {
-      period: "Rest, drink plenty of water and eat iron-rich food. The scale often reads higher these days — that's water.",
-      follicular: "Your energy is rising — a good time for more active workouts. Appetite is usually lower, too.",
-      fertile: "Your energy is at its peak. Keep your routine and don't forget protein and vegetables.",
-      luteal: "Your appetite may grow — that's hormones, not weakness. Choose filling food and lighter workouts.",
+    phaseCard: {
+      dayOfCycle: "Cycle day {{day}}",
+      periodIn: {
+        one: "period in {{count}} day",
+        other: "period in {{count}} days",
+      },
+      todayCalories: "Today's plan: ~{{kcal}} kcal",
+    },
+    stageTips: {
+      periodEarly: {
+        a1: "The first days are the hardest — rest is part of the plan right now. Eat iron-rich food (legumes, greens, meat) and drink plenty of water.",
+        a2: "If your energy is low, swap intense workouts for a walk or stretching. One gentle day won't undo your progress.",
+        a3: "Warm, filling meals are the best choice now. Fruit and a little dark chocolate handle sweet cravings well.",
+      },
+      periodLate: {
+        a1: "Retained water is starting to leave — the scale may show the loss faster over the next few days.",
+        a2: "Your energy is coming back. You can ease back into your usual workouts.",
+        a3: "A good time to plan the week ahead: food prepared in advance makes the plan much easier to keep.",
+      },
+      follicularEarly: {
+        a1: "Energy is rising and appetite is usually lower — the easiest days of the cycle to stick to your plan.",
+        a2: "Good days for strength training: keeping muscle while you lose weight supports your metabolism.",
+        a3: "Try a new activity or a longer walk — your body handles effort well right now.",
+      },
+      follicularLate: {
+        a1: "Your energy is high — if you enjoy intense workouts, now is the time.",
+        a2: "Appetite is still low. Add protein to every meal so you stay full for longer.",
+        a3: "Weigh-ins these days are the most reliable — your body is holding almost no extra water.",
+      },
+      fertile: {
+        a1: "Your energy is at its peak. Drink enough water — your body needs more on active days.",
+        a2: "Appetite is often lowest around ovulation — listen to your hunger and don't skip meals.",
+        a3: "A small one-day swing on the scale around ovulation is normal. Follow the 7-day average.",
+      },
+      lutealEarly: {
+        a1: "Progesterone is rising and your body burns a little more energy — a bigger appetite is natural, not a weakness.",
+        a2: "Choose filling food: protein, fibre, whole grains. Sweet cravings will bother you less.",
+        a3: "Keep moving, just at a gentler pace if you feel tired.",
+      },
+      lutealLate: {
+        a1: "Before your period your body holds on to water — the scale may read 0.5–2 kg higher. It isn't fat and it will go after your period.",
+        a2: "Salty and very sweet food increase water retention. Try more water, vegetables and magnesium-rich food (nuts, greens).",
+        a3: "If irritability or cravings are strong, don't punish yourself — a gentle walk and good sleep will help most right now.",
+      },
+    },
+    weighInNotes: {
+      waterHigh: "The scale will read higher these days — judge your result after your period.",
+      waterLeaving: "Retained water is leaving — the scale will go down over the next few days.",
+      reliable: "The best days to weigh in — the number is the most reliable.",
+      normal: "A normal day to weigh in — look at the average, not a single number.",
     },
     compareTitle: "This cycle vs the last one",
     compareBody: "Average weight: {{current}} kg (last cycle {{previous}} kg). Comparing the same phases is fairer than day to day.",
@@ -1340,7 +1396,7 @@ export default {
       title: "Weight loss with your cycle",
       bodyLocked: "Find out whether a jump on the scale is water or real — based on your cycle phase. A safe plan for your age.",
       bodyUnlocked: "Unlocked with Prime. Turn it on and a weight page appears in statistics — your cycle statistics stay too.",
-      lapsedTitle: "Prime has ended",
+      lapsedTitle: "Weight loss — Prime has ended",
       lapsedBody: "Weight loss is paused. Your entries are saved — everything comes back when you renew Prime.",
       unlock: "Unlock with Prime",
       enable: "Turn on",

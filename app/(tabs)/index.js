@@ -439,7 +439,7 @@ export default function HomeScreen() {
   const { isDark, isPremium, isAdmin, isTestAccount } = useTheme();
   const { pregnancyMode, accessLapsed } = usePregnancy();
   const { fertilityMode } = useFertility();
-  const { weightMode } = useWeight();
+  const { weightMode, loading: weightLoading, featureVisible: weightFeatureVisible } = useWeight();
   const lastAdviceKeyRef = useRef("");
   const adviceRequestKeyRef = useRef("");
   const hasLoadedOnceRef = useRef(false);
@@ -676,6 +676,9 @@ export default function HomeScreen() {
         [...(todayEntry?.symptoms || [])].sort().join("|"),
         todayEntry?.mood || "",
         (todayEntry?.note || "").trim(),
+        // Weight mode adds a weight tip, so the cached card must not be reused
+        // across it. Appended only when on, so every other key stays as before.
+        ...(weightMode ? ["weight"] : []),
       ].join("::");
 
       if (!hasLoadedOnceRef.current) {
@@ -688,7 +691,11 @@ export default function HomeScreen() {
           setDailyAdvice(fallbackAdvice);
         }
 
-        void refreshHomeAdvice(user.id, adviceKey, forceAdviceRefresh);
+        // Wait until weight mode is known: asking first and again once it
+        // resolves would spend two AI calls on the same card at launch.
+        if (!weightLoading) {
+          void refreshHomeAdvice(user.id, adviceKey, forceAdviceRefresh);
+        }
       } else {
         setDailyAdvice(fallbackAdvice);
         setAdviceLoading(false);
@@ -701,7 +708,7 @@ export default function HomeScreen() {
         hasLoadedOnceRef.current = true;
       }
     }
-  }, [getPhaseAndChance, isPremium, isAdmin, isTestAccount, fertilityMode, refreshHomeAdvice, t]);
+  }, [getPhaseAndChance, isPremium, isAdmin, isTestAccount, fertilityMode, weightMode, weightLoading, refreshHomeAdvice, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1024,10 +1031,18 @@ export default function HomeScreen() {
           </View>
           <PrimePreview
             style={styles.insightPreview}
-            minHeight={142}
+            // Taller for free users: the overlay also lists what Prime unlocks.
+            minHeight={isPremium ? 142 : 214}
             concealCompletely
             message={t("home.primeAdviceMessage")}
             buttonLabel={t("home.unlock")}
+            highlights={[
+              { key: "advice", icon: "sparkles-outline", label: t("primePreview.highlights.advice") },
+              { key: "chat", icon: "chatbubble-ellipses-outline", label: t("primePreview.highlights.chat") },
+              ...(weightFeatureVisible
+                ? [{ key: "weight", icon: "scale-outline", label: t("primePreview.highlights.weight"), featured: true, badge: t("premium.newBadge") }]
+                : []),
+            ]}
           >
             <Text style={[styles.insightText, { color: theme.subText }]}>{dailyAdvice}</Text>
           </PrimePreview>
