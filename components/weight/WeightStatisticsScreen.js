@@ -30,6 +30,7 @@ import {
   scaleWeightsForChart,
 } from "../../utils/weightStats";
 import AddWeightModal from "./AddWeightModal";
+import WeightMealPlanCard from "./WeightMealPlanCard";
 import { getWeightTheme } from "./weightTheme";
 
 const CHART_BARS = 10;
@@ -95,6 +96,7 @@ export default function WeightStatisticsScreen({ headerSlot }) {
         todayKg: latest?.date === today ? latest.weight : null,
         annotated,
         insight: getLatestWeightInsight(annotated),
+        targetKg,
         comparison: compareLastTwoCycles(logs, cycleRows),
         progress: getWeightProgress({ startKg: profile.weight_start_kg, targetKg, currentKg }),
         calories,
@@ -307,6 +309,14 @@ export default function WeightStatisticsScreen({ headerSlot }) {
                 )}
               </View>
             </LinearGradient>
+          )}
+
+          {data && (
+            <WeightMealPlanCard
+              calories={data.calories?.target ?? null}
+              targetKg={data.targetKg ?? null}
+              phaseKey={data.today?.guide?.phaseKey ?? null}
+            />
           )}
 
           {data?.comparison && (

@@ -5,10 +5,19 @@ import { getCyclePhaseKey } from "./cycleEngine";
 // Pure helpers for weight-loss mode. No UI text here — functions return keys
 // and numbers, screens translate them.
 //
-// Deliberately conservative: every target is floored, every pace is gentle,
-// and nothing below the healthy range is ever suggested.
+// Deliberately conservative: calories are floored and the pace is gentle. The
+// target is the user's choice — below the healthy range she is warned, not
+// stopped — except in the anorexia-risk zone, which is never allowed.
 
 export const WEIGHT_LIMITS = { minKg: 30, maxKg: 250, minHeightCm: 120, maxHeightCm: 220 };
+// Adult underweight line: someone already below it gets no weight-loss plan.
+export const UNDERWEIGHT_BMI = 18.5;
+// ICD-10 anorexia nervosa threshold (BMI ≤ 17.5). A target below it can still
+// be saved, but with the strongest warning and a doctor recommendation.
+export const ANOREXIA_RISK_BMI = 17.5;
+// Hard floor (product decision: 44.5 kg at 165 cm). Nothing below it can be
+// saved, whatever the user asks for.
+export const MIN_TARGET_BMI = 16.35;
 export const MIN_WEIGHT_MODE_AGE = 18;
 export const OLDER_ADULT_AGE = 65;
 // Absolute daily minimum; the BMR is used instead when it is higher.
@@ -126,8 +135,15 @@ export function isWeightModeAllowedForAge(age) {
   return age != null && age >= MIN_WEIGHT_MODE_AGE;
 }
 
-// Setup check. Returns the first problem as a key, plus the lowest healthy
-// target so the screen can offer it instead.
+const weightAtBmi = (bmi, heightCm) => round1(bmi * (heightCm / 100) ** 2);
+
+// Setup check.
+//   errorKey   — the first problem that blocks saving;
+//   warningKey — saving is allowed, the screen warns:
+//     "targetBelowHealthy" under the (age-aware) healthy range,
+//     "targetVeryLow"      under the anorexia line (BMI 17.5) — see a doctor.
+// minHealthyKg is the lowest healthy target (offered as the recommendation),
+// minAllowedKg the hard floor below which nothing can be saved.
 export function validateWeightGoal({ heightCm, currentKg, targetKg, age }) {
   const height = toNumber(heightCm);
   const current = toNumber(currentKg);
@@ -143,20 +159,53 @@ export function validateWeightGoal({ heightCm, currentKg, targetKg, age }) {
   }
 
   const healthy = getHealthyWeightRange(height, age);
-  // Already at or below the healthy minimum: losing more is not something we support.
-  if (current <= healthy.min) {
-    return { ok: false, errorKey: "alreadyLowest", minHealthyKg: healthy.min };
+  const limits = {
+    minHealthyKg: healthy.min,
+    maxHealthyKg: healthy.max,
+    anorexiaLineKg: weightAtBmi(ANOREXIA_RISK_BMI, height),
+    minAllowedKg: weightAtBmi(MIN_TARGET_BMI, height),
+  };
+
+  // Already underweight (adult line, not the higher 65+ band): no weight-loss plan.
+  if (current <= weightAtBmi(UNDERWEIGHT_BMI, height)) {
+    return { ok: false, errorKey: "alreadyLowest", ...limits };
   }
   if (!target || target < WEIGHT_LIMITS.minKg || target > WEIGHT_LIMITS.maxKg) {
-    return { ok: false, errorKey: "targetInvalid", minHealthyKg: healthy.min };
+    return { ok: false, errorKey: "targetInvalid", ...limits };
   }
   if (target >= current) {
-    return { ok: false, errorKey: "targetNotLower", minHealthyKg: healthy.min };
+    return { ok: false, errorKey: "targetNotLower", ...limits };
+  }
+  if (target < limits.minAllowedKg) {
+    return { ok: false, errorKey: "targetTooLow", ...limits };
+  }
+  if (target < limits.anorexiaLineKg) {
+    return { ok: true, warningKey: "targetVeryLow", ...limits };
   }
   if (target < healthy.min) {
-    return { ok: false, errorKey: "targetBelowHealthy", minHealthyKg: healthy.min };
+    return { ok: true, warningKey: "targetBelowHealthy", ...limits };
   }
-  return { ok: true, minHealthyKg: healthy.min };
+  return { ok: true, ...limits };
+}
+
+// Where a target sits, for the assistant: "healthy" | "below_healthy" | "very_low".
+export function getTargetZone({ heightCm, targetKg, age }) {
+  const height = toNumber(heightCm);
+  const target = toNumber(targetKg);
+  if (!height || !target) return null;
+  if (target < weightAtBmi(ANOREXIA_RISK_BMI, height)) return "very_low";
+  if (target < getHealthyWeightRange(height, age).min) return "below_healthy";
+  return "healthy";
+}
+
+// Main protein of the day's menu, rotating daily so suggested menus differ
+// from one day to the next (the model gets the key, not text).
+export const MENU_FOCUS_KEYS = ["fish", "poultry", "legumes", "eggs_and_dairy", "vegetarian", "lean_meat", "whole_grains"];
+
+export function getMenuFocus(date = dayjs()) {
+  const day = dayjs(date);
+  const dayOfYear = day.diff(day.startOf("year"), "day");
+  return MENU_FOCUS_KEYS[dayOfYear % MENU_FOCUS_KEYS.length];
 }
 
 // ------------------------------------------------------------- logs and trend
@@ -385,6 +434,10 @@ export function buildWeightAiContext({ logs = [], cycles = [], profile = {}, age
     weigh_ins_last_30_days: logs.filter((log) => !dayjs(log.date).isBefore(since, "day")).length,
     start_weight_kg: toNumber(profile.weight_start_kg),
     target_weight_kg: toNumber(profile.weight_target_kg),
+    // She was warned in setup and chose it anyway; the model must not argue.
+    target_zone: getTargetZone({ heightCm, targetKg: profile.weight_target_kg, age }),
+    today: dayjs(referenceDate).format("YYYY-MM-DD"),
+    today_menu_focus: getMenuFocus(referenceDate),
     started_on: profile.weight_started_at || null,
     lost_so_far_kg: progress?.lostKg ?? null,
     remaining_kg: progress?.remainingKg ?? null,

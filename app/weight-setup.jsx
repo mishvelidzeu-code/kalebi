@@ -224,11 +224,24 @@ export default function WeightSetupScreen() {
                   <Text style={[styles.errorText, { color: theme.water }]}>
                     {t(`weight.setup.errors.${validation.errorKey}`, { kg: validation.minHealthyKg })}
                   </Text>
-                  {validation.errorKey === "targetBelowHealthy" && (
+                  {validation.errorKey === "targetTooLow" && (
                     <TouchableOpacity onPress={() => setTarget(String(validation.minHealthyKg))} activeOpacity={0.8}>
                       <Text style={[styles.errorAction, { color: theme.accent }]}>{t("weight.setup.useMin", { kg: validation.minHealthyKg })}</Text>
                     </TouchableOpacity>
                   )}
+                </View>
+              )}
+
+              {/* Below the healthy range but above the anorexia line: her choice.
+                  Warn and recommend, never block. */}
+              {validation.ok && validation.warningKey && (
+                <View style={[styles.errorBox, { backgroundColor: theme.warningSoft, borderColor: theme.warningBorder }]}>
+                  <Text style={[styles.errorText, { color: theme.warning }]}>
+                    {t(`weight.setup.warnings.${validation.warningKey}`, { min: validation.minHealthyKg, max: validation.maxHealthyKg })}
+                  </Text>
+                  <TouchableOpacity onPress={() => setTarget(String(validation.minHealthyKg))} activeOpacity={0.8}>
+                    <Text style={[styles.errorAction, { color: theme.accent }]}>{t("weight.setup.useMin", { kg: validation.minHealthyKg })}</Text>
+                  </TouchableOpacity>
                 </View>
               )}
 

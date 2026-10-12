@@ -1,5 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import dayjs from "dayjs";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -29,6 +27,14 @@ import {
   getAssistantScreenSummary,
 } from "../../services/assistantOrchestrator";
 import { saveAssistantChatHistory } from "../../services/assistantHistory";
+import {
+  FREE_DAILY_QUESTION_LIMIT,
+  PREGNANCY_DAILY_QUESTION_LIMIT,
+  PRIME_DAILY_QUESTION_LIMIT,
+  getAssistantDailyUsage,
+  isAssistantDailyLimitError,
+  setAssistantDailyUsage,
+} from "../../services/assistantUsage";
 import { supabase } from "../../services/supabase";
 import { useLanguage } from "../../context/LanguageContext";
 const ASSISTANT_GUIDE_IMAGE = require("../../assets/images/assistant-guide.png");
@@ -48,52 +54,6 @@ const EMPTY_SUMMARY = {
   daysUntilNextPeriod: null,
 };
 
-const FREE_DAILY_QUESTION_LIMIT = 1;
-const PRIME_DAILY_QUESTION_LIMIT = 20;
-// The shared "pregnancy" subscription — pregnancy mode and fertility mode alike.
-const PREGNANCY_DAILY_QUESTION_LIMIT = 10;
-const DAILY_LIMIT_STORAGE_KEY_PREFIX = "@cycle-care/assistant-daily-limit";
-
-function getAssistantDailyLimitStorageKey(userId) {
-  return `${DAILY_LIMIT_STORAGE_KEY_PREFIX}/${userId}`;
-}
-
-async function getAssistantDailyUsage(userId) {
-  try {
-    if (!userId) return 0;
-
-    const rawValue = await AsyncStorage.getItem(
-      getAssistantDailyLimitStorageKey(userId)
-    );
-    const todayKey = dayjs().format("YYYY-MM-DD");
-
-    if (!rawValue) return 0;
-
-    const parsedValue = JSON.parse(rawValue);
-    if (parsedValue?.date !== todayKey) return 0;
-
-    return Math.max(0, Number(parsedValue?.count || 0));
-  } catch (error) {
-    console.log("Assistant daily usage read error:", error);
-    return 0;
-  }
-}
-
-async function setAssistantDailyUsage(userId, count) {
-  try {
-    if (!userId) return;
-
-    await AsyncStorage.setItem(
-      getAssistantDailyLimitStorageKey(userId),
-      JSON.stringify({
-        date: dayjs().format("YYYY-MM-DD"),
-        count,
-      })
-    );
-  } catch (error) {
-    console.log("Assistant daily usage save error:", error);
-  }
-}
 
 const buildWelcomeMessage = (t, name) => ({
   id: `assistant-welcome-${Date.now()}`,
@@ -339,7 +299,7 @@ export default function AssistantScreen() {
       }
     } catch (error) {
       console.log("Assistant send error:", error);
-      const isDailyLimitError = String(error?.message || "").includes("assistant-daily-limit");
+      const isDailyLimitError = isAssistantDailyLimitError(error);
 
       if (isDailyLimitError) {
         // Server says the daily budget is spent — sync the local counter so the
