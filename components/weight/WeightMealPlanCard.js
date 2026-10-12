@@ -20,6 +20,13 @@ import { getWeightTheme } from "./weightTheme";
 
 const CACHE_KEY = "cycle_app_weight_meals";
 
+// The card sits on both home and the weight statistics screen. Whichever one
+// gets a menu tells the other, so "another option" shows up on both, and two
+// cards mounting on a fresh day ask the AI only once.
+const menuListeners = new Set();
+let firstMenuRequestKey = null;
+const publishMenu = (update) => menuListeners.forEach((listener) => listener(update));
+
 // Today's AI menu on the weight screen. Generated once a day and kept on the
 // device, so opening the screen again costs nothing; a new day, a new target
 // or another language asks for a fresh one. Calories are left out of the key
@@ -45,6 +52,8 @@ export default function WeightMealPlanCard({ calories, targetKg, phaseKey }) {
   const generate = useCallback(async ({ previousMenu = "" } = {}) => {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
+    const ownsFirstRequest = !previousMenu && !firstMenuRequestKey;
+    if (ownsFirstRequest) firstMenuRequestKey = dayKey;
     setLoading(true);
     setFailed(false);
     let user = null;
@@ -53,6 +62,7 @@ export default function WeightMealPlanCard({ calories, targetKg, phaseKey }) {
       // Out of questions already: don't spend a request just to be refused.
       if (user && !isAdmin && (await getAssistantDailyUsage(user.id)) >= PRIME_DAILY_QUESTION_LIMIT) {
         setLimitReached(true);
+        publishMenu({ dayKey, limitReached: true });
         return;
       }
 
@@ -60,6 +70,7 @@ export default function WeightMealPlanCard({ calories, targetKg, phaseKey }) {
       const menu = (response?.text || "").trim();
       if (!menu) throw new Error("empty-menu");
       setText(menu);
+      publishMenu({ dayKey, text: menu });
       if (user) {
         if (!isAdmin) await addAssistantDailyUsage(user.id, 1);
         await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ userId: user.id, dayKey, text: menu }));
@@ -69,15 +80,35 @@ export default function WeightMealPlanCard({ calories, targetKg, phaseKey }) {
       if (isAssistantDailyLimitError(error)) {
         // The server says the day's questions are spent — sync the chat counter.
         setLimitReached(true);
+        publishMenu({ dayKey, limitReached: true });
         if (user) await setAssistantDailyUsage(user.id, PRIME_DAILY_QUESTION_LIMIT);
       } else {
         setFailed(true);
+        publishMenu({ dayKey, failed: true });
       }
     } finally {
+      if (ownsFirstRequest) firstMenuRequestKey = null;
       inFlightRef.current = false;
       setLoading(false);
     }
   }, [dayKey, isAdmin]);
+
+  useEffect(() => {
+    const listener = (update) => {
+      if (update.dayKey !== dayKey) return;
+      setLoading(false);
+      if (update.text) {
+        setText(update.text);
+        setFailed(false);
+      }
+      if (update.limitReached) setLimitReached(true);
+      if (update.failed) setFailed(true);
+    };
+    menuListeners.add(listener);
+    return () => {
+      menuListeners.delete(listener);
+    };
+  }, [dayKey]);
 
   useEffect(() => {
     let active = true;
@@ -93,7 +124,13 @@ export default function WeightMealPlanCard({ calories, targetKg, phaseKey }) {
       } catch (error) {
         console.log("Weight meal cache read error:", error);
       }
-      if (active) generate();
+      if (!active) return;
+      // The other card is already fetching today's first menu: wait for it.
+      if (firstMenuRequestKey === dayKey) {
+        setLoading(true);
+        return;
+      }
+      generate();
     })();
     return () => {
       active = false;
