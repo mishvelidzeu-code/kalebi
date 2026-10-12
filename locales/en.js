@@ -906,6 +906,12 @@ export default {
     limitPrime: "You've used all 20 Prime questions for today. New questions arrive tomorrow.",
     limitPregnancy: "You've used all 10 pregnancy-assistant questions for today. New questions arrive tomorrow.",
     limitFertility: "You've used all 10 assistant questions for today. New questions arrive tomorrow.",
+    humor: {
+      title: "Humor",
+      locked: "With Prime",
+      levels: { low: "Low", medium: "Medium", high: "High" },
+      hints: { low: "Calm and precise", medium: "With a light smile", high: "Bold and playful 😏" },
+    },
     limitFree: "You've used your 1 free question for today. A new one becomes available tomorrow.",
     limitReachedMessage: "Today's question limit is used up. New questions arrive tomorrow.",
     answerFailed: "Couldn't get an answer right now. Please try again a little later.",

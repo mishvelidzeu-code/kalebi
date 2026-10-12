@@ -28,6 +28,12 @@ import {
 } from "../../services/assistantOrchestrator";
 import { saveAssistantChatHistory } from "../../services/assistantHistory";
 import {
+  DEFAULT_HUMOR_LEVEL,
+  getAssistantHumorLevel,
+  setAssistantHumorLevel,
+} from "../../services/assistantHumor";
+import HumorDial from "../../components/HumorDial";
+import {
   FREE_DAILY_QUESTION_LIMIT,
   PREGNANCY_DAILY_QUESTION_LIMIT,
   PRIME_DAILY_QUESTION_LIMIT,
@@ -72,7 +78,7 @@ export default function AssistantScreen() {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const { isDark, isPremium, isAdmin } = useTheme();
-  const { pregnancyMode, currentWeek, currentTrimester, daysRemaining } = usePregnancy();
+  const { pregnancyMode, hasSubscription, currentWeek, currentTrimester, daysRemaining } = usePregnancy();
   const { fertilityMode } = useFertility();
   const scrollRef = useRef(null);
 
@@ -88,6 +94,7 @@ export default function AssistantScreen() {
   const [questionsUsedToday, setQuestionsUsedToday] = useState(0);
   const [assistantUserId, setAssistantUserId] = useState(null);
   const [userAvatarUri, setUserAvatarUri] = useState("");
+  const [humorLevel, setHumorLevel] = useState(DEFAULT_HUMOR_LEVEL);
 
   // Fertility mode carries the same green palette as its calendar/stats screens.
   const theme = fertilityMode
@@ -141,6 +148,10 @@ export default function AssistantScreen() {
     dailyQuestionLimit - questionsUsedToday
   );
   const hasQuestionLeft = remainingQuestions > 0;
+  // The humor dial is for anyone who bought something: Prime or the shared
+  // pregnancy/fertility subscription. Free users see it locked.
+  const canUseHumor = isPremium || hasSubscription;
+  const effectiveHumorLevel = canUseHumor ? humorLevel : DEFAULT_HUMOR_LEVEL;
   const tabBarClearance = Math.max(insets.bottom, 10) + 84;
 
   const loadScreenData = useCallback(async () => {
@@ -166,13 +177,14 @@ export default function AssistantScreen() {
         return;
       }
 
-      const [{ data: profile }, usageCount] = await Promise.all([
+      const [{ data: profile }, usageCount, savedHumorLevel] = await Promise.all([
         supabase
           .from("profiles")
           .select("name, avatar_path")
           .eq("id", user.id)
           .maybeSingle(),
         getAssistantDailyUsage(user.id),
+        getAssistantHumorLevel(user.id),
       ]);
 
       const fallbackName =
@@ -191,6 +203,7 @@ export default function AssistantScreen() {
       setUserName(fallbackName);
       setUserAvatarUri(avatarUrl);
       setQuestionsUsedToday(usageCount);
+      setHumorLevel(savedHumorLevel);
       setMessages((prev) => (prev.length ? prev : [buildWelcomeMessage(t, fallbackName)]));
       setLoadingProfile(false);
 
@@ -270,6 +283,7 @@ export default function AssistantScreen() {
       const assistantReply = await askAssistant({
         prompt,
         history: nextMessages.filter((message) => !message.synthetic),
+        humorLevel: effectiveHumorLevel,
       });
 
       await saveAssistantChatHistory({
@@ -280,6 +294,7 @@ export default function AssistantScreen() {
         metadata: {
           isPremium,
           questionsUsedToday,
+          humorLevel: effectiveHumorLevel,
         },
       });
 
@@ -321,6 +336,11 @@ export default function AssistantScreen() {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleHumorChange = (level) => {
+    setHumorLevel(level);
+    setAssistantHumorLevel(assistantUserId, level);
   };
 
   if (loadingProfile) {
@@ -368,6 +388,14 @@ export default function AssistantScreen() {
             </View>
           </View>
         )}
+
+        <HumorDial
+          value={humorLevel}
+          onChange={handleHumorChange}
+          locked={!canUseHumor}
+          onLockedPress={() => router.push("/premium")}
+          theme={theme}
+        />
 
         <ScrollView
           ref={scrollRef}
