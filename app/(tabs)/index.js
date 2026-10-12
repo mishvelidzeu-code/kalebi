@@ -9,6 +9,7 @@ import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Modal, Pressable, 
 import DiaryAvatar from "../../components/DiaryAvatar";
 import PrimePreview from "../../components/PrimePreview";
 import WeightHomeCard from "../../components/weight/WeightHomeCard";
+import WeightHomeMealPlan from "../../components/weight/WeightHomeMealPlan";
 import { TEMP_FERTILITY_COMING_SOON } from "../../constants/tempFlags";
 import { getFertilityLogsForDay } from "../../services/fertilityLogs";
 import { buildDailyPlan } from "../../utils/fertilityPlan";
@@ -1053,6 +1054,8 @@ export default function HomeScreen() {
             </View>
           )}
         </LinearGradient>
+
+        {weightMode && <WeightHomeMealPlan />}
 
       {/* The pregnancy mode was switched off because the subscription behind it
           ended. Explain it and make renewing one tap away — the data is still

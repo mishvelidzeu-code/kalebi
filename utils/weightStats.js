@@ -199,8 +199,9 @@ export function getTargetZone({ heightCm, targetKg, age }) {
 }
 
 // Main protein of the day's menu, rotating daily so suggested menus differ
-// from one day to the next (the model gets the key, not text).
-export const MENU_FOCUS_KEYS = ["fish", "poultry", "legumes", "eggs_and_dairy", "vegetarian", "lean_meat", "whole_grains"];
+// from one day to the next (the model gets the key, not text). It is only a
+// variety hint: the menu itself is never labelled (no "vegetarian day").
+export const MENU_FOCUS_KEYS = ["fish", "poultry", "legumes", "eggs_and_dairy", "seasonal_vegetables", "lean_meat", "whole_grains"];
 
 export function getMenuFocus(date = dayjs()) {
   const day = dayjs(date);
