@@ -19,6 +19,7 @@ import {
 } from "../utils/ovulationDetection";
 import { isAdminEmail, isTestAccountEmail } from "./adminAccess";
 import { generateAiResponse } from "./ai";
+import { normalizeHumorLevel } from "./assistantHumor";
 import { getLanguage, t } from "./i18n";
 import { getFertilityLogsForDay, getFertilityLogsRange } from "./fertilityLogs";
 import { resolvePregnancyAccessFromProfile } from "./purchases";
@@ -222,6 +223,42 @@ const WEIGHT_ADVICE_INSTRUCTIONS = [
   "Add one short, practical weight tip that fits today's cycle phase, using her real numbers — for example today's calorie target, or that a gain in the luteal phase or during the period is likely water.",
   "Never suggest eating less than her plan, and keep it kind and body-positive.",
 ];
+
+// Chat humor dial (paid users only, see components/HumorDial.js). "low" adds
+// nothing, so the default chat is exactly the tone it always had.
+const HUMOR_LEVEL_RULES = {
+  medium: `
+# HUMOR LEVEL: MEDIUM (chosen by the user)
+She asked for a lighter tone. Keep the answer complete, accurate and warm, and add at most ONE short, gentle, witty line — a smile, not a stand-up act.`,
+  high: `
+# HUMOR LEVEL: HIGH (chosen by the user)
+She asked for a playful assistant. Answer fully and accurately first, and let the tone be cheeky, teasing and fun, like a witty best friend. When the topic is intimacy, light and tasteful flirty innuendo is fine; never explicit, crude or vulgar. Two or three playful touches per reply at most — the facts and any safety advice must stay crystal clear.`,
+};
+
+const HUMOR_SHARED_RULES = `
+# HUMOR MUST FIT HER MODE AND DAY
+Read the app context before joking:
+- Regular cycle in the fertile window and her goal is NOT getting pregnant: tease her playfully about her "most fertile days" and remind her about protection (e.g. "careful, your body is in its most fertile mood today — if a baby is not in the plan yet, don't forget protection 😏").
+- Trying to conceive (goal "Get Pregnant" / context.fertilityTracking), fertile window or a positive LH test: cheer her on with playful nudges about timing intimacy ("tonight is the main event 😉").
+- Period: chocolate, heating pads, blankets, a body on strike. Luteal phase / PMS: hormones running the show, cravings, a short fuse — always on her side, never mocking her.
+- Pregnancy: tender humor about the baby (size comparisons, kicks, cravings, nesting, the partner). Never about her body size, weight or looks.
+- Weight-loss mode: humor may touch motivation or the cycle, NEVER her body, her weight, food amounts or guilt about eating.
+- Write humor that sounds native in __LANGUAGE__. Never translate English idioms or puns literally; if a joke would not land naturally, leave it out.
+
+# HUMOR OFF (overrides the chosen level)
+Answer with zero jokes, in your normal warm tone, whenever any of these applies:
+- bleeding, severe or unusual pain, fever, fainting, any pregnancy complication or fear for the baby, miscarriage or loss;
+- she is trying to conceive and her period came, a test was negative, or trying_history.months_trying is 6 or more;
+- worry about a late or missed period or a possible unplanned pregnancy;
+- signs of an eating disorder, strong guilt about food, body shame;
+- today's mood is bad or terrible, she logged sadness or anxiety, or she sounds upset, stressed, lonely or grieving;
+- sexual health problems, infections, contraception failure or assault.
+Never joke about her body, weight, appearance, fertility struggles or a medical condition, and never let a joke blur a piece of advice.`;
+
+function getHumorInstructions(level) {
+  const rules = HUMOR_LEVEL_RULES[normalizeHumorLevel(level)];
+  return rules ? `${rules}\n${HUMOR_SHARED_RULES}`.replace("__LANGUAGE__", languageName()) : "";
+}
 
 const getPregnancySystemPrompt = () => PREGNANCY_SYSTEM_PROMPT_TEMPLATE.replace("__LANGUAGE__", languageName());
 const getAssistantSystemPrompt = () => ASSISTANT_SYSTEM_PROMPT_TEMPLATE.replace("__LANGUAGE__", languageName());
@@ -872,7 +909,7 @@ function buildLocalAssistantResponse(prompt, context) {
 }
 // i18n-check: ignore-end
 
-export async function askAssistant({ prompt, history = [], allowAi = true }) {
+export async function askAssistant({ prompt, history = [], allowAi = true, humorLevel = "low" }) {
   const context = await getAssistantContext();
 
   if (!context.pregnancy_mode) {
@@ -891,7 +928,9 @@ export async function askAssistant({ prompt, history = [], allowAi = true }) {
     text: message.text,
   }));
 
-  const systemPrompt = context.pregnancy_mode ? getPregnancySystemPrompt() : getAssistantSystemPrompt();
+  const baseSystemPrompt = context.pregnancy_mode ? getPregnancySystemPrompt() : getAssistantSystemPrompt();
+  const humorInstructions = getHumorInstructions(humorLevel);
+  const systemPrompt = humorInstructions ? `${baseSystemPrompt}\n${humorInstructions}` : baseSystemPrompt;
 
   const response = await generateAiResponse({
     prompt,
