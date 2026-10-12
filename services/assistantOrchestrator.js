@@ -858,7 +858,7 @@ function buildPregnancyLocalResponse(prompt, context) {
   return null;
 }
 
-function buildLocalAssistantResponse(prompt, context) {
+function buildLocalAssistantResponse(prompt, context, { dateMathOnly = false } = {}) {
   const normalizedPrompt = normalizePromptText(prompt);
   const cycleDay = context.currentCycle?.cycle_day || context.cycle_day;
   const phaseLabel = context.current_phase_label;
@@ -875,6 +875,9 @@ function buildLocalAssistantResponse(prompt, context) {
 
   const missedPeriodResponse = buildMissedPeriodResponseFromPrompt(prompt, context);
   if (missedPeriodResponse) return missedPeriodResponse;
+  // With the humor dial up, canned replies would ignore the tone she picked —
+  // only the exact missed-period date math above stays local.
+  if (dateMathOnly) return null;
 
   if (hasAny(normalizedPrompt, ["გამარჯობა", "სალამი", "hello", "hi"]) && normalizedPrompt.length <= 20) {
     return `გამარჯობა${context.user_name ? `, ${context.user_name}` : ""} 💗 მკითხე რაც გაინტერესებს ციკლზე, სიმპტომებზე ან დღევანდელ მდგომარეობაზე.`;
@@ -913,7 +916,9 @@ export async function askAssistant({ prompt, history = [], allowAi = true, humor
   const context = await getAssistantContext();
 
   if (!context.pregnancy_mode) {
-    const localResponse = buildLocalAssistantResponse(prompt, context);
+    const localResponse = buildLocalAssistantResponse(prompt, context, {
+      dateMathOnly: normalizeHumorLevel(humorLevel) !== "low",
+    });
     if (localResponse) {
       return { text: localResponse, context, source: "local" };
     }
