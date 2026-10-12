@@ -4,7 +4,7 @@ import { calculateCycleState, getPregnancyChanceKey } from "../utils/cycleEngine
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../utils/cyclePrediction";
 import { buildFertilityAiContext, getAgeFromBirthDate } from "../utils/fertilityInsights";
 import { buildPregnancyMemory } from "../utils/pregnancyMemory";
-import { buildWeightAiContext, normalizeWeightLogs } from "../utils/weightStats";
+import { buildWeightAiContext, getWeightPhaseGuide, normalizeWeightLogs } from "../utils/weightStats";
 import {
   analyzeCycleRegularity,
   buildFertileWindows,
@@ -195,12 +195,15 @@ The user turned on weight-loss mode, which sits on top of her cycle tracking. co
 - Judge progress by seven_day_average_kg and this_cycle_vs_last, never by a single weigh-in.
 - In the luteal phase appetite naturally rises: normalise it and suggest filling, protein- and fibre-rich food. Never shame her for hunger or cravings.
 - If cycle_warning is set ("late" or "changed"), gently explain that too large a calorie deficit can disrupt the cycle, suggest easing the pace and eating more, and recommend a doctor if the delay continues.
+- Food and menus: when she asks what to eat, for a diet or a menu, give a concrete plan for today — breakfast, lunch, dinner and one snack, each a real dish with a rough portion and approximate kcal — adding up to about daily_calorie_target_kcal, never less. Fit it to today's cycle phase (period: iron-rich, warm meals; follicular and fertile: lighter, fresh, protein for workouts; luteal: more fibre, protein and magnesium, a filling snack, less salt and sugar). Use everyday food that is easy to find in Georgia (for example matsoni, cottage cheese, beans, buckwheat, chicken, trout, eggs, seasonal vegetables, greens, walnuts) and name dishes in her language. Build the day around today_menu_focus so menus differ from day to day. Write plain text lines, no Markdown.
+- Cycle questions: answer them as usual, and where it helps, connect them to her weight (water retention, appetite, energy for workouts).
 - If a value is null, say it is not logged yet instead of guessing.
 
 # WEIGHT-LOSS SAFETY (STRICT)
 - daily_calorie_target_kcal is already floored for safety. NEVER suggest eating less than it, and never below 1200 kcal a day.
 - NEVER suggest fasting for days, skipping meals, detoxes or cleanses, diet pills, laxatives, diuretics or "burning off" food with exercise.
-- Never encourage a target below healthy_weight_range_kg.min or losing faster than safe_weekly_loss_kg. Do not celebrate rapid loss.
+- target_weight_kg is her own choice and the app already warned her if it is low: build your advice around her target without lecturing her about it, and never suggest going lower than it. If target_zone is "very_low" (under the medical anorexia line), you may once, gently, recommend reaching it under a doctor's supervision, and keep the focus on eating enough.
+- Never encourage losing faster than safe_weekly_loss_kg. Do not celebrate rapid loss.
 - If she mentions bingeing, purging, fear of eating, extreme restriction or strong guilt about food, do not give diet advice: respond with care and encourage her to talk to a doctor or an eating-disorder specialist.
 - Be body-positive and non-judgmental. Never comment on her appearance or call her body "fat".
 
@@ -1078,6 +1081,63 @@ export async function getHomeAssistantAdvice() {
   });
 
   return { text: response.text, context };
+}
+
+// Weight mode: today's menu for the weight screen. Cached per day by the card;
+// previousMenu (the one on screen) is passed on "another option" so the new
+// one does not repeat it. "weight-daily-meals" is not in the edge function's
+// feature list, so the server counts it as a chat question (product decision);
+// the card mirrors that in the chat screen's local counter.
+export async function getWeightMealPlan({ previousMenu = "" } = {}) {
+  const context = await getAssistantContext();
+  const weight = context.weightTracking;
+  if (!weight) {
+    throw new Error("weight-mode-off");
+  }
+
+  const cycle = context.currentCycle || {};
+  const guide = getWeightPhaseGuide({
+    cycleDay: cycle.cycle_day,
+    cycleLength: cycle.cycle_length,
+    periodLength: cycle.period_length,
+  });
+  const calories = weight.daily_calorie_target_kcal;
+
+  const prompt = [
+    `Write her meal plan for today (${weight.today}) for her weight-loss plan.`,
+    "Use exactly four lines, each starting with its emoji: 🍳 breakfast, 🥗 lunch, 🍲 dinner, 🍎 snack. Each line: one concrete dish with a rough portion and approximate kcal.",
+    "Then one short line starting with 💧 with a food tip for today's cycle stage.",
+    calories
+      ? `The four meals should add up to about ${calories} kcal and never less.`
+      : "Keep the portions moderate and balanced.",
+    `Today's cycle stage: ${guide?.stageKey || "unknown"} (${context.current_phase_label || "unknown phase"}). Fit the food to it.`,
+    `Main protein today: ${weight.today_menu_focus}.`,
+    "Use everyday food that is easy to find in Georgia, and name the dishes in her language.",
+    previousMenu ? `Do not repeat any dish from this previous menu: ${String(previousMenu).slice(0, 400)}` : "",
+    "Plain text only: no Markdown, no title, no extra commentary.",
+  ].filter(Boolean).join(" ");
+
+  const response = await generateAiResponse({
+    prompt,
+    systemPrompt: getAssistantSystemPrompt(),
+    context: {
+      user_name: context.user_name || null,
+      current_phase_label: context.current_phase_label || null,
+      cycle_day: context.cycle_day || null,
+      weightTracking: {
+        daily_calorie_target_kcal: calories,
+        target_weight_kg: weight.target_weight_kg,
+        target_zone: weight.target_zone,
+        today_menu_focus: weight.today_menu_focus,
+        latest_change: weight.latest_change,
+        safe_weekly_loss_kg: weight.safe_weekly_loss_kg,
+      },
+    },
+    maxOutputTokens: 420,
+    metadata: { feature: "weight-daily-meals" },
+  });
+
+  return { text: response.text };
 }
 
 export async function getPregnancyWeeklyAdvice() {
