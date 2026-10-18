@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "com.mishvela.kalebi",
-      "versionCode": 8,
+      "versionCode": 9,
       "runtimeVersion": "android-1",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
