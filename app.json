@@ -23,6 +23,7 @@
       "package": "com.mishvela.kalebi",
       "versionCode": 7,
       "runtimeVersion": "android-1",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",

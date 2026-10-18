@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "118733642204",
+    "project_id": "qalis-sivrce",
+    "storage_bucket": "qalis-sivrce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:118733642204:android:17c764996a70d9ee231719",
+        "android_client_info": {
+          "package_name": "com.mishvela.kalebi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBquJF7Rn7CUXR6EU3eZGGTSPbmTK1mQAU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
