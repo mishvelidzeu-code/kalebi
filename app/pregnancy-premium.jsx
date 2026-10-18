@@ -2,10 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Linking,
   Platform,
   SafeAreaView,
@@ -20,10 +21,13 @@ import { useLanguage } from "../context/LanguageContext";
 import { usePregnancy } from "../context/PregnancyContext";
 import {
   canOpenManageSubscriptions,
+  canPurchaseOnAndroid,
   checkPregnancySubscriptionStatus,
   getPregnancyOfferings,
+  openAndroidWebCheckout,
   openManageSubscriptions,
   purchasePregnancyPackage,
+  recordPregnancyPurchaseContext,
   restorePregnancyPurchases,
 } from "../services/purchases";
 
@@ -47,6 +51,11 @@ export default function PregnancyPremiumScreen() {
   const [restoring, setRestoring] = useState(false);
   const [availablePackage, setAvailablePackage] = useState(null);
   const [storeConfigured, setStoreConfigured] = useState(true);
+  const [pendingAndroidCheckout, setPendingAndroidCheckout] = useState(false);
+  const isAndroid = Platform.OS === "android";
+  // Android has no store purchase: no price, no Restore. Access bought
+  // elsewhere still turns the mode on; buying needs the web-purchase flag.
+  const androidCanBuy = canPurchaseOnAndroid();
 
   const today = new Date();
   const minDate = new Date(today.getFullYear(), today.getMonth() - 9, today.getDate());
@@ -59,6 +68,14 @@ export default function PregnancyPremiumScreen() {
 
   const loadPaywall = useCallback(async () => {
     setLoading(true);
+
+    if (Platform.OS === "android") {
+      setStoreConfigured(true);
+      setAvailablePackage(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       const offeringsState = await getPregnancyOfferings();
       setStoreConfigured(offeringsState.configured);
@@ -79,7 +96,71 @@ export default function PregnancyPremiumScreen() {
 
   const lmpDateStr = lmpDate.toISOString().split("T")[0];
 
+  // Android web purchase: the bank page opens in the browser, so access is
+  // re-checked when the app comes back to the foreground.
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return undefined;
+    }
+
+    const subscription = AppState.addEventListener("change", async (nextState) => {
+      if (nextState !== "active" || !pendingAndroidCheckout) {
+        return;
+      }
+
+      setPendingAndroidCheckout(false);
+
+      try {
+        const status = await checkPregnancySubscriptionStatus();
+        if (!status.hasSubscription) {
+          return;
+        }
+
+        await recordPregnancyPurchaseContext("pregnancy");
+        await enablePregnancyMode(lmpDateStr);
+        Alert.alert(t("pregnancyPremium.successTitle"), t("pregnancyPremium.modeEnabledWelcome"), [
+          { text: t("common.ok"), onPress: () => router.replace("/(tabs)") },
+        ]);
+      } catch (error) {
+        console.log("Android pregnancy checkout refresh error:", error);
+        Alert.alert(t("common.error"), t("profile.paymentRefreshFailed"));
+      }
+    });
+
+    return () => subscription.remove();
+  }, [enablePregnancyMode, lmpDateStr, pendingAndroidCheckout, router, t]);
+
   const handlePurchase = async () => {
+    if (Platform.OS === "android") {
+      setPurchasing(true);
+      try {
+        // Access bought elsewhere (iPhone, hand grant) lives on the profile.
+        const status = await checkPregnancySubscriptionStatus();
+        if (status.hasSubscription) {
+          await enablePregnancyMode(lmpDateStr);
+          Alert.alert(t("pregnancyPremium.successTitle"), t("pregnancyPremium.modeEnabled"), [
+            { text: t("common.ok"), onPress: () => router.replace("/(tabs)") },
+          ]);
+          return;
+        }
+
+        if (!canPurchaseOnAndroid()) {
+          Alert.alert(t("common.purchaseUnavailableAndroidTitle"), t("common.purchaseUnavailableAndroidBody"));
+          return;
+        }
+
+        await openAndroidWebCheckout({ product: "pregnancy", context: "pregnancy" });
+        setPendingAndroidCheckout(true);
+        Alert.alert(t("profile.checkoutOpenedTitle"), t("profile.checkoutOpenedBody"));
+      } catch (error) {
+        console.log("Android pregnancy checkout error:", error);
+        Alert.alert(t("common.error"), t("premium.androidOpenFailed"));
+      } finally {
+        setPurchasing(false);
+      }
+      return;
+    }
+
     if (!availablePackage && storeConfigured) {
       Alert.alert(t("premium.productNotReadyTitle"), t("pregnancyPremium.productNotReadyBody"));
       return;
@@ -249,17 +330,26 @@ export default function PregnancyPremiumScreen() {
             )}
           </View>
 
-          {/* Price card */}
-          <View style={[styles.card, styles.cardActive]}>
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={styles.cardTitle}>Pregnancy Monthly</Text>
-              <Text style={styles.cardPrice}>{storePriceLabel}</Text>
-              <Text style={styles.autoRenewText}>{t("premium.autoRenew")}</Text>
+          {/* Price card (store price — iOS only) */}
+          {!isAndroid && (
+            <View style={[styles.card, styles.cardActive]}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={styles.cardTitle}>Pregnancy Monthly</Text>
+                <Text style={styles.cardPrice}>{storePriceLabel}</Text>
+                <Text style={styles.autoRenewText}>{t("premium.autoRenew")}</Text>
+              </View>
+              <View style={styles.best}>
+                <Text style={styles.bestText}>BEST</Text>
+              </View>
             </View>
-            <View style={styles.best}>
-              <Text style={styles.bestText}>BEST</Text>
+          )}
+
+          {isAndroid && !androidCanBuy && !pregnancyMode && (
+            <View style={styles.infoBox}>
+              <Text style={styles.infoTitle}>{t("common.purchaseUnavailableAndroidTitle")}</Text>
+              <Text style={styles.infoText}>{t("common.purchaseUnavailableAndroidBody")}</Text>
             </View>
-          </View>
+          )}
 
           {!storeConfigured && (
             <View style={styles.warningBox}>
@@ -293,17 +383,19 @@ export default function PregnancyPremiumScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.restoreButton}
-            onPress={handleRestore}
-            disabled={restoring}
-          >
-            {restoring ? (
-              <ActivityIndicator color={ACCENT} />
-            ) : (
-              <Text style={styles.restoreButtonText}>Restore Purchases</Text>
-            )}
-          </TouchableOpacity>
+          {!isAndroid && (
+            <TouchableOpacity
+              style={styles.restoreButton}
+              onPress={handleRestore}
+              disabled={restoring}
+            >
+              {restoring ? (
+                <ActivityIndicator color={ACCENT} />
+              ) : (
+                <Text style={styles.restoreButtonText}>Restore Purchases</Text>
+              )}
+            </TouchableOpacity>
+          )}
 
           {canOpenManageSubscriptions() && (
             <TouchableOpacity style={styles.manageButton} onPress={handleManageSubscription}>
@@ -319,13 +411,15 @@ export default function PregnancyPremiumScreen() {
             >
               <Text style={styles.linkText}>Privacy Policy</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() =>
-                Linking.openURL("https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
-              }
-            >
-              <Text style={styles.linkText}>Terms of Use (EULA)</Text>
-            </TouchableOpacity>
+            {!isAndroid && (
+              <TouchableOpacity
+                onPress={() =>
+                  Linking.openURL("https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
+                }
+              >
+                <Text style={styles.linkText}>Terms of Use (EULA)</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -440,6 +534,17 @@ const styles = StyleSheet.create({
   },
   warningTitle: { color: "#FFD166", fontSize: 15, fontWeight: "800", marginBottom: 6 },
   warningText: { color: "#ddd", fontSize: 13, lineHeight: 20 },
+  infoBox: {
+    width: "100%",
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    marginBottom: 14,
+  },
+  infoTitle: { color: "white", fontSize: 15, fontWeight: "800", marginBottom: 6 },
+  infoText: { color: "#ccc", fontSize: 13, lineHeight: 20 },
   activeBox: {
     width: "100%",
     padding: 18,

@@ -21,9 +21,9 @@ import { useTheme } from "../context/ThemeContext";
 import { useWeight } from "../context/WeightContext";
 import {
   canOpenManageSubscriptions,
+  canPurchaseOnAndroid,
   getPremiumOfferings,
-  hasAndroidPrimeCheckoutConfigured,
-  openAndroidPrimeCheckout,
+  openAndroidWebCheckout,
   openManageSubscriptions,
   purchasePrimePackage,
   restorePrimePurchases,
@@ -45,6 +45,10 @@ export default function PremiumScreen() {
   const [availablePackage, setAvailablePackage] = useState(null);
   const [storeConfigured, setStoreConfigured] = useState(true);
   const [pendingAndroidCheckout, setPendingAndroidCheckout] = useState(false);
+  const isAndroid = Platform.OS === "android";
+  // Android shows no price and no buy button until web purchases are allowed
+  // (see TEMP_ANDROID_WEB_PURCHASE_ENABLED); Prime bought elsewhere still works.
+  const androidCanBuy = canPurchaseOnAndroid();
 
   const features = [
     {
@@ -76,7 +80,7 @@ export default function PremiumScreen() {
     setLoading(true);
 
     if (Platform.OS === "android") {
-      setStoreConfigured(hasAndroidPrimeCheckoutConfigured());
+      setStoreConfigured(true);
       setAvailablePackage(null);
       setLoading(false);
       return;
@@ -125,7 +129,7 @@ export default function PremiumScreen() {
       setPurchasing(true);
 
       try {
-        await openAndroidPrimeCheckout();
+        await openAndroidWebCheckout({ product: "prime" });
         setPendingAndroidCheckout(true);
         Alert.alert(
           t("profile.checkoutOpenedTitle"),
@@ -285,19 +289,28 @@ export default function PremiumScreen() {
             ))}
           </View>
 
-          <View style={[styles.card, styles.cardActive]}>
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={styles.cardTitle}>Prime Monthly</Text>
-              <Text style={styles.cardPrice}>{storePriceLabel}</Text>
-              <Text style={styles.autoRenewText}>
-                {Platform.OS === "ios" ? IOS_AUTO_RENEW_COPY : ANDROID_CHECKOUT_COPY}
-              </Text>
-            </View>
+          {(!isAndroid || androidCanBuy) && (
+            <View style={[styles.card, styles.cardActive]}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={styles.cardTitle}>Prime Monthly</Text>
+                <Text style={styles.cardPrice}>{storePriceLabel}</Text>
+                <Text style={styles.autoRenewText}>
+                  {Platform.OS === "ios" ? IOS_AUTO_RENEW_COPY : ANDROID_CHECKOUT_COPY}
+                </Text>
+              </View>
 
-            <View style={styles.best}>
-              <Text style={styles.bestText}>BEST</Text>
+              <View style={styles.best}>
+                <Text style={styles.bestText}>BEST</Text>
+              </View>
             </View>
-          </View>
+          )}
+
+          {isAndroid && !androidCanBuy && !isPremium && (
+            <View style={styles.infoBox}>
+              <Text style={styles.infoTitle}>{t("common.purchaseUnavailableAndroidTitle")}</Text>
+              <Text style={styles.infoText}>{t("common.purchaseUnavailableAndroidBody")}</Text>
+            </View>
+          )}
 
           {!storeConfigured && (
             <View style={styles.warningBox}>
@@ -321,26 +334,28 @@ export default function PremiumScreen() {
             </View>
           ) : null}
 
-          <TouchableOpacity
-            style={[
-              styles.button,
-              (loading || purchasing || isPremium || !storeConfigured) && styles.buttonDisabled,
-            ]}
-            onPress={handlePurchase}
-            disabled={loading || purchasing || isPremium || !storeConfigured}
-          >
-            {loading || purchasing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>
-                {isPremium
-                  ? t("premium.buttonActive")
-                  : Platform.OS === "android"
-                    ? t("premium.buttonAndroid")
-                    : t("premium.buttonBuy")}
-              </Text>
-            )}
-          </TouchableOpacity>
+          {(!isAndroid || androidCanBuy || isPremium) && (
+            <TouchableOpacity
+              style={[
+                styles.button,
+                (loading || purchasing || isPremium || !storeConfigured) && styles.buttonDisabled,
+              ]}
+              onPress={handlePurchase}
+              disabled={loading || purchasing || isPremium || !storeConfigured}
+            >
+              {loading || purchasing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>
+                  {isPremium
+                    ? t("premium.buttonActive")
+                    : Platform.OS === "android"
+                      ? t("premium.buttonAndroid")
+                      : t("premium.buttonBuy")}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
 
           {Platform.OS === "ios" && (
             <TouchableOpacity
@@ -501,6 +516,17 @@ const styles = StyleSheet.create({
   },
   warningTitle: { color: "#FFD166", fontSize: 15, fontWeight: "800", marginBottom: 6 },
   warningText: { color: "#ddd", fontSize: 13, lineHeight: 20 },
+  infoBox: {
+    width: "100%",
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    marginBottom: 14,
+  },
+  infoTitle: { color: "white", fontSize: 15, fontWeight: "800", marginBottom: 6 },
+  infoText: { color: "#ccc", fontSize: 13, lineHeight: 20 },
   activeBox: {
     width: "100%",
     padding: 18,

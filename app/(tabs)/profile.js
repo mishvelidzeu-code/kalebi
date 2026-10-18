@@ -21,9 +21,9 @@ import { invalidateAssistantContextCache } from "../../services/assistantOrchest
 import { disableCycleReminders, getNotificationsEnabled, setNotificationsEnabled, syncCycleRemindersForUser } from "../../services/notifications";
 import {
   resetPurchasesIdentity,
-  hasAndroidPregnancyCheckoutConfigured,
+  canPurchaseOnAndroid,
   getPregnancyOfferings,
-  openAndroidPregnancyCheckout,
+  openAndroidWebCheckout,
   purchasePregnancyPackage,
   checkPregnancySubscriptionStatus,
   recordPregnancyPurchaseContext,
@@ -131,6 +131,9 @@ export default function ProfileScreen() {
   // cancelling closes both; say so before the user assumes otherwise.
   const CANCEL_HINT = canOpenManageSubscriptions() ? t("profile.cancelHintIos") : t("profile.cancelHintWeb");
   const SHARED_SUBSCRIPTION_HINT = t("profile.sharedSubscriptionHint", { mode: FERTILITY_MODE_LABEL });
+  // Android shows no store price (no in-app purchase there, see
+  // TEMP_ANDROID_WEB_PURCHASE_ENABLED); iOS texts stay exactly as they were.
+  const isAndroid = Platform.OS === "android";
   const getGoalLabel = (value) => (GOAL_LABEL_KEYS[value] ? t(GOAL_LABEL_KEYS[value]) : value);
 
   // TEMP: fertility mode is blocked while it is being finished — every entry
@@ -213,12 +216,8 @@ export default function ProfileScreen() {
   }, [reloadPregnancy]);
 
   const startAndroidPregnancyCheckout = useCallback(async (payload) => {
-    if (!hasAndroidPregnancyCheckoutConfigured()) {
-      throw new Error("android-pregnancy-payment-url-not-configured");
-    }
-
     // payload.type ("fertility" | "pregnancy") doubles as the analytics context.
-    await openAndroidPregnancyCheckout({ context: payload?.type || null });
+    await openAndroidWebCheckout({ product: "pregnancy", context: payload?.type || null });
     setPendingAndroidCheckout(payload);
   }, []);
 
@@ -608,6 +607,11 @@ export default function ProfileScreen() {
           return;
         }
 
+        if (!canPurchaseOnAndroid()) {
+          Alert.alert(t("common.purchaseUnavailableAndroidTitle"), t("common.purchaseUnavailableAndroidBody"));
+          return;
+        }
+
         await startAndroidPregnancyCheckout({ type: "pregnancy", dateStr });
         Alert.alert(t("profile.checkoutOpenedTitle"), t("profile.checkoutOpenedBody"));
         return;
@@ -784,6 +788,11 @@ export default function ProfileScreen() {
           await reloadPregnancy();
           setShowFertilityModal(false);
           Alert.alert(t("profile.fertilityEnabledTitle", { mode: FERTILITY_MODE_LABEL }), t("profile.fertilityAlreadyAccess"));
+          return;
+        }
+
+        if (!canPurchaseOnAndroid()) {
+          Alert.alert(t("common.purchaseUnavailableAndroidTitle"), t("common.purchaseUnavailableAndroidBody"));
           return;
         }
 
@@ -1039,7 +1048,7 @@ export default function ProfileScreen() {
                 icon="🌿"
                 bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
                 title={FERTILITY_MODE_LABEL}
-                value={t("profile.pricePerMonth")}
+                value={isAndroid ? t("profile.subscriptionActive") : t("profile.pricePerMonth")}
                 subtitle={t("profile.tapToDisable")}
                 onPress={handleFertilityDisable}
                 isDarkTheme={isDark}
@@ -1053,7 +1062,7 @@ export default function ProfileScreen() {
                 icon="🔒"
                 bgColor={isDark ? "#1f2c24" : "#EEF9F4"}
                 title={FERTILITY_MODE_LABEL}
-                subtitle={t("profile.fertilityLockedSubtitle")}
+                subtitle={isAndroid ? t("profile.fertilityLockedSubtitleAndroid") : t("profile.fertilityLockedSubtitle")}
                 onPress={openFertilityFlow}
                 showArrow
                 isDarkTheme={isDark}
@@ -1223,7 +1232,7 @@ export default function ProfileScreen() {
               )}
             </View>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handlePregnancyModalSubmit}>
-              {pregnancySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{pregnancyModalMode === "edit" ? t("profile.saveDate") : t("profile.enableForPrice")}</Text>}
+              {pregnancySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{pregnancyModalMode === "edit" ? t("profile.saveDate") : isAndroid ? t("profile.enableMode") : t("profile.enableForPrice")}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowPregnancyModal(false)}>
               <Text style={styles.cancelBtnText}>{t("common.cancel")}</Text>
@@ -1242,10 +1251,10 @@ export default function ProfileScreen() {
               <Text style={[styles.modalLabel, { color: theme.subText, marginBottom: 10 }]}>{t("profile.whatYouGet")}</Text>
               <Text style={[styles.fertilityBenefit, { color: theme.text }]}>{t("profile.fertilityBenefit1")}</Text>
               <Text style={[styles.fertilityBenefit, { color: theme.text }]}>{t("profile.fertilityBenefit2")}</Text>
-              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>{t("profile.fertilityBenefit3")}</Text>
+              <Text style={[styles.fertilityBenefit, { color: theme.text }]}>{isAndroid ? t("profile.fertilityBenefit3Android") : t("profile.fertilityBenefit3")}</Text>
             </View>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handleFertilityEnable}>
-              {fertilitySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{t("profile.enableForPrice")}</Text>}
+              {fertilitySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{isAndroid ? t("profile.enableMode") : t("profile.enableForPrice")}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowFertilityModal(false)}>
               <Text style={styles.cancelBtnText}>{t("common.cancel")}</Text>

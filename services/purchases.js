@@ -1,6 +1,7 @@
 import { Linking, Platform } from "react-native";
 import Purchases, { LOG_LEVEL } from "react-native-purchases";
 
+import { TEMP_ANDROID_WEB_PURCHASE_ENABLED } from "../constants/tempFlags";
 import { logMetaPregnancyPurchase, logMetaPrimePurchase } from "./metaAppEvents";
 import { supabase } from "./supabase";
 
@@ -19,8 +20,10 @@ const PREGNANCY_OFFERING_ID = "pregnancy";
 //       pregnancy_until = '2026-12-31'   -- or null for open-ended
 //   where email = '...';
 const MANUAL_PREGNANCY_GRANT_SOURCES = ["admin_grant"];
-const ANDROID_PRIME_PAYMENT_URL = process.env.EXPO_PUBLIC_ANDROID_PRIME_PAYMENT_URL || "";
-const ANDROID_PREGNANCY_PAYMENT_URL = process.env.EXPO_PUBLIC_ANDROID_PREGNANCY_PAYMENT_URL || "";
+// Edge function that creates the bank (BOG/TBC) order for an Android web
+// purchase and returns its payment page URL. Access itself is granted on the
+// server from the bank's callback, never by the app.
+const WEB_CHECKOUT_FUNCTION = "web-checkout-create";
 
 let configuredAppUserId = null;
 let isConfigured = false;
@@ -141,8 +144,8 @@ function getPurchaseSource() {
 // (App Store Review Guideline 3.1.2). This opens the account's subscription
 // list, where the user can cancel or change the plan.
 //
-// iOS only on purpose: Android purchases go through the external web checkout,
-// not Play Billing, so the Play subscriptions page would show nothing.
+// iOS only on purpose: Android has no Play Billing purchases (Georgia has no
+// Play merchant support), so the Play subscriptions page would show nothing.
 export function canOpenManageSubscriptions() {
   return Platform.OS === "ios";
 }
@@ -163,35 +166,10 @@ export async function getCurrentSupabaseUser() {
   return user || null;
 }
 
-export function hasAndroidPrimeCheckoutConfigured() {
-  return Boolean(ANDROID_PRIME_PAYMENT_URL);
-}
-
-export function hasAndroidPregnancyCheckoutConfigured() {
-  return Boolean(ANDROID_PREGNANCY_PAYMENT_URL);
-}
-
-function buildAndroidPrimePaymentUrl(userId) {
-  if (!ANDROID_PRIME_PAYMENT_URL) {
-    return "";
-  }
-
-  const separator = ANDROID_PRIME_PAYMENT_URL.includes("?") ? "&" : "?";
-  return `${ANDROID_PRIME_PAYMENT_URL}${separator}user_id=${encodeURIComponent(userId)}`;
-}
-
-function buildAndroidPregnancyPaymentUrl(userId, context = null) {
-  if (!ANDROID_PREGNANCY_PAYMENT_URL) {
-    return "";
-  }
-
-  const separator = ANDROID_PREGNANCY_PAYMENT_URL.includes("?") ? "&" : "?";
-  let url = `${ANDROID_PREGNANCY_PAYMENT_URL}${separator}user_id=${encodeURIComponent(userId)}`;
-  // Analytics-only marker for the web checkout server, if it wants to log it.
-  if (context) {
-    url += `&context=${encodeURIComponent(context)}`;
-  }
-  return url;
+// Android can buy only while TEMP_ANDROID_WEB_PURCHASE_ENABLED is on: Google
+// Play does not yet let apps in Georgia link out to an external payment.
+export function canPurchaseOnAndroid() {
+  return Platform.OS === "android" && TEMP_ANDROID_WEB_PURCHASE_ENABLED;
 }
 
 async function readPremiumStatusFromProfile(userId) {
@@ -360,54 +338,31 @@ export async function syncPremiumStatusFromPurchases() {
   };
 }
 
-export async function openAndroidPrimeCheckout() {
+// Opens the bank's payment page for an Android web purchase. product is
+// "prime" or "pregnancy"; context ("pregnancy" | "fertility") is the
+// analytics marker of which screen sold it. The caller refreshes access when
+// the app comes back to the foreground.
+export async function openAndroidWebCheckout({ product, context = null }) {
+  if (!canPurchaseOnAndroid()) {
+    throw new Error("android-web-purchase-disabled");
+  }
+
   const user = await getCurrentSupabaseUser();
   if (!user) {
     throw new Error("user-not-found");
   }
 
-  const paymentUrl = buildAndroidPrimePaymentUrl(user.id);
-  if (!paymentUrl) {
-    throw new Error("android-payment-url-not-configured");
+  const { data, error } = await supabase.functions.invoke(WEB_CHECKOUT_FUNCTION, {
+    body: { product, context },
+  });
+
+  if (error || !data?.url) {
+    throw new Error("web-checkout-unavailable");
   }
 
-  const supported = await Linking.canOpenURL(paymentUrl);
-  if (!supported) {
-    throw new Error("android-payment-url-invalid");
-  }
+  await Linking.openURL(data.url);
 
-  await Linking.openURL(paymentUrl);
-
-  return {
-    opened: true,
-    paymentUrl,
-    userId: user.id,
-  };
-}
-
-export async function openAndroidPregnancyCheckout({ context = null } = {}) {
-  const user = await getCurrentSupabaseUser();
-  if (!user) {
-    throw new Error("user-not-found");
-  }
-
-  const paymentUrl = buildAndroidPregnancyPaymentUrl(user.id, context);
-  if (!paymentUrl) {
-    throw new Error("android-pregnancy-payment-url-not-configured");
-  }
-
-  const supported = await Linking.canOpenURL(paymentUrl);
-  if (!supported) {
-    throw new Error("android-pregnancy-payment-url-invalid");
-  }
-
-  await Linking.openURL(paymentUrl);
-
-  return {
-    opened: true,
-    paymentUrl,
-    userId: user.id,
-  };
+  return { opened: true };
 }
 
 export async function getPremiumOfferings() {

@@ -17,6 +17,13 @@ export const TEMP_HIDE_ASSISTANT_HEADER = true;
 // in. Flip to true once the English and Russian dictionaries are complete.
 export const TEMP_LANGUAGE_PICKER_ENABLED = true;
 
+// Android in-app "buy" button that opens the bank's payment page (BOG/TBC).
+// Google Play does not yet let apps in Georgia link out to an external payment
+// for digital features, so while false Android paywalls show what's included
+// but no price and no buy button. Flip to true (Android OTA) only once that
+// rule covers Georgia and the web-checkout server functions are deployed.
+export const TEMP_ANDROID_WEB_PURCHASE_ENABLED = false;
+
 // Weight-loss mode (a Prime feature). Kill switch: false hides it everywhere —
 // statistics card, profile row, paywall spotlight, home Prime chip — except on
 // test accounts; users' data and settings stay in the database untouched.

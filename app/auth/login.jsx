@@ -101,7 +101,7 @@ export default function Login() {
       // 3. პირდაპირ გამოვიძახოთ სკანერი (ყოველგვარი წინასწარი ალერტის გარეშე)
       // ალერტმა შეიძლება დააბნიოს iOS-ის Face ID ინტერფეისი
       const authResult = await LocalAuthentication.authenticateAsync({
-        promptMessage: t("auth.login.faceIdPrompt"),
+        promptMessage: Platform.OS === "android" ? t("auth.login.biometricPrompt") : t("auth.login.faceIdPrompt"),
         fallbackLabel: t("auth.login.faceIdFallback"),
         disableDeviceFallback: false, // მივცეთ უფლება პინ-კოდი გამოიყენოს, თუ სახე ვერ იცნო
         cancelLabel: t("common.cancel")
@@ -185,7 +185,7 @@ export default function Login() {
                   onPress={handleBiometricAuth}
                   activeOpacity={0.7}
                 >
-                  <MaterialCommunityIcons name="face-recognition" size={35} color="#ff4d88" />
+                  <MaterialCommunityIcons name={Platform.OS === "android" ? "fingerprint" : "face-recognition"} size={35} color="#ff4d88" />
                 </TouchableOpacity>
               </View>
             )}
