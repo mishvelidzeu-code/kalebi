@@ -11,6 +11,7 @@ import { LanguageProvider } from "../context/LanguageContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { WeightProvider } from "../context/WeightContext";
 import { useOtaUpdatePrompt } from "../hooks/useOtaUpdatePrompt";
+import { startAppSessionTracking } from "../services/appSessions";
 import { initializeMetaAppEvents } from "../services/metaAppEvents";
 import { registerPushTokenForCurrentUser } from "../services/notifications";
 import { syncProfileEmailForCurrentUser, syncProfileEmailForUser } from "../services/profileSync";
@@ -33,6 +34,7 @@ function LayoutContent() {
     initializeMetaAppEvents();
     syncProfileEmailForCurrentUser();
     registerPushTokenForCurrentUser();
+    const stopAppSessionTracking = startAppSessionTracking();
 
     const {
       data: { subscription },
@@ -43,7 +45,10 @@ function LayoutContent() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      stopAppSessionTracking();
+    };
   }, []);
 
   return (
