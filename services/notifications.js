@@ -46,6 +46,17 @@ export async function registerPushTokenForCurrentUser() {
 
     if (!expoPushToken) return null;
 
+    // The RPC moves the token to this account even if another account signed in
+    // on this phone first (a plain upsert is refused by RLS in that case).
+    const { error: rpcError } = await supabase.rpc("register_push_token", {
+      p_token: expoPushToken,
+      p_platform: Platform.OS,
+    });
+    if (!rpcError) return expoPushToken;
+
+    // If the RPC fails for any reason, fall back to the plain upsert, which
+    // still works for a token this account already owns.
+    console.log("register_push_token failed, falling back to upsert:", rpcError);
     const { error } = await supabase.from("push_tokens").upsert(
       {
         user_id: user.id,
