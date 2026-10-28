@@ -404,10 +404,20 @@ export default function AdminScreen() {
         throw new Error(`${response.status}: ${data?.error || data?.message || JSON.stringify(data)}`);
       }
 
-      Alert.alert(
-        "გაიგზავნა",
-        `Target: ${data?.target || pushTarget}\nToken: ${data?.tokenCount ?? 0}`
-      );
+      const resultLines = [
+        `Target: ${data?.target || pushTarget}`,
+        `Token: ${data?.tokenCount ?? 0}`,
+      ];
+      if (data?.sentCount != null) {
+        resultLines.push(`Expo-მ მიიღო: ${data.sentCount}`);
+        if (data.failedCount) {
+          resultLines.push(`ვერ გაიგზავნა: ${data.failedCount}`);
+          Object.entries(data.errors || {}).forEach(([reason, count]) => {
+            resultLines.push(`• ${reason}: ${count}`);
+          });
+        }
+      }
+      Alert.alert("გაიგზავნა", resultLines.join("\n"));
       setPushTitle("");
       setPushBody("");
       setPushEmail("");
