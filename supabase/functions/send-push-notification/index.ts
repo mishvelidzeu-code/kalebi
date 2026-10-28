@@ -12,7 +12,11 @@ const PAGE_SIZE = 1000;
 // Long `in(...)` filters go into the URL, so user ids are queried in batches.
 const USER_ID_BATCH_SIZE = 150;
 const EXPO_BATCH_SIZE = 100;
-const EXPO_PARALLEL_REQUESTS = 4;
+// Expo accepts about 600 notifications per second per project. Batches go one
+// at a time, at most 5 per second (500 notifications), and a batch Expo turns
+// away (429 / 5xx) is retried after 1, 2 and 4 seconds.
+const EXPO_MIN_BATCH_INTERVAL_MS = 200;
+const EXPO_MAX_RETRIES = 3;
 
 type PushTarget = "all" | "me" | "paid_prime" | "pregnancy_paid" | "today_users";
 
@@ -101,6 +105,8 @@ async function fetchPushTokens(adminClient: any, targetUserIds: string[] | null)
   return { rows, error: null };
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // Sends every message and counts what Expo accepted. A failed batch no longer
 // stops the rest of the send.
 async function sendToExpo(messages: unknown[]) {
@@ -111,42 +117,62 @@ async function sendToExpo(messages: unknown[]) {
   };
 
   const sendBatch = async (batch: unknown[]) => {
-    try {
-      const expoResponse = await fetch(EXPO_PUSH_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(batch),
-      });
-      const responseBody = await expoResponse.json().catch(() => null);
-      const tickets: ExpoTicket[] = Array.isArray(responseBody?.data) ? responseBody.data : [];
+    for (let attempt = 0; ; attempt += 1) {
+      // status 0 = the request itself failed (network).
+      let status = 0;
+      // deno-lint-ignore no-explicit-any
+      let responseBody: any = null;
+      try {
+        const expoResponse = await fetch(EXPO_PUSH_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(batch),
+        });
+        status = expoResponse.status;
+        responseBody = await expoResponse.json().catch(() => null);
+      } catch (error) {
+        console.error("send-push-notification expo batch error:", error);
+      }
 
-      if (!expoResponse.ok || tickets.length === 0) {
-        addErrors(responseBody?.errors?.[0]?.code || `http-${expoResponse.status}`, batch.length);
+      const tickets: ExpoTicket[] = Array.isArray(responseBody?.data) ? responseBody.data : [];
+      const errorCode: string | undefined = responseBody?.errors?.[0]?.code;
+
+      if (status >= 200 && status < 300 && tickets.length > 0) {
+        for (const ticket of tickets) {
+          if (ticket?.status === "ok") {
+            acceptedCount += 1;
+          } else {
+            addErrors(ticket?.details?.error || "unknown-error", 1);
+          }
+        }
+        if (tickets.length < batch.length) {
+          addErrors("missing-ticket", batch.length - tickets.length);
+        }
         return;
       }
 
-      for (const ticket of tickets) {
-        if (ticket?.status === "ok") {
-          acceptedCount += 1;
-        } else {
-          addErrors(ticket?.details?.error || "unknown-error", 1);
-        }
+      const retryable = status === 0 || status === 429 || status >= 500 || errorCode === "TOO_MANY_REQUESTS";
+      if (retryable && attempt < EXPO_MAX_RETRIES) {
+        await sleep(1000 * 2 ** attempt);
+        continue;
       }
-      if (tickets.length < batch.length) {
-        addErrors("missing-ticket", batch.length - tickets.length);
-      }
-    } catch (error) {
-      console.error("send-push-notification expo batch error:", error);
-      addErrors("network-error", batch.length);
+
+      addErrors(errorCode || (status === 0 ? "network-error" : `http-${status}`), batch.length);
+      return;
     }
   };
 
   const batches = chunk(messages, EXPO_BATCH_SIZE);
-  for (const parallelGroup of chunk(batches, EXPO_PARALLEL_REQUESTS)) {
-    await Promise.all(parallelGroup.map(sendBatch));
+  for (const batch of batches) {
+    const startedAt = Date.now();
+    await sendBatch(batch);
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < EXPO_MIN_BATCH_INTERVAL_MS) {
+      await sleep(EXPO_MIN_BATCH_INTERVAL_MS - elapsed);
+    }
   }
 
   return { acceptedCount, errorCounts, batchCount: batches.length };
