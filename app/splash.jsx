@@ -87,35 +87,38 @@ export default function Splash() {
     // 1. პატარა ვიბრაცია აპლიკაციის გახსნისთანავე
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const initUser = async () => {
-      // 1. ვაყოვნებთ 4.5 წამი, რომ მთელი ეს მაგია კარგად გამოჩნდეს
-      await new Promise((resolve) => setTimeout(resolve, 4500));
-
+    // Where to go next. This runs while the animation plays: it used to start
+    // only after the 4.5s wait, so the finished splash sat still for several
+    // network round trips (session, date fix, profile) before it faded out.
+    const resolveNextRoute = async () => {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const hasStoredSession = Boolean(sessionData?.session);
       // Signed in, but the expired token could not be refreshed offline —
       // getSession() answers "no session" then, which is not a sign-out.
-      const offlineWithSession = !sessionData?.session && isOfflineSessionError(sessionError);
+      const offlineWithSession = !hasStoredSession && isOfflineSessionError(sessionError);
 
       // დეფოლტად (თუ არ არის სესია) მიდის ონბორდინგზე
       let nextRoute = offlineWithSession ? "/(tabs)" : "/onboarding/name";
 
       // 2. ვამოწმებთ, აქვს თუ არა სესია და გავლილი ონბორდინგი
-      if (sessionData?.session) {
+      if (hasStoredSession) {
         const user = sessionData.session.user;
-        try {
-          const migrationResult = await fixFutureCycleDatesForCurrentUser();
-          if (migrationResult.fixedProfile || migrationResult.fixedCycles > 0) {
-            await syncCycleRemindersForUser();
+        const fixCycleDates = async () => {
+          try {
+            const migrationResult = await fixFutureCycleDatesForCurrentUser();
+            if (migrationResult.fixedProfile || migrationResult.fixedCycles > 0) {
+              await syncCycleRemindersForUser();
+            }
+          } catch (migrationError) {
+            console.log("Cycle date migration failed:", migrationError);
           }
-        } catch (migrationError) {
-          console.log("Cycle date migration failed:", migrationError);
-        }
+        };
 
-        const profileResult = await supabase
-          .from("profiles")
-          .select("onboarding_completed")
-          .eq("id", user.id)
-          .single();
+        // The date fix never touches onboarding_completed, so both run at once.
+        const [, profileResult] = await Promise.all([
+          fixCycleDates(),
+          supabase.from("profiles").select("onboarding_completed").eq("id", user.id).single(),
+        ]);
         const profile = profileResult.data;
 
         if (profile?.onboarding_completed) {
@@ -128,9 +131,20 @@ export default function Splash() {
         }
       }
 
+      return { nextRoute, hasStoredSession, offlineWithSession };
+    };
+
+    const initUser = async () => {
+      // 1. ვაყოვნებთ 4.5 წამი, რომ მთელი ეს მაგია კარგად გამოჩნდეს —
+      // შემდეგი ეკრანი ამ დროს უკვე ირკვევა
+      const [{ nextRoute, hasStoredSession, offlineWithSession }] = await Promise.all([
+        resolveNextRoute(),
+        new Promise((resolve) => setTimeout(resolve, 4500)),
+      ]);
+
       const shouldAskLanguage =
         TEMP_LANGUAGE_PICKER_ENABLED &&
-        !sessionData?.session &&
+        !hasStoredSession &&
         !offlineWithSession &&
         languageStateRef.current.isLanguageLoaded &&
         !languageStateRef.current.hasChosenLanguage;
