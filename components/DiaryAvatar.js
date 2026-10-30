@@ -7,6 +7,7 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useLanguage } from "../context/LanguageContext";
+import { getCurrentUser } from "../services/currentUser";
 import { supabase } from "../services/supabase";
 
 const AVATAR_BUCKET = "avatars";
@@ -60,7 +61,7 @@ export default function DiaryAvatar({
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
 
       if (!user) return;
       setUserId(user.id);
@@ -99,7 +100,7 @@ export default function DiaryAvatar({
 
   const handleAvatarPress = async () => {
     try {
-      const targetUserId = userId || (await supabase.auth.getUser()).data.user?.id;
+      const targetUserId = userId || (await getCurrentUser()).data.user?.id;
       if (!targetUserId) return;
 
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();

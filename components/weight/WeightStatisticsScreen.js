@@ -7,6 +7,7 @@ import { ActivityIndicator, RefreshControl, SafeAreaView, ScrollView, StatusBar,
 import DiaryAvatar from "../DiaryAvatar";
 import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
+import { getCurrentUser } from "../../services/currentUser";
 import { supabase } from "../../services/supabase";
 import { getWeightLogsRange, WEIGHT_PROFILE_FIELDS } from "../../services/weightLogs";
 import { calculateCycleState } from "../../utils/cycleEngine";
@@ -59,7 +60,7 @@ export default function WeightStatisticsScreen({ headerSlot }) {
 
   const loadData = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!user) return;
 
       const today = dayjs().format("YYYY-MM-DD");

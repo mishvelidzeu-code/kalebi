@@ -1,12 +1,13 @@
 import dayjs from "dayjs";
 
 import { normalizeCycleStartDate } from "../utils/cycleEngine";
+import { getCurrentUser } from "./currentUser";
 import { supabase } from "./supabase";
 
 export async function fixFutureCycleDatesForCurrentUser() {
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getCurrentUser();
 
   if (!user) return { fixedProfile: false, fixedCycles: 0 };
 

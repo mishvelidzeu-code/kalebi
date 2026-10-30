@@ -4,6 +4,7 @@ import { AppState, Platform } from "react-native";
 
 import { isAdminEmail, isTestAccountEmail } from "../services/adminAccess";
 import { getSignedInUser, isOfflineQueryResult, retryWhenOnline } from "../services/networkRecovery";
+import { getCurrentUser } from "../services/currentUser";
 import { supabase } from "../services/supabase";
 import { schedulePregnancyNotifications, syncCycleRemindersForUser } from "../services/notifications";
 import {
@@ -119,10 +120,17 @@ export function PregnancyProvider({ children }) {
   // Sign-out and account switches must not leave the previous user's pregnancy
   // state on screen. Token refreshes fire here too, so compare the user id
   // first — clearing on every refresh would remount the pregnancy screens.
+  // The launch's own session and token refreshes never change the user, and
+  // the mount load covers them; when they won the race against that load they
+  // started a second one (with a second store check).
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") {
+        return;
+      }
+
       const nextUserId = session?.user?.id ?? null;
       if (nextUserId === loadedUserIdRef.current) {
         return;
@@ -143,7 +151,7 @@ export function PregnancyProvider({ children }) {
   }, [loadPregnancyData]);
 
   const enablePregnancyMode = useCallback(async (startDate) => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getCurrentUser();
     if (!user) return;
 
     // has_pregnancy_subscription is owned by services/purchases.js — the store
@@ -167,7 +175,7 @@ export function PregnancyProvider({ children }) {
   }, []);
 
   const updatePregnancyStartDate = useCallback(async (startDate) => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getCurrentUser();
     if (!user) return;
 
     await supabase.from("profiles").update({
@@ -182,7 +190,7 @@ export function PregnancyProvider({ children }) {
   }, []);
 
   const disablePregnancyMode = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getCurrentUser();
     if (!user) return;
 
     // Only the mode is switched off. The subscription is deliberately left

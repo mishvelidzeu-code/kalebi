@@ -1,6 +1,7 @@
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 
+import { getCurrentUser } from "../../services/currentUser";
 import { supabase } from "../../services/supabase";
 import { getWeightLogsRange, getWeightProfile } from "../../services/weightLogs";
 import { calculateCycleState } from "../../utils/cycleEngine";
@@ -18,7 +19,7 @@ export default function WeightHomeMealPlan() {
 
   const load = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!user) return;
 
       const today = dayjs().format("YYYY-MM-DD");

@@ -8,6 +8,7 @@ import {
   isSupportedLanguage,
   translate,
 } from "../services/i18n";
+import { getCurrentUser } from "../services/currentUser";
 import { supabase } from "../services/supabase";
 
 // Persisted locally so the app can render in the right language before any
@@ -28,7 +29,7 @@ async function writeLanguageToProfile(language) {
   try {
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getCurrentUser();
     if (!user) return;
     const { error } = await supabase.from("profiles").update({ language }).eq("id", user.id);
     // The column ships in a separate migration; until it exists the update

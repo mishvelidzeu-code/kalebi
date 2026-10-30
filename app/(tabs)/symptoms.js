@@ -41,6 +41,7 @@ import {
   isAssistantDailyLimitError,
   setAssistantDailyUsage,
 } from "../../services/assistantUsage";
+import { getCurrentUser } from "../../services/currentUser";
 import { supabase } from "../../services/supabase";
 import { useLanguage } from "../../context/LanguageContext";
 const ASSISTANT_GUIDE_IMAGE = require("../../assets/images/assistant-guide.png");
@@ -154,8 +155,18 @@ export default function AssistantScreen() {
   const effectiveHumorLevel = canUseHumor ? humorLevel : DEFAULT_HUMOR_LEVEL;
   const tabBarClearance = Math.max(insets.bottom, 10) + 84;
 
+  // loadScreenData only needs to know whether the chat is still empty (for the
+  // profile spinner). With messages.length in its deps it was re-created on
+  // every message, and the focus effect re-ran it: the welcome message, each
+  // question and each answer reloaded the profile, usage, avatar link and
+  // summary — while the AI request waited behind them.
+  const hasMessagesRef = useRef(false);
+  useEffect(() => {
+    hasMessagesRef.current = messages.length > 0;
+  }, [messages.length]);
+
   const loadScreenData = useCallback(async () => {
-    if (messages.length === 0) {
+    if (!hasMessagesRef.current) {
       setLoadingProfile(true);
     }
     setLoadingSummary(true);
@@ -163,7 +174,7 @@ export default function AssistantScreen() {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
 
       if (!user) {
         setAssistantUserId(null);
@@ -222,7 +233,7 @@ export default function AssistantScreen() {
       setLoadingProfile(false);
       setLoadingSummary(false);
     }
-  }, [messages.length, t]);
+  }, [t]);
 
   useFocusEffect(
     useCallback(() => {

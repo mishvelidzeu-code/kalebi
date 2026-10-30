@@ -1,6 +1,6 @@
 import { DefaultTheme } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { isAdminEmail, isTestAccountEmail } from "../services/adminAccess";
 import { getSignedInUser, isOfflineQueryResult, retryWhenOnline } from "../services/networkRecovery";
@@ -54,6 +54,8 @@ export const ThemeProvider = ({ children }) => {
   const [isTestAccount, setIsTestAccount] = useState(false);
   const [testPrimeEnabled, setTestPrimeEnabledState] = useState(false);
   const [usePremiumTheme, setUsePremiumThemeState] = useState(DEFAULT_THEME_IS_DARK);
+  // Whose tier is in state — see the auth listener below.
+  const loadedUserIdRef = useRef(null);
 
   const checkPremiumStatus = useCallback(async () => {
     try {
@@ -65,6 +67,8 @@ export const ThemeProvider = ({ children }) => {
         retryWhenOnline("premium", checkPremiumStatus);
         return;
       }
+
+      loadedUserIdRef.current = user?.id ?? null;
 
       if (!user) {
         setIsPremium(false);
@@ -154,11 +158,27 @@ export const ThemeProvider = ({ children }) => {
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // Only a sign-in, sign-out or account switch changes the tier. This used
+      // to reset Prime and admin to false on every event — the launch's own
+      // session and every hourly token refresh included — so the app flashed
+      // its free version and rebuilt the admin's tabs, then checked it all
+      // again. The mount check above covers the session the app starts with.
+      if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") {
+        return;
+      }
+
+      const nextUserId = session?.user?.id ?? null;
+      if (nextUserId === loadedUserIdRef.current) {
+        return;
+      }
+
+      loadedUserIdRef.current = nextUserId;
       setIsPremium(false);
       setIsAdmin(false);
+      setIsTestAccount(false);
 
-      if (session?.user) {
+      if (nextUserId) {
         checkPremiumStatus();
       }
     });
