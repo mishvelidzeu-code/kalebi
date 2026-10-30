@@ -40,6 +40,20 @@ function isProfilePaidPrime(profile) {
   return Number.isNaN(timestamp) ? false : timestamp > Date.now();
 }
 
+function formatDuration(seconds) {
+  if (seconds == null || Number.isNaN(Number(seconds))) {
+    return "—";
+  }
+
+  const total = Math.round(Number(seconds));
+  if (total < 60) {
+    return `${total} წმ`;
+  }
+
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return minutes >= 10 || rest === 0 ? `${minutes} წთ` : `${minutes} წთ ${rest} წმ`;
+}
 
 export default function AdminScreen() {
   const router = useRouter();
@@ -56,6 +70,8 @@ export default function AdminScreen() {
     pregnancyPaid: 0,
     withPhotos: 0,
   });
+  const [usage, setUsage] = useState(null);
+  const [usageError, setUsageError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -150,6 +166,18 @@ export default function AdminScreen() {
       );
     } finally {
       setLoading(false);
+    }
+
+    // Separate from the counts above: if the app_sessions migration is missing,
+    // only this block should say so.
+    try {
+      const { data, error } = await supabase.rpc("admin_app_usage_stats", { p_days: 14 });
+      if (error) throw error;
+      setUsage(data);
+      setUsageError(false);
+    } catch (error) {
+      console.log("Admin usage stats error:", error);
+      setUsageError(true);
     }
   }, []);
 
@@ -376,10 +404,20 @@ export default function AdminScreen() {
         throw new Error(`${response.status}: ${data?.error || data?.message || JSON.stringify(data)}`);
       }
 
-      Alert.alert(
-        "გაიგზავნა",
-        `Target: ${data?.target || pushTarget}\nToken: ${data?.tokenCount ?? 0}`
-      );
+      const resultLines = [
+        `Target: ${data?.target || pushTarget}`,
+        `Token: ${data?.tokenCount ?? 0}`,
+      ];
+      if (data?.sentCount != null) {
+        resultLines.push(`Expo-მ მიიღო: ${data.sentCount}`);
+        if (data.failedCount) {
+          resultLines.push(`ვერ გაიგზავნა: ${data.failedCount}`);
+          Object.entries(data.errors || {}).forEach(([reason, count]) => {
+            resultLines.push(`• ${reason}: ${count}`);
+          });
+        }
+      }
+      Alert.alert("გაიგზავნა", resultLines.join("\n"));
       setPushTitle("");
       setPushBody("");
       setPushEmail("");
@@ -456,6 +494,18 @@ export default function AdminScreen() {
             accent="#9B59B6"
           />
         </View>
+
+        {/* Activity */}
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>აქტიურობა</Text>
+        {usageError ? (
+          <Text style={[styles.sectionHint, { color: theme.subText }]}>
+            აქტიურობის სტატისტიკა ვერ ჩაიტვირთა. Supabase-ზე app_sessions migration გაშვებულია?
+          </Text>
+        ) : usage ? (
+          <UsageSection usage={usage} theme={theme} />
+        ) : (
+          <ActivityIndicator color={theme.primary} style={{ marginBottom: 18 }} />
+        )}
 
         {/* Search */}
         <TextInput
@@ -675,6 +725,68 @@ function StatCard({ label, value, theme, onPress, accent }) {
   );
 }
 
+function UsageSection({ usage, theme }) {
+  const week = usage.week || {};
+  const userDays = week.user_days || 0;
+  const daily = usage.daily || [];
+  const maxUsers = Math.max(1, ...daily.map((day) => day.users || 0));
+  const visitAccent = "#3B82F6";
+
+  return (
+    <>
+      <View style={styles.statsGrid}>
+        <StatCard label="აქტიური 24 სთ" value={usage.active_24h ?? 0} theme={theme} accent={theme.good} />
+        <StatCard label="აქტიური 7 დღე" value={usage.active_7d ?? 0} theme={theme} accent={theme.good} />
+        <StatCard label="აქტიური 30 დღე" value={usage.active_30d ?? 0} theme={theme} accent={theme.good} />
+        <StatCard
+          label="ვიზიტი დღეში (1 user)"
+          value={userDays ? (week.sessions / userDays).toFixed(1) : "—"}
+          theme={theme}
+          accent={visitAccent}
+        />
+        <StatCard label="1 ვიზიტი (მედიანა)" value={formatDuration(week.median_seconds)} theme={theme} accent={visitAccent} />
+        <StatCard
+          label="დღეში აპში (1 user)"
+          value={formatDuration(userDays ? week.total_seconds / userDays : null)}
+          theme={theme}
+          accent={visitAccent}
+        />
+      </View>
+
+      <Text style={[styles.sectionHint, { color: theme.subText }]}>
+        {usage.tracking_since
+          ? `ვიზიტები — ბოლო 7 დღე. აღრიცხვა დაიწყო ${dayjs(usage.tracking_since).format("DD.MM.YYYY")}-ს.`
+          : "ვიზიტების აღრიცხვა დაიწყება, როცა მომხმარებლებს აპის განახლება (OTA) ჩამოუვათ."}
+      </Text>
+
+      {!!usage.tracking_since && daily.length > 0 && (
+        <View style={[styles.dailyCard, { backgroundColor: theme.card }]}>
+          <Text style={[styles.pushTitle, { color: theme.text }]}>დღეების მიხედვით</Text>
+          {daily.map((day) => (
+            <View key={day.day} style={styles.dailyRow}>
+              <Text style={[styles.dailyDay, { color: theme.subText }]}>{dayjs(day.day).format("DD.MM")}</Text>
+              <View style={{ flex: 1 }}>
+                <View style={[styles.dailyBarTrack, { backgroundColor: theme.border }]}>
+                  <View
+                    style={[
+                      styles.dailyBarFill,
+                      { width: `${Math.round(((day.users || 0) / maxUsers) * 100)}%`, backgroundColor: theme.good },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.dailyMeta, { color: theme.subText }]} numberOfLines={1}>
+                  {day.sessions} ვიზიტი · {formatDuration(day.median_seconds)} · +{day.new_users} ახალი
+                </Text>
+              </View>
+              <Text style={[styles.dailyUsers, { color: theme.text }]}>{day.users}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
   keyboardView: { flex: 1 },
   container: { flex: 1, paddingHorizontal: 20 },
@@ -688,6 +800,15 @@ const styles = StyleSheet.create({
   statCard: { flexGrow: 1, flexBasis: "47%", borderRadius: 18, paddingVertical: 18, alignItems: "center" },
   statValue: { fontSize: 24, fontWeight: "900" },
   statLabel: { fontSize: 12, fontWeight: "700", marginTop: 4 },
+  sectionTitle: { fontSize: 16, fontWeight: "900", marginBottom: 10 },
+  sectionHint: { fontSize: 12, fontWeight: "600", lineHeight: 18, marginTop: -6, marginBottom: 14 },
+  dailyCard: { borderRadius: 24, padding: 16, marginBottom: 18 },
+  dailyRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
+  dailyDay: { width: 42, fontSize: 12, fontWeight: "800" },
+  dailyBarTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
+  dailyBarFill: { height: "100%", borderRadius: 4 },
+  dailyMeta: { fontSize: 11, fontWeight: "600", marginTop: 4 },
+  dailyUsers: { minWidth: 34, textAlign: "right", fontSize: 15, fontWeight: "900" },
   searchInput: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 18, paddingVertical: 15, fontSize: 15, marginBottom: 16 },
   pushCard: { borderRadius: 24, padding: 16, marginBottom: 16 },
   pushTitle: { fontSize: 16, fontWeight: "900", marginBottom: 12 },
