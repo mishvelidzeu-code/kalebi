@@ -12,6 +12,7 @@ import WeightHomeCard from "../../components/weight/WeightHomeCard";
 import WeightHomeMealPlan from "../../components/weight/WeightHomeMealPlan";
 import { TEMP_FERTILITY_COMING_SOON } from "../../constants/tempFlags";
 import { getFertilityLogsForDay } from "../../services/fertilityLogs";
+import { fetchHomeData, takePrefetchedHomeData } from "../../services/homePrefetch";
 import { buildDailyPlan } from "../../utils/fertilityPlan";
 import { useLanguage } from "../../context/LanguageContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -582,9 +583,10 @@ export default function HomeScreen() {
 
   const loadData = useCallback(async ({ forceAdviceRefresh = false } = {}) => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Right after the splash: it already read this while its animation
+      // played, so the first load skips the spinner's two round trips.
+      const prefetched = hasLoadedOnceRef.current ? null : takePrefetchedHomeData();
+      const user = prefetched ? prefetched.user : (await supabase.auth.getUser()).data.user;
       if (!user) {
         setAdviceLoading(false);
         return;
@@ -593,11 +595,7 @@ export default function HomeScreen() {
       const today = dayjs().startOf("day");
       const todayKey = today.format("YYYY-MM-DD");
 
-      const [cyclesRes, profileRes, todaySymptomsRes] = await Promise.all([
-        supabase.from("cycles").select("*").eq("user_id", user.id).order("start_date", { ascending: true }),
-        supabase.from("profiles").select("*").eq("id", user.id).single(),
-        supabase.from("symptoms").select("symptoms, mood, note").eq("user_id", user.id).eq("date", todayKey).maybeSingle(),
-      ]);
+      const [cyclesRes, profileRes, todaySymptomsRes] = await (prefetched?.promise ?? fetchHomeData(user.id, todayKey));
 
       const cycles = cyclesRes.data || [];
       const profile = profileRes.data;

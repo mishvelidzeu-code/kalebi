@@ -7,7 +7,9 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { TEMP_LANGUAGE_PICKER_ENABLED } from "../constants/tempFlags";
 import { useLanguage } from "../context/LanguageContext";
+import { isAdminEmail } from "../services/adminAccess";
 import { fixFutureCycleDatesForCurrentUser } from "../services/cycleDataMigration";
+import { prefetchHomeData } from "../services/homePrefetch";
 import { isOfflineQueryResult, isOfflineSessionError } from "../services/networkRecovery";
 import { syncCycleRemindersForUser } from "../services/notifications";
 import { translate } from "../services/i18n";
@@ -112,6 +114,12 @@ export default function Splash() {
           } catch (migrationError) {
             console.log("Cycle date migration failed:", migrationError);
           }
+
+          // After the date fix, so the home screen gets the fixed dates. The
+          // admin opens on the dashboard, not the home screen.
+          if (!isAdminEmail(user.email || "")) {
+            prefetchHomeData(user);
+          }
         };
 
         // The date fix never touches onboarding_completed, so both run at once.
@@ -163,7 +171,7 @@ export default function Splash() {
     const leaveTo = (route) => {
       Animated.timing(mainOpacity, {
         toValue: 0,
-        duration: 800,
+        duration: 400,
         useNativeDriver: true,
       }).start(() => {
         router.replace(route);
