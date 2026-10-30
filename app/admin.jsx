@@ -112,9 +112,12 @@ export default function AdminScreen() {
   const checkAccess = useCallback(async () => {
     setCheckingAccess(true);
     try {
+      // The stored session is enough to pick the screen (the data itself is
+      // guarded by RLS), and it needs no round trip before the dashboard shows.
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
 
       const allowed = isAdminEmail(user?.email || "");
       setHasAccess(allowed);
