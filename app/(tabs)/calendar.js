@@ -511,7 +511,7 @@ function PregnancyCalendarScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal visible={showMonthPicker} transparent animationType="fade">
+      <Modal visible={showMonthPicker} transparent animationType="fade" onRequestClose={() => setShowMonthPicker(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.monthPickerCard, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
             <View style={styles.yearSelector}>
@@ -1226,7 +1226,7 @@ function RegularCalendarScreen() {
       </KeyboardAvoidingView>
 
       {/* --------------- MONTH PICKER MODAL --------------- */}
-      <Modal visible={showMonthPicker} transparent animationType="fade">
+      <Modal visible={showMonthPicker} transparent animationType="fade" onRequestClose={() => setShowMonthPicker(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.monthPickerCard, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
             <View style={styles.yearSelector}>
@@ -1825,7 +1825,7 @@ function FertilityCalendarScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal visible={showMonthPicker} transparent animationType="fade">
+      <Modal visible={showMonthPicker} transparent animationType="fade" onRequestClose={() => setShowMonthPicker(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.monthPickerCard, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
             <View style={styles.yearSelector}>

@@ -110,6 +110,9 @@ export default function ProfileScreen() {
   const [pregnancyModalMode, setPregnancyModalMode] = useState("enable");
   const [showFertilityModal, setShowFertilityModal] = useState(false);
   const [selectedPregnancyDate, setSelectedPregnancyDate] = useState(new Date());
+  // Android's date picker is a dialog that opens whenever it mounts, so it is
+  // shown only on tap (and unmounted on pick) instead of inside the sheet.
+  const [showAndroidPregnancyPicker, setShowAndroidPregnancyPicker] = useState(false);
   const [pregnancySaving, setPregnancySaving] = useState(false);
   const [fertilitySaving, setFertilitySaving] = useState(false);
   const [pendingAndroidCheckout, setPendingAndroidCheckout] = useState(null);
@@ -129,7 +132,13 @@ export default function ProfileScreen() {
   // Turning a mode off is not a cancellation — the subscription lives in the
   // store and keeps billing. Both paid modes share one subscription, so
   // cancelling closes both; say so before the user assumes otherwise.
-  const CANCEL_HINT = canOpenManageSubscriptions() ? t("profile.cancelHintIos") : t("profile.cancelHintWeb");
+  // Android can't buy yet, so its access came from elsewhere (an iPhone, an
+  // admin grant) — don't point it at a "website where you paid".
+  const CANCEL_HINT = canOpenManageSubscriptions()
+    ? t("profile.cancelHintIos")
+    : canPurchaseOnAndroid()
+      ? t("profile.cancelHintWeb")
+      : t("profile.cancelHintAndroid");
   const SHARED_SUBSCRIPTION_HINT = t("profile.sharedSubscriptionHint", { mode: FERTILITY_MODE_LABEL });
   // Android shows no store price (no in-app purchase there, see
   // TEMP_ANDROID_WEB_PURCHASE_ENABLED); iOS texts stay exactly as they were.
@@ -931,7 +940,9 @@ export default function ProfileScreen() {
         },
       })),
       { text: t("common.cancel"), style: "cancel" },
-    ]);
+      // Android shows at most three buttons and drops Cancel here, so let a tap
+      // outside / Back close it (iOS ignores this option).
+    ], { cancelable: true });
   };
 
   const handleLogout = () => {
@@ -1215,6 +1226,34 @@ export default function ProfileScreen() {
                 : t("profile.pregnancyModalBody")}
             </Text>
             <Text style={[styles.inputLabel, { color: theme.subText }]}>{t("profile.lmpLabel")}</Text>
+            {isAndroid ? (
+              <>
+                <TouchableOpacity
+                  style={[styles.pickerCard, styles.androidDateButton, { backgroundColor: theme.pickerBg, borderColor: theme.pickerBorder }]}
+                  onPress={() => setShowAndroidPregnancyPicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="calendar-outline" size={18} color={theme.primary} />
+                  <Text style={[styles.androidDateText, { color: theme.text }]}>
+                    {dayjs(selectedPregnancyDate).format("D MMMM, YYYY")}
+                  </Text>
+                  <Ionicons name="chevron-down-outline" size={16} color={theme.subText} />
+                </TouchableOpacity>
+                {showPregnancyModal && showAndroidPregnancyPicker && (
+                  <DateTimePicker
+                    value={selectedPregnancyDate instanceof Date ? selectedPregnancyDate : new Date()}
+                    mode="date"
+                    maximumDate={new Date()}
+                    minimumDate={new Date(Date.now() - 280 * 24 * 60 * 60 * 1000)}
+                    onChange={(event, date) => {
+                      setShowAndroidPregnancyPicker(false);
+                      if (event.type === "set" && date) setSelectedPregnancyDate(date);
+                    }}
+                    accentColor={theme.primary}
+                  />
+                )}
+              </>
+            ) : (
             <View style={[styles.pickerCard, { backgroundColor: theme.pickerBg, borderColor: theme.pickerBorder }]}>
               {showPregnancyModal && (
                 <DateTimePicker
@@ -1231,6 +1270,7 @@ export default function ProfileScreen() {
                 />
               )}
             </View>
+            )}
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={handlePregnancyModalSubmit}>
               {pregnancySaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{pregnancyModalMode === "edit" ? t("profile.saveDate") : isAndroid ? t("profile.enableMode") : t("profile.enableForPrice")}</Text>}
             </TouchableOpacity>
@@ -1454,6 +1494,8 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 24, fontWeight: "900", marginBottom: 25, textAlign: "center" },
   modalCard: { padding: 20, borderRadius: 22, marginBottom: 15 },
   pickerCard: { borderWidth: 1, borderRadius: 22, marginBottom: 12, overflow: "hidden", paddingHorizontal: 6 },
+  androidDateButton: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 18, paddingVertical: 16 },
+  androidDateText: { flex: 1, fontSize: 16, fontWeight: "700" },
   modalLabel: { fontSize: 14, fontWeight: "700", marginBottom: 18, textAlign: "center" },
   fertilityBenefit: { fontSize: 14, lineHeight: 22, marginBottom: 4, fontWeight: "600" },
   selectorContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderRadius: 20, padding: 6 },

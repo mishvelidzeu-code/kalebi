@@ -133,6 +133,7 @@ export default {
   profile: {
     cancelHintIos: "To cancel: Profile → Manage subscriptions (or App Store → Subscriptions).",
     cancelHintWeb: "Cancel the subscription on the website where you paid.",
+    cancelHintAndroid: "Cancel the subscription where you took it out.",
     sharedSubscriptionHint: "One subscription unlocks both modes — pregnancy and \"{{mode}}\". Cancelling closes both.",
     fertilityComingSoonTitle: "Coming soon 🌿",
     fertilityComingSoonBody: "\"{{mode}}\" mode is launching soon — hang on a little longer.",

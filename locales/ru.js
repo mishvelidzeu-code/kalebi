@@ -134,6 +134,7 @@ export default {
   profile: {
     cancelHintIos: "Чтобы отменить: Профиль → Управление подписками (или App Store → Подписки).",
     cancelHintWeb: "Подписка отменяется на сайте, где вы её оплатили.",
+    cancelHintAndroid: "Подписка отменяется там, где вы её оформили.",
     sharedSubscriptionHint: "Одна подписка открывает оба режима — беременность и «{{mode}}». Отмена закроет оба.",
     fertilityComingSoonTitle: "Скоро 🌿",
     fertilityComingSoonBody: "Режим «{{mode}}» скоро появится — немного терпения.",

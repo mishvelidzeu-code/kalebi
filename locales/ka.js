@@ -137,6 +137,7 @@ export default {
   profile: {
     cancelHintIos: "გასაუქმებლად: პროფილი → გამოწერების მართვა (ან App Store → გამოწერები).",
     cancelHintWeb: "გამოწერა იმ საიტიდან უქმდება, სადაც გადაიხადე.",
+    cancelHintAndroid: "გამოწერა იქ უქმდება, სადაც გააფორმე.",
     sharedSubscriptionHint: "ერთი გამოწერა ორივე რეჟიმს ხსნის — ორსულობასაც და \"{{mode}}\"-საც. გაუქმება ორივეს დახურავს.",
     fertilityComingSoonTitle: "მალე დაემატება 🌿",
     fertilityComingSoonBody: "\"{{mode}}\" რეჟიმი მალე გაეშვება — ცოტაც მოითმინე.",
