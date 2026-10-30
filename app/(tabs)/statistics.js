@@ -16,6 +16,7 @@ import WeightModeEntryCard from "../../components/weight/WeightModeEntryCard";
 import WeightStatisticsScreen from "../../components/weight/WeightStatisticsScreen";
 import WeightViewSwitch from "../../components/weight/WeightViewSwitch";
 import { getFertilityLogsRange } from "../../services/fertilityLogs";
+import { getCurrentUser } from "../../services/currentUser";
 import { supabase } from "../../services/supabase";
 import { calculateCycleState } from "../../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../../utils/cyclePrediction";
@@ -93,7 +94,7 @@ function PregnancyStatisticsScreen() {
   useFocusEffect(useCallback(() => {
     const load = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user } } = await getCurrentUser();
         if (!user) return;
         const { data } = await supabase.from("symptoms").select("symptoms").eq("user_id", user.id);
         const all = (data || []).flatMap((s) => s.symptoms || []);
@@ -341,7 +342,7 @@ function RegularStatisticsScreen({ headerSlot = null }) {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
       if (!user) return;
 
       const [cyclesRes, profileRes, symptomsRes] = await Promise.all([
@@ -634,7 +635,7 @@ function FertilityStatisticsScreen() {
 
   const loadAllStats = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!user) return;
 
       const [cyclesRes, profileRes] = await Promise.all([

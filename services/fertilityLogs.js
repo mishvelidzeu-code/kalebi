@@ -1,3 +1,4 @@
+import { getCurrentUser } from "./currentUser";
 import { supabase } from "./supabase";
 
 // Fertility-mode daily log helpers. All fail-silent — a logging hiccup should
@@ -17,7 +18,7 @@ export const FERTILITY_LOG_TYPES = {
 // Pass value = null to clear that entry for the day.
 export async function upsertFertilityLog(date, type, value) {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getCurrentUser();
     if (!user) return { ok: false };
 
     if (value == null) {
@@ -54,7 +55,7 @@ export async function upsertFertilityLog(date, type, value) {
 // Returns all log rows for one day, keyed by type: { intercourse, lh_test, ... }.
 export async function getFertilityLogsForDay(date) {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getCurrentUser();
     if (!user) return {};
 
     const { data, error } = await supabase
@@ -79,7 +80,7 @@ export async function getFertilityLogsForDay(date) {
 // Returns raw rows across an inclusive date range, for calendar marks / stats.
 export async function getFertilityLogsRange(fromDate, toDate) {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getCurrentUser();
     if (!user) return [];
 
     const { data, error } = await supabase

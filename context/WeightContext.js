@@ -78,7 +78,13 @@ export function WeightProvider({ children }) {
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // The launch's own session and token refreshes never change the user
+      // (see PregnancyContext).
+      if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") {
+        return;
+      }
+
       const nextUserId = session?.user?.id ?? null;
       if (nextUserId === loadedUserIdRef.current) {
         return;

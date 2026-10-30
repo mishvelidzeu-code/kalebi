@@ -1,3 +1,4 @@
+import { getCurrentUser } from "./currentUser";
 import { supabase } from "./supabase";
 
 export async function syncProfileEmailForUser(user) {
@@ -23,7 +24,7 @@ export async function syncProfileEmailForUser(user) {
 export async function syncProfileEmailForCurrentUser() {
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getCurrentUser();
 
   await syncProfileEmailForUser(user);
 }

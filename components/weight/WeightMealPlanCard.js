@@ -14,7 +14,7 @@ import {
   isAssistantDailyLimitError,
   setAssistantDailyUsage,
 } from "../../services/assistantUsage";
-import { supabase } from "../../services/supabase";
+import { getCurrentUser } from "../../services/currentUser";
 import dayjs from "../../utils/dayjs";
 import { getWeightTheme } from "./weightTheme";
 
@@ -58,7 +58,7 @@ export default function WeightMealPlanCard({ calories, targetKg, phaseKey }) {
     setFailed(false);
     let user = null;
     try {
-      ({ data: { user } } = await supabase.auth.getUser());
+      ({ data: { user } } = await getCurrentUser());
       // Out of questions already: don't spend a request just to be refused.
       if (user && !isAdmin && (await getAssistantDailyUsage(user.id)) >= PRIME_DAILY_QUESTION_LIMIT) {
         setLimitReached(true);
@@ -114,7 +114,7 @@ export default function WeightMealPlanCard({ calories, targetKg, phaseKey }) {
     let active = true;
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user } } = await getCurrentUser();
         const raw = await AsyncStorage.getItem(CACHE_KEY);
         const cached = raw ? JSON.parse(raw) : null;
         if (active && cached && user && cached.userId === user.id && cached.dayKey === dayKey && cached.text) {

@@ -29,6 +29,7 @@ import { useFertility } from "../../context/FertilityContext";
 import { useWeight } from "../../context/WeightContext";
 import WeightDayRow from "../../components/weight/WeightDayRow";
 import { useCycles } from "../../hooks/useCycles";
+import { getCurrentUser } from "../../services/currentUser";
 import { supabase } from "../../services/supabase";
 import { FERTILITY_LOG_TYPES, getFertilityLogsForDay, getFertilityLogsRange, upsertFertilityLog } from "../../services/fertilityLogs";
 import { SUPPLEMENT_OPTIONS } from "../../utils/fertilityPlan";
@@ -280,7 +281,7 @@ function PregnancyCalendarScreen() {
   const loadTodaySymptoms = useCallback(async () => {
     setSymptomsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!user) return;
       const { data } = await supabase.from("symptoms").select("*").eq("user_id", user.id).eq("date", todayStr).maybeSingle();
       if (data) {
@@ -312,7 +313,7 @@ function PregnancyCalendarScreen() {
   const saveSymptoms = async () => {
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!user) return;
       await supabase.from("symptoms").upsert({ user_id: user.id, date: todayStr, symptoms: selectedSymptoms, mood, note, updated_at: new Date().toISOString() }, { onConflict: "user_id,date" });
       Alert.alert(t("calendar.savedTitle"), t("calendar.diarySaved"));
@@ -577,6 +578,15 @@ function RegularCalendarScreen() {
     signature: null,
     error: null,
   });
+  // What loadAssistantSupport checks to skip a card it already has (or is
+  // already fetching). A ref, as on the pregnancy calendar: with the state in
+  // its deps every update re-created loadTodaySymptoms and re-ran the focus
+  // effect, so opening the calendar loaded everything ~4 times and asked the
+  // AI for the same card twice.
+  const assistantSupportRef = useRef(assistantSupport);
+  useEffect(() => {
+    assistantSupportRef.current = assistantSupport;
+  }, [assistantSupport]);
 
   // -- Theme -------------------------------------------------------
   const theme = {
@@ -622,7 +632,7 @@ function RegularCalendarScreen() {
   const fetchDayDetails = async (dateStr) => {
     setDayDetails((prev) => ({ ...prev, loading: true }));
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!user) return;
       const { data } = await supabase
         .from("symptoms")
@@ -723,8 +733,9 @@ function RegularCalendarScreen() {
     }
 
     const signature = buildDiarySignature(entry);
+    const current = assistantSupportRef.current;
 
-    if (!options.force && assistantSupport.signature === signature && assistantSupport.text) {
+    if (!options.force && current.signature === signature && (current.text || current.loading)) {
       return;
     }
 
@@ -752,12 +763,12 @@ function RegularCalendarScreen() {
         error: error instanceof Error ? error.message : "assistant-support-failed",
       }));
     }
-  }, [assistantSupport.signature, assistantSupport.text, isPremium]);
+  }, [isPremium]);
 
   const loadTodaySymptoms = useCallback(async () => {
     setSymptomsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!user) {
         setSelectedSymptoms([]);
         setMood(null);
@@ -820,7 +831,7 @@ function RegularCalendarScreen() {
   const saveSymptoms = async () => {
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!user) return;
       const { error } = await supabase.from("symptoms").upsert(
         {
@@ -1404,7 +1415,7 @@ function FertilityCalendarScreen() {
   // calendars write it), so the assistant sees it in its normal context.
   const loadDayNote = useCallback(async (dateStr) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!user) return;
       const { data } = await supabase
         .from("symptoms")
@@ -1471,7 +1482,7 @@ function FertilityCalendarScreen() {
   const saveNote = async () => {
     setNoteSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!user) return;
 
       await supabase.from("symptoms").upsert(

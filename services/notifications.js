@@ -7,6 +7,7 @@ import { Platform } from "react-native";
 import { isAdminEmail, isTestAccountEmail } from "./adminAccess";
 import { t } from "./i18n";
 import { resolvePregnancyAccessFromProfile } from "./purchases";
+import { getCurrentUser } from "./currentUser";
 import { supabase } from "./supabase";
 import { isWeightModeActive } from "./weightLogs";
 
@@ -35,7 +36,7 @@ export async function registerPushTokenForCurrentUser() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getCurrentUser();
     if (!user) return null;
 
     const projectId = getExpoProjectId();
@@ -494,7 +495,7 @@ async function syncCycleRemindersNow() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getCurrentUser();
     if (!user) return [];
 
     const [latestCycleResponse, profileResponse] = await Promise.all([
