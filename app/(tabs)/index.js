@@ -21,6 +21,7 @@ import { useFertility } from "../../context/FertilityContext";
 import { useWeight } from "../../context/WeightContext";
 import { getHomeAssistantAdvice, getPregnancyWeeklyAdvice, invalidateAssistantContextCache } from "../../services/assistantOrchestrator";
 import { syncCycleRemindersForUser } from "../../services/notifications";
+import { getCurrentUser } from "../../services/currentUser";
 import { supabase } from "../../services/supabase";
 import { calculateCycleState, getPregnancyChanceKey } from "../../utils/cycleEngine";
 import { getPreferredCycleLength, getPreferredPeriodLength } from "../../utils/cyclePrediction";
@@ -212,7 +213,7 @@ function PregnancyHomeScreen({ isDark }) {
     if (!isMountedRef.current) return;
     setAdviceError(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getCurrentUser();
       if (!isMountedRef.current || !user) return;
       const cacheKey = `@cycle-care/pregnancy-weekly-advice/${user.id}`;
       if (!force) {
@@ -445,6 +446,10 @@ export default function HomeScreen() {
   const lastAdviceKeyRef = useRef("");
   const adviceRequestKeyRef = useRef("");
   const hasLoadedOnceRef = useRef(false);
+  // What the last load read from the server, and the latest loadData — see the
+  // focus effect below.
+  const loadedHomeDataRef = useRef(null);
+  const loadDataRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -581,21 +586,38 @@ export default function HomeScreen() {
     return { phaseKey: "luteal", chanceKey: "low", color: "#C8B6FF" };
   }, [theme.primary]);
 
-  const loadData = useCallback(async ({ forceAdviceRefresh = false } = {}) => {
+  const loadData = useCallback(async ({ forceAdviceRefresh = false, reuseLoaded = false } = {}) => {
     try {
-      // Right after the splash: it already read this while its animation
-      // played, so the first load skips the spinner's two round trips.
-      const prefetched = hasLoadedOnceRef.current ? null : takePrefetchedHomeData();
-      const user = prefetched ? prefetched.user : (await supabase.auth.getUser()).data.user;
-      if (!user) {
-        setAdviceLoading(false);
-        return;
+      let loaded = reuseLoaded ? loadedHomeDataRef.current : null;
+
+      if (!loaded) {
+        // Right after the splash: it already read this while its animation
+        // played, so the first load skips the spinner's two round trips.
+        const prefetched = hasLoadedOnceRef.current ? null : takePrefetchedHomeData();
+        const signedInUser = prefetched ? prefetched.user : (await getCurrentUser()).data.user;
+        if (!signedInUser) {
+          loadedHomeDataRef.current = null;
+          setAdviceLoading(false);
+          return;
+        }
+
+        const loadDay = dayjs().startOf("day");
+        const loadDayKey = loadDay.format("YYYY-MM-DD");
+        const results = await (prefetched?.promise ?? fetchHomeData(signedInUser.id, loadDayKey));
+
+        loaded = { user: signedInUser, today: loadDay, todayKey: loadDayKey, results };
+        loadedHomeDataRef.current = loaded;
+
+        // Prime, a mode or the language changed while this was loading: the
+        // current loadData derives the screen, or it would show the new data
+        // the way things were when the load started.
+        if (loadDataRef.current && loadDataRef.current !== loadData) {
+          return await loadDataRef.current({ forceAdviceRefresh, reuseLoaded: true });
+        }
       }
 
-      const today = dayjs().startOf("day");
-      const todayKey = today.format("YYYY-MM-DD");
-
-      const [cyclesRes, profileRes, todaySymptomsRes] = await (prefetched?.promise ?? fetchHomeData(user.id, todayKey));
+      const { user, today, todayKey } = loaded;
+      const [cyclesRes, profileRes, todaySymptomsRes] = loaded.results;
 
       const cycles = cyclesRes.data || [];
       const profile = profileRes.data;
@@ -709,17 +731,30 @@ export default function HomeScreen() {
     }
   }, [getPhaseAndChance, isPremium, isAdmin, isTestAccount, fertilityMode, weightMode, weightLoading, refreshHomeAdvice, t]);
 
+  // Every visit reads fresh data. A change in Prime, a mode or the language
+  // re-creates loadData; that used to re-run the focus effect and fetch it all
+  // again — several times at launch, while those settle. Now it only re-derives
+  // the screen from what the last visit read (or fetches, if that is still on
+  // its way).
+  useEffect(() => {
+    const previous = loadDataRef.current;
+    loadDataRef.current = loadData;
+    if (previous) {
+      loadData({ reuseLoaded: true });
+    }
+  }, [loadData]);
+
   useFocusEffect(
     useCallback(() => {
-      loadData();
-    }, [loadData])
+      loadDataRef.current();
+    }, [])
   );
 
   const logPeriod = async () => {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
       if (!user) return;
 
       const today = dayjs().format("YYYY-MM-DD");

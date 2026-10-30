@@ -38,7 +38,14 @@ function LayoutContent() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // The two calls above already cover the session the app starts with, and
+      // a token refresh keeps the same user — redoing both on those (hourly,
+      // too) only added an Expo token request and two writes.
+      if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") {
+        return;
+      }
+
       if (session?.user) {
         syncProfileEmailForUser(session.user);
         registerPushTokenForCurrentUser();

@@ -3,6 +3,7 @@ import Purchases, { LOG_LEVEL } from "react-native-purchases";
 
 import { TEMP_ANDROID_WEB_PURCHASE_ENABLED } from "../constants/tempFlags";
 import { logMetaPregnancyPurchase, logMetaPrimePurchase } from "./metaAppEvents";
+import { getCurrentUser } from "./currentUser";
 import { supabase } from "./supabase";
 
 const DEFAULT_ENTITLEMENT_ID = "prime";
@@ -161,7 +162,7 @@ export async function openManageSubscriptions() {
 export async function getCurrentSupabaseUser() {
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getCurrentUser();
 
   return user || null;
 }

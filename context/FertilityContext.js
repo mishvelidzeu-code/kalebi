@@ -101,10 +101,16 @@ export function FertilityProvider({ children }) {
 
   // Sign-out and account switches must not leave the previous user's fertility
   // state on screen; token refreshes are ignored by comparing the user id.
+  // The launch's own session and token refreshes are skipped outright — see
+  // PregnancyContext.
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") {
+        return;
+      }
+
       const nextUserId = session?.user?.id ?? null;
       if (nextUserId === loadedUserIdRef.current) {
         return;

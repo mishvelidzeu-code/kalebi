@@ -30,6 +30,7 @@ import {
   canOpenManageSubscriptions,
   openManageSubscriptions,
 } from "../../services/purchases";
+import { getCurrentUser } from "../../services/currentUser";
 import { supabase } from "../../services/supabase";
 import dayjs from "../../utils/dayjs";
 
@@ -251,7 +252,7 @@ export default function ProfileScreen() {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
       if (!user) return;
 
       setUserId(user.id);
@@ -322,7 +323,7 @@ export default function ProfileScreen() {
 
   const handleAvatarPress = async () => {
     try {
-      const targetUserId = userId || (await supabase.auth.getUser()).data.user?.id;
+      const targetUserId = userId || (await getCurrentUser()).data.user?.id;
       if (!targetUserId) return;
 
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -440,7 +441,7 @@ export default function ProfileScreen() {
       setSaving(true);
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
       if (!user) return;
 
       const { data: cycles } = await supabase.from("cycles").select("*").eq("user_id", user.id).order("start_date", { ascending: false });
@@ -514,7 +515,7 @@ export default function ProfileScreen() {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
       if (!user) return;
 
       const newCycle = Number(cycleLength);
@@ -558,7 +559,7 @@ export default function ProfileScreen() {
   const updateGoalMode = async (nextGoal) => {
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getCurrentUser();
     if (!user) throw new Error("user-not-found");
 
     const finalName = tempName.trim() !== "" ? tempName : userName;
@@ -747,7 +748,7 @@ export default function ProfileScreen() {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
 
       if (user) {
         const { data } = await supabase

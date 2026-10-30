@@ -23,6 +23,7 @@ import { normalizeHumorLevel } from "./assistantHumor";
 import { getLanguage, t } from "./i18n";
 import { getFertilityLogsForDay, getFertilityLogsRange } from "./fertilityLogs";
 import { resolvePregnancyAccessFromProfile } from "./purchases";
+import { getCurrentUser } from "./currentUser";
 import { supabase } from "./supabase";
 import { getWeightLogsRange, isWeightModeActive, WEIGHT_PROFILE_FIELDS } from "./weightLogs";
 
@@ -393,7 +394,7 @@ function getCurrentCycle(cycles, profile) {
 async function getAssistantContext({ forceRefresh = false } = {}) {
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getCurrentUser();
 
   if (!user) {
     throw new Error(t("assistant.userNotFound"));

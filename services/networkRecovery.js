@@ -1,20 +1,23 @@
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 
+import { getCurrentUser } from "./currentUser";
 import { supabase } from "./supabase";
 
 // Telling "offline" apart from "signed out".
 //
-// supabase.auth.getUser() asks the server, and when the server cannot be
-// reached it answers `user: null` — exactly what a sign-out looks like. The
-// contexts used to take that at face value, so opening the app without
-// internet switched pregnancy / fertility mode off and dropped Prime, and it
-// stayed that way after the connection came back until the app was
-// backgrounded. These helpers let callers keep what is on screen and reload by
-// themselves once the server is reachable again.
+// When the server cannot be reached, the user lookup answers `user: null` —
+// exactly what a sign-out looks like. The contexts used to take that at face
+// value, so opening the app without internet switched pregnancy / fertility
+// mode off and dropped Prime, and it stayed that way after the connection came
+// back until the app was backgrounded. These helpers let callers keep what is
+// on screen and reload by themselves once the server is reachable again.
 
 // The signed-in user, plus whether the answer is unknown because of the network.
+// It comes from the stored session (see currentUser.js): offline with a valid
+// token the user is simply there, and only a token that has to be refreshed
+// can come back "offline".
 export async function getSignedInUser() {
-  const { data, error } = await supabase.auth.getUser();
+  const { data, error } = await getCurrentUser();
   const user = data?.user ?? null;
 
   return { user, offline: !user && isAuthRetryableFetchError(error) };
@@ -62,6 +65,7 @@ async function probe() {
 
   let offline = true;
   try {
+    // The one lookup that must reach the server: it is the reachability test.
     const { error } = await supabase.auth.getUser();
     offline = isAuthRetryableFetchError(error);
   } catch {

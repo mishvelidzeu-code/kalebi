@@ -7,6 +7,7 @@ import { Alert, DeviceEventEmitter } from "react-native";
 
 import { invalidateAssistantContextCache } from "../services/assistantOrchestrator";
 import { syncCycleRemindersForUser } from "../services/notifications";
+import { getCurrentUser } from "../services/currentUser";
 import { supabase } from "../services/supabase";
 import { useLanguage } from "../context/LanguageContext";
 import { getCycleWindowDates } from "../utils/cycleEngine";
@@ -30,7 +31,7 @@ export const useCycles = () => {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
       if (!user) return;
 
       const [cyclesRes, profileRes] = await Promise.all([
@@ -70,7 +71,7 @@ export const useCycles = () => {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
       if (!user) return;
 
       const avgPeriod = getPreferredPeriodLength(rawCycles, profile);
@@ -101,7 +102,7 @@ export const useCycles = () => {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getCurrentUser();
       if (!user) return;
 
       if (!cycleObj.isProfileFallback && cycleObj.id !== "profile_fallback") {

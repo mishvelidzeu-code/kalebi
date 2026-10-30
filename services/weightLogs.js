@@ -1,3 +1,4 @@
+import { getCurrentUser } from "./currentUser";
 import { supabase } from "./supabase";
 import dayjs from "../utils/dayjs";
 
@@ -24,7 +25,7 @@ export function isWeightModeActive() {
 }
 
 async function getUserId() {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await getCurrentUser();
   return user?.id || null;
 }
 
