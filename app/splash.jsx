@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Animated, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { TEMP_LANGUAGE_PICKER_ENABLED } from "../constants/tempFlags";
 import { useLanguage } from "../context/LanguageContext";
 import { isAdminEmail } from "../services/adminAccess";
@@ -69,6 +69,11 @@ export default function Splash() {
 
   // ხმის დაკვრის ფუნქცია
   const playMagicSound = async () => {
+    // Android: expo-av's ExoPlayer crashed the app on some phones
+    // (IllegalStateException in ExoPlayerImpl.verifyApplicationThread, Play
+    // Console, build 10). The splash stays silent there until the sound moves
+    // to expo-audio in the next native build. iOS keeps the sound.
+    if (Platform.OS === "android") return;
     try {
       const { sound } = await Audio.Sound.createAsync(
         require("../assets/sounds/magic.mp3")
