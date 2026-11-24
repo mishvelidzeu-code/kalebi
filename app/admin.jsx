@@ -26,6 +26,8 @@ import { supabase } from "../services/supabase";
 
 const AVATAR_BUCKET = "avatars";
 const PAGE_SIZE = 50;
+const IOS_COLOR = "#0A84FF";
+const ANDROID_COLOR = "#3DDC84";
 
 function isProfilePaidPrime(profile) {
   if (!profile?.is_premium) {
@@ -72,6 +74,8 @@ export default function AdminScreen() {
   });
   const [usage, setUsage] = useState(null);
   const [usageError, setUsageError] = useState(false);
+  const [registrations, setRegistrations] = useState(null);
+  const [registrationsError, setRegistrationsError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -181,6 +185,17 @@ export default function AdminScreen() {
     } catch (error) {
       console.log("Admin usage stats error:", error);
       setUsageError(true);
+    }
+
+    // Same idea: registrations by platform come from their own migration.
+    try {
+      const { data, error } = await supabase.rpc("admin_registration_platform_stats", { p_days: 30 });
+      if (error) throw error;
+      setRegistrations(data);
+      setRegistrationsError(false);
+    } catch (error) {
+      console.log("Admin registration platform stats error:", error);
+      setRegistrationsError(true);
     }
   }, []);
 
@@ -498,6 +513,18 @@ export default function AdminScreen() {
           />
         </View>
 
+        {/* Registrations by platform */}
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>რეგისტრაციები: iOS / Android</Text>
+        {registrationsError ? (
+          <Text style={[styles.sectionHint, { color: theme.subText }]}>
+            რეგისტრაციების სტატისტიკა ვერ ჩაიტვირთა. Supabase-ზე registration platform migration გაშვებულია?
+          </Text>
+        ) : registrations ? (
+          <RegistrationsSection data={registrations} theme={theme} />
+        ) : (
+          <ActivityIndicator color={theme.primary} style={{ marginBottom: 18 }} />
+        )}
+
         {/* Activity */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>აქტიურობა</Text>
         {usageError ? (
@@ -716,11 +743,12 @@ export default function AdminScreen() {
   );
 }
 
-function StatCard({ label, value, theme, onPress, accent }) {
+function StatCard({ label, value, theme, onPress, accent, icon }) {
   const Component = onPress ? TouchableOpacity : View;
   const color = accent || theme.primary;
   return (
     <Component style={[styles.statCard, { backgroundColor: theme.card }]} onPress={onPress} activeOpacity={0.82}>
+      {!!icon && <Ionicons name={icon} size={18} color={color} style={{ marginBottom: 4 }} />}
       <Text style={[styles.statValue, { color }]}>{value}</Text>
       <Text style={[styles.statLabel, { color: theme.subText }]}>{label}</Text>
       {onPress && <Ionicons name="chevron-forward" size={12} color={theme.subText} style={{ marginTop: 4 }} />}
@@ -790,6 +818,54 @@ function UsageSection({ usage, theme }) {
   );
 }
 
+function RegistrationsSection({ data, theme }) {
+  const today = data.today || {};
+  const total = data.total || {};
+  const daily = data.daily || [];
+  const dayTotal = (day) => (day.ios || 0) + (day.android || 0) + (day.unknown || 0);
+  const maxDay = Math.max(1, ...daily.map(dayTotal));
+  const barWidth = (count) => `${((count || 0) / maxDay) * 100}%`;
+
+  return (
+    <>
+      <View style={styles.statsGrid}>
+        <StatCard label="დღეს · iOS" value={today.ios ?? 0} theme={theme} accent={IOS_COLOR} icon="logo-apple" />
+        <StatCard label="დღეს · Android" value={today.android ?? 0} theme={theme} accent={ANDROID_COLOR} icon="logo-android" />
+        <StatCard label="სულ · iOS" value={total.ios ?? 0} theme={theme} accent={IOS_COLOR} icon="logo-apple" />
+        <StatCard label="სულ · Android" value={total.android ?? 0} theme={theme} accent={ANDROID_COLOR} icon="logo-android" />
+      </View>
+
+      {(total.unknown || 0) > 0 && (
+        <Text style={[styles.sectionHint, { color: theme.subText }]}>
+          {`პლატფორმა ვერ დადგინდა: დღეს ${today.unknown || 0}, სულ ${total.unknown || 0} — ძირითადად ძველი ანგარიშები, რომლებსაც აპი დიდი ხანია არ გაუხსნიათ.`}
+        </Text>
+      )}
+
+      {daily.length > 0 && (
+        <View style={[styles.dailyCard, { backgroundColor: theme.card }]}>
+          <Text style={[styles.pushTitle, { color: theme.text }]}>რეგისტრაციები დღეების მიხედვით</Text>
+          {daily.map((day) => (
+            <View key={day.day} style={styles.dailyRow}>
+              <Text style={[styles.dailyDay, { color: theme.subText }]}>{dayjs(day.day).format("DD.MM")}</Text>
+              <View style={{ flex: 1 }}>
+                <View style={[styles.dailyBarTrack, styles.stackedBar, { backgroundColor: theme.border }]}>
+                  <View style={[styles.stackedBarPart, { width: barWidth(day.ios), backgroundColor: IOS_COLOR }]} />
+                  <View style={[styles.stackedBarPart, { width: barWidth(day.android), backgroundColor: ANDROID_COLOR }]} />
+                  <View style={[styles.stackedBarPart, { width: barWidth(day.unknown), backgroundColor: theme.subText }]} />
+                </View>
+                <Text style={[styles.dailyMeta, { color: theme.subText }]} numberOfLines={1}>
+                  {`iOS ${day.ios || 0} · Android ${day.android || 0}${day.unknown ? ` · უცნობი ${day.unknown}` : ""}`}
+                </Text>
+              </View>
+              <Text style={[styles.dailyUsers, { color: theme.text }]}>{dayTotal(day)}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
   keyboardView: { flex: 1 },
   container: { flex: 1, paddingHorizontal: 20 },
@@ -810,6 +886,8 @@ const styles = StyleSheet.create({
   dailyDay: { width: 42, fontSize: 12, fontWeight: "800" },
   dailyBarTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
   dailyBarFill: { height: "100%", borderRadius: 4 },
+  stackedBar: { flexDirection: "row" },
+  stackedBarPart: { height: "100%" },
   dailyMeta: { fontSize: 11, fontWeight: "600", marginTop: 4 },
   dailyUsers: { minWidth: 34, textAlign: "right", fontSize: 15, fontWeight: "900" },
   searchInput: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 18, paddingVertical: 15, fontSize: 15, marginBottom: 16 },
